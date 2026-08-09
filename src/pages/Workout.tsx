@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -14,14 +14,21 @@ import { AIWorkoutTip } from '@/components/workout/AIWorkoutTip';
 import { RestTimer } from '@/components/workout/RestTimer';
 import { getRestDuration } from '@/utils/rest';
 import { WORKOUT_MAP } from '@/constants/workouts';
+import { askAI } from '@/utils/ai';
 
 export function Workout() {
   const navigate = useNavigate();
   const [resting, setResting] = useState(false);
   const [showQuitModal, setShowQuitModal] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [aiQuestion, setAIQuestion] = useState('');
+  const [aiAnswer, setAIAnswer] = useState('');
+  const [aiLoading, setAILoading] = useState(false);
   const { activeSession, completeSet, nextExercise, previousExercise, endSession } =
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
+  const apiKey = useAIStore((s) => s.apiKey);
+  const profile = useProfileStore((s) => s.profile);
   const goal = useProfileStore((s) => s.profile?.goal || 'maintain');
   const { notes, setNote } = useNotesStore();
 
@@ -63,11 +70,29 @@ export function Workout() {
     }
   };
 
-  const handleQuit = () => setShowQuitModal(true);
+  const handleQuit = () => navigate('/dashboard');
 
-  const confirmQuit = () => {
+  const handleAbandon = () => setShowQuitModal(true);
+
+  const confirmAbandon = () => {
     endSession();
     navigate('/dashboard');
+  };
+
+  const handleAskAI = async () => {
+    if (!aiQuestion.trim() || !apiKey || !profile) return;
+    setAILoading(true);
+    setAIAnswer('');
+    try {
+      const context = `Exercício atual: ${exercise.name} (${exercise.muscleGroup}, ${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}).
+Treino: ${workout.label} — ${workout.focus}.
+Equipamentos disponíveis: academia completa.`;
+      const answer = await askAI(apiKey, profile, `${context}\n\nPergunta da usuária: ${aiQuestion}`);
+      setAIAnswer(answer);
+    } catch {
+      setAIAnswer('Erro ao consultar IA. Tente novamente.');
+    }
+    setAILoading(false);
   };
 
   return (
@@ -81,9 +106,22 @@ export function Workout() {
           ← Sair
         </button>
         <span className="text-white/30 text-sm font-mono">{formatted}</span>
-        <span className="text-white/40 text-sm">
-          {currentIndex + 1}/{exercises.length}
-        </span>
+        <div className="flex items-center gap-2">
+          {aiEnabled && (
+            <button
+              onClick={() => setShowAIChat(!showAIChat)}
+              className="text-primary-400 text-sm font-medium px-2 py-1"
+            >
+              🤖
+            </button>
+          )}
+          <button
+            onClick={handleAbandon}
+            className="text-red-400/60 text-xs px-2 py-1"
+          >
+            Desistir
+          </button>
+        </div>
       </div>
 
       {/* Overall Progress */}
@@ -199,14 +237,53 @@ export function Workout() {
 
       <RestTimer active={resting} duration={getRestDuration(exercise, goal)} onSkip={() => setResting(false)} />
 
+      {/* AI Chat Panel */}
+      <AnimatePresence>
+        {showAIChat && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed inset-x-0 bottom-0 z-50 bg-dark-100 border-t border-white/10 rounded-t-3xl p-5 max-h-[60vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-primary-300">🤖 FlowAI — Treinando</span>
+              <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg">✕</button>
+            </div>
+            {aiAnswer && (
+              <p className="text-sm text-white/80 leading-relaxed mb-3 whitespace-pre-line bg-white/5 rounded-xl p-3">
+                {aiAnswer}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={aiQuestion}
+                onChange={(e) => setAIQuestion(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
+                placeholder="Ex: substitui esse exercício por qual?"
+                className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary-500"
+              />
+              <button
+                onClick={handleAskAI}
+                disabled={aiLoading || !aiQuestion.trim()}
+                className="px-4 py-2.5 rounded-xl bg-primary-500 text-white text-sm font-medium disabled:opacity-40"
+              >
+                {aiLoading ? '...' : '→'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <ConfirmModal
         open={showQuitModal}
-        title="Sair do treino?"
-        message="Seu progresso será perdido se sair agora."
-        confirmText="Sair"
-        cancelText="Continuar"
+        title="Desistir do treino?"
+        message="Isso vai zerar o progresso desse treino. Pra só pausar, use o botão ← Sair."
+        confirmText="Desistir"
+        cancelText="Voltar"
         danger
-        onConfirm={confirmQuit}
+        onConfirm={confirmAbandon}
         onCancel={() => setShowQuitModal(false)}
       />
     </div>
