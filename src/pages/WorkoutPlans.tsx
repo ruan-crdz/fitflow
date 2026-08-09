@@ -5,7 +5,6 @@ import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useToastStore } from '@/stores/useToastStore';
-import { WORKOUTS } from '@/constants/workouts';
 import { EXERCISE_CATALOG, MUSCLE_GROUPS } from '@/constants/exerciseCatalog';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
@@ -59,7 +58,6 @@ export function WorkoutPlans() {
 
   const activeTypes = activeSlots;
 
-  const defaultWorkout = WORKOUTS.find((w) => w.type === selected) || { type: selected, label: `Treino ${selected}`, focus: 'Personalizado', exercises: [] };
   const exercises = getExercises(selected);
 
   // Derive focus label from actual muscle groups in the workout
@@ -194,7 +192,7 @@ export function WorkoutPlans() {
 
 ${workoutGuide[selected]}
 
-TREINO ATUAL (${selected} — ${defaultWorkout.focus}):
+TREINO ATUAL (${selected} — ${workoutFocus}):
 ${currentList}
 
 OBJETIVO: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}
@@ -321,7 +319,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
         return;
       }
 
-      const prompt = `Você é um biomecânico esportivo. Sugira UM substituto para "${ex.name}" no treino ${selected} (${defaultWorkout.focus}).
+      const prompt = `Você é um biomecânico esportivo. Sugira UM substituto para "${ex.name}" no treino ${selected} (${workoutFocus}).
 
 REGRA CRÍTICA: O substituto deve ter o MESMO PADRÃO DE MOVIMENTO, não apenas o mesmo grupo muscular.
 Exemplos de padrões:
