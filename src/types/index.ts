@@ -4,6 +4,8 @@ export type WorkoutType = 'A' | 'B' | 'C';
 
 export type Goal = 'lose' | 'maintain' | 'gain';
 
+export type BiologicalSex = 'male' | 'female';
+
 export interface Profile {
   name: string;
   age: number;
@@ -11,6 +13,7 @@ export interface Profile {
   height: number;
   goal: Goal;
   trainingDays: WeekDay[];
+  sex?: BiologicalSex;
 }
 
 export interface Exercise {

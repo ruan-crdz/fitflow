@@ -72,7 +72,7 @@ export function Dashboard() {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-white/40 text-sm">Olá,</p>
-          <h1 className="text-2xl font-bold">{profile.name} <span className="text-primary-400">♥</span></h1>
+          <h1 className="text-2xl font-bold">{profile.name} <span className="text-primary-400">{profile.sex === 'male' ? '💪' : '♥'}</span></h1>
         </div>
         {aiEnabled && (
           <motion.span

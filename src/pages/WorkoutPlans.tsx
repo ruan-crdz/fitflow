@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -23,6 +24,7 @@ interface SwapSuggestion {
 }
 
 export function WorkoutPlans() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<WorkoutType>('A');
   const [editing, setEditing] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
@@ -51,6 +53,15 @@ export function WorkoutPlans() {
 
   const defaultWorkout = WORKOUTS.find((w) => w.type === selected)!;
   const exercises = getExercises(selected);
+
+  // Auto-open AI builder when coming from onboarding
+  useEffect(() => {
+    if (searchParams.get('ai') === 'true' && apiKey && profile) {
+      setSearchParams({});
+      setEditing(true);
+      setTimeout(() => handleAIBuild(), 300);
+    }
+  }, []);
 
   // Maps compound muscle groups from workouts to catalog filter names
   const toCatalogGroups = (mg: string): string[] => {
@@ -153,7 +164,11 @@ export function WorkoutPlans() {
         .map((e) => `${e.name} (${e.muscleGroup})`)
         .join(', ');
 
-      const prompt = `Você é personal trainer de mulheres. Analise este treino:
+      const sexContext = profile.sex === 'male'
+        ? 'Você é personal trainer de homens. Volume de treino pode ser maior, priorize compostos pesados.'
+        : 'Você é personal trainer de mulheres. Priorize glúteos e posterior nos treinos de perna.';
+
+      const prompt = `${sexContext} Analise este treino:
 
 ${workoutGuide[selected]}
 

@@ -1,15 +1,17 @@
-import type { Goal } from '@/types';
+import type { Goal, BiologicalSex } from '@/types';
 
 interface CalorieInput {
   weight: number;
   height: number;
   age: number;
   goal: Goal;
+  sex?: BiologicalSex;
 }
 
-/** Mifflin-St Jeor para mulheres: 10×peso(kg) + 6.25×altura(cm) - 5×idade - 161 */
-function basalMetabolicRate({ weight, height, age }: Omit<CalorieInput, 'goal'>): number {
-  return 10 * weight + 6.25 * height - 5 * age - 161;
+/** Mifflin-St Jeor: male = +5, female = -161 */
+function basalMetabolicRate({ weight, height, age, sex }: Omit<CalorieInput, 'goal'>): number {
+  const base = 10 * weight + 6.25 * height - 5 * age;
+  return sex === 'male' ? base + 5 : base - 161;
 }
 
 /** TDEE com fator de atividade moderado (treina 3x/semana) */

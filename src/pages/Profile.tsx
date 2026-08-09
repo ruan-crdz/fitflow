@@ -7,7 +7,7 @@ import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { ExportData } from '@/components/ui/ExportData';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
-import type { WeekDay, Goal } from '@/types';
+import type { WeekDay, Goal, BiologicalSex } from '@/types';
 
 export function Profile() {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ export function Profile() {
   const [aiKeyInput, setAiKeyInput] = useState('');
 
   const [name, setName] = useState(profile?.name || '');
+  const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'female');
   const [age, setAge] = useState(String(profile?.age || ''));
   const [weight, setWeight] = useState(String(profile?.weight || ''));
   const [height, setHeight] = useState(String(profile?.height || ''));
@@ -34,13 +35,14 @@ export function Profile() {
 
   const toggleDay = (day: WeekDay) => {
     setDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : prev.length < 3 ? [...prev, day] : prev,
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   };
 
   const handleSave = () => {
     updateProfile({
       name,
+      sex,
       age: Number(age),
       weight: Number(weight),
       height: Number(height),
@@ -72,6 +74,17 @@ export function Profile() {
               onChange={(e) => setName(e.target.value)}
               className="input-field"
             />
+          </div>
+          <div>
+            <label className="text-sm text-white/40 mb-2 block">Sexo biológico</label>
+            <div className="flex gap-2">
+              <button onClick={() => setSex('female')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'female' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
+                ♀️ Feminino
+              </button>
+              <button onClick={() => setSex('male')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'male' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
+                ♂️ Masculino
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -125,7 +138,7 @@ export function Profile() {
           </div>
 
           <div>
-            <label className="text-sm text-white/40 mb-2 block">Dias de treino (3)</label>
+            <label className="text-sm text-white/40 mb-2 block">Dias de treino</label>
             <div className="grid grid-cols-7 gap-2">
               {WEEKDAY_OPTIONS.map((opt) => (
                 <button
