@@ -5,7 +5,6 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
-import { useAIStore } from '@/stores/useAIStore';
 import { useWaterStore } from '@/stores/useWaterStore';
 import { MotivationalQuote } from '@/components/ui/MotivationalQuote';
 import { WeightChart } from '@/components/ui/WeightChart';
@@ -30,7 +29,6 @@ export function Dashboard() {
   const sessions = useHistoryStore((s) => s.sessions);
   const weightEntries = useWeightStore((s) => s.entries);
   const hasTodayWeight = useWeightStore((s) => s.hasTodayEntry());
-  const aiEnabled = useAIStore((s) => s.isEnabled);
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
@@ -74,20 +72,14 @@ export function Dashboard() {
   return (
     <div className="px-5 pt-12 pb-6 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <p className="text-white/40 text-sm">Olá,</p>
-          <h1 className="text-2xl font-bold">{profile.name} <span className="text-primary-400">{profile.sex === 'male' ? '💪' : '♥'}</span></h1>
+          <h1 className="text-2xl font-bold">{profile.name} {profile.sex === 'male' ? '💪' : '♥'}</h1>
         </div>
-        {aiEnabled && (
-          <motion.span
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-[10px] font-bold text-black uppercase tracking-wide shadow-lg shadow-amber-500/20"
-          >
-            ✨ Premium
-          </motion.span>
-        )}
+        <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center">
+          <span className="text-lg">{profile.sex === 'male' ? '🏋️' : '🧘'}</span>
+        </div>
       </div>
 
       <MotivationalQuote />
@@ -115,38 +107,39 @@ export function Dashboard() {
 
       {/* Today's Training */}
       {!activeSession && (
-        <div className="card space-y-4">
+        <div className="card space-y-4 border-primary-500/20">
           {isTodayTraining && !todayAlreadyDone ? (
             <>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center text-2xl">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-primary-500/20 flex items-center justify-center text-2xl">
                   🏋️
                 </div>
-                <div>
-                  <p className="text-sm text-white/50">Hoje é dia de</p>
-                  <p className="text-lg font-bold">
-                    {todayWorkout && WORKOUT_MAP[todayWorkout].label} — {todayWorkout && WORKOUT_MAP[todayWorkout].focus}
+                <div className="flex-1">
+                  <p className="text-xs text-white/40 uppercase tracking-wide">Treino de hoje</p>
+                  <p className="text-lg font-bold mt-0.5">
+                    {todayWorkout && WORKOUT_MAP[todayWorkout].label}
                   </p>
+                  <p className="text-sm text-primary-400">{todayWorkout && WORKOUT_MAP[todayWorkout].focus}</p>
                 </div>
               </div>
               <button
                 className="btn-primary"
                 onClick={() => todayWorkout && handleStartWorkout(todayWorkout)}
               >
-                Iniciar Treino 🔥
+                Iniciar Treino
               </button>
             </>
           ) : todayAlreadyDone ? (
-            <div className="text-center py-4">
-              <span className="text-4xl">✅</span>
-              <p className="text-lg font-semibold mt-2">Treino de hoje concluído!</p>
-              <p className="text-white/40 text-sm">Descanse e se recupere</p>
+            <div className="text-center py-6">
+              <span className="text-5xl">✅</span>
+              <p className="text-lg font-semibold mt-3">Treino concluído!</p>
+              <p className="text-white/40 text-sm mt-1">Descanse e se recupere 💤</p>
             </div>
           ) : (
-            <div className="text-center py-4">
-              <span className="text-4xl">😴</span>
-              <p className="text-lg font-semibold mt-2">Hoje é dia de descanso</p>
-              <p className="text-white/40 text-sm">Aproveite para se recuperar</p>
+            <div className="text-center py-6">
+              <span className="text-5xl">😴</span>
+              <p className="text-lg font-semibold mt-3">Dia de descanso</p>
+              <p className="text-white/40 text-sm mt-1">Aproveite para se recuperar</p>
             </div>
           )}
         </div>

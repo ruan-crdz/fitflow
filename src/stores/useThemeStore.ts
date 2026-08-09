@@ -22,8 +22,14 @@ export interface AppTheme {
 
 export const THEMES: AppTheme[] = [
   {
+    id: 'smartfit',
+    name: 'Amarelo (SmartFit)',
+    emoji: '💛',
+    colors: { primary: '#e5a100', primaryLight: '#fbbf24', primaryDark: '#b45309', bg: '#0d0d0d', bgCard: '#1a1a1a', accent: '#fbbf24' },
+  },
+  {
     id: 'purple',
-    name: 'Roxo (Padrão)',
+    name: 'Roxo',
     emoji: '💜',
     colors: { primary: '#7c3aed', primaryLight: '#a78bfa', primaryDark: '#5b21b6', bg: '#0f0f1a', bgCard: '#1a1a2e', accent: '#7c3aed' },
   },
