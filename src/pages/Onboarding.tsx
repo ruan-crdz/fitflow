@@ -39,7 +39,7 @@ export function Onboarding() {
 
   const handleFinishAI = () => {
     saveProfile();
-    navigate('/plans?ai=true');
+    navigate('/setup-ai');
   };
 
   return (

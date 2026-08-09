@@ -12,7 +12,7 @@ export function AppShell({ children }: AppShellProps) {
   const navigate = useNavigate();
   const aiEnabled = useAIStore((s) => s.isEnabled);
 
-  const hideNav = location.pathname.startsWith('/workout') || location.pathname === '/ai/intro';
+  const hideNav = location.pathname.startsWith('/workout') || location.pathname === '/ai/intro' || location.pathname === '/setup-ai';
   if (hideNav) return <>{children}</>;
 
   const navItems = [

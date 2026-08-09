@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSearchParams } from 'react-router-dom';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -24,7 +23,6 @@ interface SwapSuggestion {
 }
 
 export function WorkoutPlans() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<WorkoutType>('A');
   const [editing, setEditing] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
@@ -53,15 +51,6 @@ export function WorkoutPlans() {
 
   const defaultWorkout = WORKOUTS.find((w) => w.type === selected)!;
   const exercises = getExercises(selected);
-
-  // Auto-open AI builder when coming from onboarding
-  useEffect(() => {
-    if (searchParams.get('ai') === 'true' && apiKey && profile) {
-      setSearchParams({});
-      setEditing(true);
-      setTimeout(() => handleAIBuild(), 300);
-    }
-  }, []);
 
   // Maps compound muscle groups from workouts to catalog filter names
   const toCatalogGroups = (mg: string): string[] => {

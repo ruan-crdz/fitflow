@@ -14,6 +14,7 @@ import { Profile } from '@/pages/Profile';
 import { WorkoutPlans } from '@/pages/WorkoutPlans';
 import { AIIntro } from '@/pages/AIIntro';
 import { AIChat } from '@/pages/AIChat';
+import { AISetup } from '@/pages/AISetup';
 
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
@@ -57,6 +58,7 @@ export function App() {
             <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/plans" element={<WorkoutPlans />} />
+            <Route path="/setup-ai" element={<AISetup />} />
             <Route path="/ai/intro" element={<AIIntro />} />
             <Route path="/ai" element={<AIChat />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
