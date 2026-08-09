@@ -13,6 +13,7 @@ import { ExerciseImage } from '@/components/workout/ExerciseImage';
 import { AIWorkoutTip } from '@/components/workout/AIWorkoutTip';
 import { RestTimer } from '@/components/workout/RestTimer';
 import { getRestDuration } from '@/utils/rest';
+import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { askAI } from '@/utils/ai';
 
@@ -24,6 +25,7 @@ export function Workout() {
   const [aiQuestion, setAIQuestion] = useState('');
   const [aiAnswer, setAIAnswer] = useState('');
   const [aiLoading, setAILoading] = useState(false);
+  const [swapSuggestion, setSwapSuggestion] = useState<{ name: string; muscleGroup: string; image?: string } | null>(null);
   const { activeSession, completeSet, nextExercise, previousExercise, endSession } =
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
@@ -31,6 +33,7 @@ export function Workout() {
   const profile = useProfileStore((s) => s.profile);
   const goal = useProfileStore((s) => s.profile?.goal || 'maintain');
   const { notes, setNote } = useNotesStore();
+  const getExercises = useCustomWorkoutStore((s) => s.getExercises);
 
   const { formatted } = useTimer(activeSession?.startedAt ?? null);
 
@@ -40,7 +43,7 @@ export function Workout() {
   }
 
   const workout = WORKOUT_MAP[activeSession.workoutType];
-  const exercises = workout.exercises;
+  const exercises = getExercises(activeSession.workoutType);
   const currentIndex = activeSession.currentExerciseIndex;
   const exercise = exercises[currentIndex];
   const isLastExercise = currentIndex === exercises.length - 1;
@@ -86,13 +89,47 @@ export function Workout() {
     try {
       const context = `Exercício atual: ${exercise.name} (${exercise.muscleGroup}, ${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}).
 Treino: ${workout.label} — ${workout.focus}.
-Equipamentos disponíveis: academia completa.`;
+Equipamentos disponíveis: academia completa.
+
+IMPORTANTE: Se a usuária pedir pra SUBSTITUIR o exercício, responda com uma sugestão E inclua no final da resposta este bloco JSON:
+[SWAP:{"name":"Nome do exercício substituto","muscleGroup":"grupo","image":"URL da imagem"}]
+O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
       const answer = await askAI(apiKey, profile, `${context}\n\nPergunta da usuária: ${aiQuestion}`);
-      setAIAnswer(answer);
+
+      // Check if AI suggested a swap
+      const swapMatch = answer.match(/\[SWAP:(\{[^}]+\})\]/);
+      if (swapMatch) {
+        const cleanAnswer = answer.replace(/\[SWAP:[^\]]+\]/, '').trim();
+        setAIAnswer(cleanAnswer + '\n\n✅ Deseja substituir? Toque "Trocar" abaixo.');
+        try {
+          const swapData = JSON.parse(swapMatch[1]);
+          setSwapSuggestion(swapData);
+        } catch { /* ignore parse error */ }
+      } else {
+        setAIAnswer(answer);
+      }
     } catch {
       setAIAnswer('Erro ao consultar IA. Tente novamente.');
     }
     setAILoading(false);
+  };
+
+  const handleSwapAccept = () => {
+    if (!swapSuggestion) return;
+    const { swapExercise: doSwap } = useCustomWorkoutStore.getState();
+    const newId = `swap_${Date.now()}`;
+    doSwap(activeSession!.workoutType, exercise.id, {
+      id: newId,
+      name: swapSuggestion.name,
+      sets: exercise.sets,
+      repsMin: exercise.repsMin,
+      repsMax: exercise.repsMax,
+      muscleGroup: swapSuggestion.muscleGroup || exercise.muscleGroup,
+      image: swapSuggestion.image,
+    });
+    setSwapSuggestion(null);
+    setAIAnswer('✅ Exercício trocado! Avance para continuar.');
+    setShowAIChat(false);
   };
 
   return (
@@ -251,9 +288,19 @@ Equipamentos disponíveis: academia completa.`;
               <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg">✕</button>
             </div>
             {aiAnswer && (
-              <p className="text-sm text-white/80 leading-relaxed mb-3 whitespace-pre-line bg-white/5 rounded-xl p-3">
-                {aiAnswer}
-              </p>
+              <div className="mb-3">
+                <p className="text-sm text-white/80 leading-relaxed whitespace-pre-line bg-white/5 rounded-xl p-3">
+                  {aiAnswer}
+                </p>
+                {swapSuggestion && (
+                  <button
+                    onClick={handleSwapAccept}
+                    className="mt-2 w-full py-2.5 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-medium"
+                  >
+                    ✓ Trocar por {swapSuggestion.name}
+                  </button>
+                )}
+              </div>
             )}
             <div className="flex gap-2">
               <input
