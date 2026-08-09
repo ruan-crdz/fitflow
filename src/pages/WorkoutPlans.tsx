@@ -62,6 +62,29 @@ export function WorkoutPlans() {
   const defaultWorkout = WORKOUTS.find((w) => w.type === selected) || { type: selected, label: `Treino ${selected}`, focus: 'Personalizado', exercises: [] };
   const exercises = getExercises(selected);
 
+  // Derive focus label from actual muscle groups in the workout
+  const deriveFocus = (): string => {
+    if (exercises.length === 0) return 'Vazio';
+    const groups = exercises.map((e) => e.muscleGroup.toLowerCase());
+    const upper = ['costas', 'peitoral', 'ombros', 'bíceps', 'tríceps', 'costas / bíceps'];
+    const lower = ['quadríceps', 'posterior de coxa', 'glúteos', 'panturrilhas', 'panturrilha'];
+    const upperCount = groups.filter((g) => upper.some((u) => g.includes(u))).length;
+    const lowerCount = groups.filter((g) => lower.some((l) => g.includes(l))).length;
+    const total = exercises.length;
+
+    if (upperCount >= total * 0.7) return 'Superior';
+    if (lowerCount >= total * 0.7) return 'Inferior';
+    if (upperCount > 0 && lowerCount > 0) return 'Full Body';
+
+    // Find the most common group
+    const freq: Record<string, number> = {};
+    groups.forEach((g) => { freq[g] = (freq[g] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    return top.map(([g]) => g.charAt(0).toUpperCase() + g.slice(1)).join(' + ');
+  };
+
+  const workoutFocus = deriveFocus();
+
   // Maps compound muscle groups from workouts to catalog filter names
   const toCatalogGroups = (mg: string): string[] => {
     const lower = mg.toLowerCase();
@@ -442,8 +465,8 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           className="space-y-3"
         >
           <div className="mb-4">
-            <h2 className="text-lg font-bold">{defaultWorkout.label}</h2>
-            <p className="text-primary-400 text-sm">{defaultWorkout.focus}</p>
+            <h2 className="text-lg font-bold">Treino {selected}</h2>
+            <p className="text-primary-400 text-sm">{workoutFocus}</p>
             <p className="text-white/30 text-xs mt-1">
               {exercises.reduce((acc, e) => acc + e.sets, 0)} séries • {exercises.length} exercícios
             </p>
