@@ -14,8 +14,6 @@ import { Profile } from '@/pages/Profile';
 import { WorkoutPlans } from '@/pages/WorkoutPlans';
 import { AIIntro } from '@/pages/AIIntro';
 import { AIChat } from '@/pages/AIChat';
-import { Badges } from '@/pages/Badges';
-import { BadgeToast } from '@/components/ui/BadgeToast';
 
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
@@ -52,7 +50,6 @@ export function App() {
     <ThemeProvider>
       <HashRouter>
         <AppShell>
-          <BadgeToast />
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/workout" element={<Workout />} />
@@ -60,7 +57,6 @@ export function App() {
             <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/plans" element={<WorkoutPlans />} />
-            <Route path="/badges" element={<Badges />} />
             <Route path="/ai/intro" element={<AIIntro />} />
             <Route path="/ai" element={<AIChat />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
