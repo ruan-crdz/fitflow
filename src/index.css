@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary-rgb: 124 58 237;
+    --color-primary-light-rgb: 167 139 250;
+    --color-primary-mid-rgb: 139 92 246;
+    --color-primary-dark-rgb: 109 40 217;
+    --color-primary-darker-rgb: 91 33 182;
+    --color-bg-rgb: 15 15 26;
+    --color-bg-card-rgb: 26 26 46;
+    --color-bg-mid-rgb: 20 20 36;
+    --font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    overscroll-behavior: none;
+    min-height: 100dvh;
+    background-color: rgb(var(--color-bg-rgb));
+    color: white;
+    font-family: var(--font-family);
+  }
+
+  #root {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-dark-100/80 backdrop-blur-lg border border-white/5;
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 hover:bg-primary-600 active:scale-95 text-white font-semibold
+           rounded-2xl px-6 py-4 text-lg transition-all duration-150 w-full
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply bg-dark-50 hover:bg-dark-100 active:scale-95 text-white font-medium
+           rounded-2xl px-6 py-4 text-lg transition-all duration-150 w-full
+           border border-white/10;
+  }
+
+  .btn-success {
+    @apply bg-success hover:bg-emerald-600 active:scale-95 text-white font-semibold
+           rounded-2xl px-6 py-4 text-lg transition-all duration-150 w-full;
+  }
+
+  .input-field {
+    @apply bg-dark-200 border border-white/10 rounded-xl px-4 py-3 text-white
+           placeholder:text-white/30 focus:outline-none focus:border-primary-400
+           transition-colors w-full text-lg;
+  }
+
+  .card {
+    @apply glass rounded-2xl p-5;
+  }
+}
