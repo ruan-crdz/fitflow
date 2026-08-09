@@ -13,7 +13,7 @@ export function AppShell({ children }: AppShellProps) {
   const navigate = useNavigate();
   const aiEnabled = useAIStore((s) => s.isEnabled);
 
-  const hideNav = location.pathname.startsWith('/workout') || location.pathname === '/ai/intro' || location.pathname === '/setup-ai';
+  const hideNav = location.pathname.startsWith('/workout') || location.pathname === '/ai/intro' || location.pathname === '/setup-ai' || location.pathname === '/plans/reeval';
   if (hideNav) return <><ToastContainer />{children}</>;
 
   const navItems = [

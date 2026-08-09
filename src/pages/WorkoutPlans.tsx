@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
+import { useToastStore } from '@/stores/useToastStore';
 import { WORKOUTS } from '@/constants/workouts';
 import { EXERCISE_CATALOG, MUSCLE_GROUPS } from '@/constants/exerciseCatalog';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -23,11 +25,16 @@ interface SwapSuggestion {
 }
 
 export function WorkoutPlans() {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<WorkoutType>('A');
   const [editing, setEditing] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogFilter, setCatalogFilter] = useState<string>('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [importInput, setImportInput] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<WorkoutType | null>(null);
 
   // AI Builder states
   const [showAIBuilder, setShowAIBuilder] = useState(false);
@@ -44,14 +51,13 @@ export function WorkoutPlans() {
   const [swapTargetLoading, setSwapTargetLoading] = useState(false);
   const [manualSwapTargetId, setManualSwapTargetId] = useState<string | null>(null);
 
-  const { getExercises, setExercises, resetWorkout, swapExercise, customWorkouts } = useCustomWorkoutStore();
+  const { getExercises, setExercises, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, exportWorkout, exportAll, importWorkouts } = useCustomWorkoutStore();
   const apiKey = useAIStore((s) => s.apiKey);
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
+  const toast = useToastStore((s) => s.show);
 
-  const activeTypes = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[]).filter(
-    (t) => customWorkouts[t] !== null || WORKOUTS.find((w) => w.type === t),
-  );
+  const activeTypes = activeSlots;
 
   const defaultWorkout = WORKOUTS.find((w) => w.type === selected) || { type: selected, label: `Treino ${selected}`, focus: 'Personalizado', exercises: [] };
   const exercises = getExercises(selected);
@@ -361,24 +367,69 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           {editing ? '✓ Salvar' : '✏️ Editar'}
         </motion.button>
       </div>
-      <p className="text-white/30 text-xs mb-6">
-        {editing ? 'Reordene, substitua ou remova exercícios' : 'Toque em Editar para personalizar'}
-      </p>
 
-      {/* Tabs - pill style with spring animation */}
+      {/* Action toolbar */}
+      <div className="flex gap-2 mb-4 overflow-x-auto no-scrollbar">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowShareMenu(true)}
+          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium flex items-center gap-1 shrink-0"
+        >
+          📤 Compartilhar
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowImport(true)}
+          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium flex items-center gap-1 shrink-0"
+        >
+          📥 Importar
+        </motion.button>
+        {aiEnabled && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate('/plans/reeval')}
+            className="px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20 text-primary-300 text-[11px] font-medium flex items-center gap-1 shrink-0"
+          >
+            🧠 Reavaliação IA
+          </motion.button>
+        )}
+      </div>
+
+      {/* Tabs + Add Day */}
       <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
         {activeTypes.map((type) => (
           <motion.button
             key={type}
             whileTap={{ scale: 0.92 }}
             onClick={() => !editing && setSelected(type)}
-            className={`flex-1 min-w-[60px] py-3 rounded-xl font-semibold transition-all relative ${
+            className={`flex-1 min-w-[52px] py-3 rounded-xl font-semibold transition-all relative ${
               selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : editing ? 'bg-dark-200 text-white/20 opacity-50' : 'bg-dark-200 text-white/40'
             }`}
           >
             {type}
+            {editing && activeTypes.length > 2 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setRemoveTarget(type); }}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+              >×</button>
+            )}
           </motion.button>
         ))}
+        {activeTypes.length < 5 && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              const slot = addSlot();
+              if (slot) {
+                toast(`Treino ${slot} adicionado!`, 'success');
+                setSelected(slot);
+              }
+            }}
+            className="min-w-[52px] py-3 rounded-xl border-2 border-dashed border-white/15 text-white/30 font-bold text-lg"
+          >
+            +
+          </motion.button>
+        )}
       </div>
 
       {/* Workout Detail */}
@@ -710,6 +761,143 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {/* Remove Day Confirmation */}
+      <ConfirmModal
+        open={!!removeTarget}
+        title={`Remover Treino ${removeTarget}?`}
+        message="Todos os exercícios desse treino serão apagados."
+        confirmText="Remover"
+        cancelText="Cancelar"
+        danger
+        onConfirm={() => {
+          if (removeTarget) {
+            removeSlot(removeTarget);
+            toast(`Treino ${removeTarget} removido`, 'info');
+            if (selected === removeTarget) setSelected(activeTypes[0] === removeTarget ? activeTypes[1] || 'A' : activeTypes[0]);
+          }
+          setRemoveTarget(null);
+        }}
+        onCancel={() => setRemoveTarget(null)}
+      />
+
+      {/* Share/Export Modal */}
+      <AnimatePresence>
+        {showShareMenu && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
+            onClick={() => setShowShareMenu(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
+              <h3 className="text-lg font-bold">Compartilhar treinos</h3>
+              <p className="text-xs text-white/40">Gere um código para enviar a alguém. A pessoa importa no app dela.</p>
+
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  const code = exportWorkout(selected);
+                  navigator.clipboard.writeText(code);
+                  toast(`Treino ${selected} copiado!`, 'success');
+                  setShowShareMenu(false);
+                }}
+                className="w-full py-3 rounded-xl bg-primary-500/10 border border-primary-500/20 text-primary-300 text-sm font-semibold"
+              >
+                📋 Copiar Treino {selected}
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  const code = exportAll();
+                  navigator.clipboard.writeText(code);
+                  toast('Todos os treinos copiados!', 'success');
+                  setShowShareMenu(false);
+                }}
+                className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm font-medium"
+              >
+                📋 Copiar Todos ({activeTypes.join('')})
+              </motion.button>
+
+              {typeof navigator.share === 'function' && (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={async () => {
+                    const code = exportAll();
+                    await navigator.share({ title: 'FitFlow - Meus Treinos', text: code });
+                    setShowShareMenu(false);
+                  }}
+                  className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm font-medium"
+                >
+                  🔗 Compartilhar via...
+                </motion.button>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Import Modal */}
+      <AnimatePresence>
+        {showImport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
+            onClick={() => setShowImport(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
+              <h3 className="text-lg font-bold">Importar treino</h3>
+              <p className="text-xs text-white/40">Cole o código que alguém te enviou.</p>
+
+              <textarea
+                value={importInput}
+                onChange={(e) => setImportInput(e.target.value)}
+                placeholder="Cole o código aqui..."
+                className="input-field text-sm min-h-[100px] resize-none"
+                autoFocus
+              />
+
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                disabled={!importInput.trim()}
+                onClick={() => {
+                  const success = importWorkouts(importInput.trim());
+                  if (success) {
+                    toast('Treinos importados com sucesso!', 'success');
+                    setImportInput('');
+                    setShowImport(false);
+                  } else {
+                    toast('Código inválido. Verifique e tente novamente.', 'error');
+                  }
+                }}
+                className="btn-primary"
+              >
+                Importar
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
