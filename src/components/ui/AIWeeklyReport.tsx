@@ -35,6 +35,9 @@ export function AIWeeklyReport() {
     const weekSessions = sessions.filter((s) => s.completedAt && s.date >= weekStr);
     const weekWeight = weightEntries.filter((e) => e.date >= weekStr);
 
+    // Don't show report if no workouts were done this week
+    if (weekSessions.length === 0) return;
+
     setLoading(true);
 
     fetch('https://api.openai.com/v1/chat/completions', {
@@ -48,14 +51,13 @@ export function AIWeeklyReport() {
         messages: [
           {
             role: 'system',
-            content: `Você é a FlowAI, assistente fitness. Faça um mini relatório semanal motivador (máx 4 linhas) com: resumo da semana, progresso, e 1 recomendação pra semana seguinte. Use emojis. Seja direta e positiva.`,
+            content: `Você é a FlowAI, personal trainer virtual. Faça um mini relatório semanal ULTRA motivador (máx 4 linhas). Celebre conquistas reais (ex: "3 treinos essa semana, monstro!"). Se houve progresso de peso no objetivo, destaque. Dê 1 meta específica pra próxima semana. Use emojis. Tom: amiga animada que puxa pra cima. NUNCA diga coisas óbvias ou desmotivantes como "o peso se manteve" sem contexto positivo.`,
           },
           {
             role: 'user',
             content: `Perfil: ${profile.name}, ${profile.weight}kg, objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
-Esta semana: ${weekSessions.length} treinos completados.
-Peso: ${weekWeight.length > 0 ? `de ${weekWeight[0].weight}kg para ${weekWeight[weekWeight.length - 1].weight}kg` : 'sem registros'}.
-Treinos: ${weekSessions.map((s) => s.workoutType).join(', ') || 'nenhum'}`,
+Esta semana: ${weekSessions.length} treinos completados (${weekSessions.map((s) => s.workoutType).join(', ')}).
+Peso: ${weekWeight.length >= 2 ? `de ${weekWeight[0].weight}kg para ${weekWeight[weekWeight.length - 1].weight}kg` : weekWeight.length === 1 ? `${weekWeight[0].weight}kg registrado` : 'sem registros essa semana'}.`,
           },
         ],
         max_tokens: 150,

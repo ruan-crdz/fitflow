@@ -17,6 +17,10 @@ export function AIDashInsight() {
   useEffect(() => {
     if (!apiKey || !isEnabled || !profile) return;
 
+    const completedSessions = sessions.filter((s) => s.completedAt);
+    // Don't show insight if user hasn't done any workouts yet
+    if (completedSessions.length === 0) return;
+
     const storageKey = `fitflow-ai-insight-${new Date().toISOString().slice(0, 10)}`;
     const cached = sessionStorage.getItem(storageKey);
     if (cached) {
@@ -26,7 +30,6 @@ export function AIDashInsight() {
 
     setLoading(true);
 
-    const completedSessions = sessions.filter((s) => s.completedAt);
     const recentWeight = weightEntries.slice(-7);
     const weightTrend = recentWeight.length >= 2
       ? `Peso: de ${recentWeight[0].weight}kg para ${recentWeight[recentWeight.length - 1].weight}kg nos últimos ${recentWeight.length} dias`
