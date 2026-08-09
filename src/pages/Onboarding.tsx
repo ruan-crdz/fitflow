@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
-import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
+import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
+import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus } from '@/types';
 
-type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'setup';
+type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'focus' | 'customSplit' | 'setup';
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -19,6 +19,8 @@ export function Onboarding() {
   const [goal, setGoal] = useState<Goal>('lose');
   const [experience, setExperience] = useState<ExperienceLevel>('beginner');
   const [days, setDays] = useState<WeekDay[]>([]);
+  const [focus, setFocus] = useState<TrainingFocus>('balanced');
+  const [customSplit, setCustomSplit] = useState<Record<string, string>>({});
 
   const toggleDay = (day: WeekDay) => {
     setDays((prev) =>
@@ -30,6 +32,8 @@ export function Onboarding() {
     setProfile({
       name, age: Number(age), weight: Number(weight), height: Number(height),
       goal, trainingDays: days, sex, experienceLevel: experience,
+      trainingFocus: focus,
+      ...(focus === 'custom' && Object.keys(customSplit).length > 0 ? { customSplit } : {}),
     });
   };
 
@@ -302,8 +306,68 @@ export function Onboarding() {
               <button
                 className="btn-primary"
                 disabled={days.length < 1}
-                onClick={() => setStep('setup')}
+                onClick={() => setStep('focus')}
               >
+                Continuar
+              </button>
+            </div>
+          )}
+
+          {/* Training Focus */}
+          {step === 'focus' && (
+            <div className="space-y-8">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Preferência de treino 🎯</h1>
+                <p className="text-white/50">Onde você quer dar mais ênfase?</p>
+              </div>
+              <div className="space-y-3">
+                {FOCUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFocus(opt.value)}
+                    className={`w-full p-4 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                      focus === opt.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
+                    }`}
+                  >
+                    <span className="text-2xl">{opt.emoji}</span>
+                    <div>
+                      <span className="font-medium text-lg">{opt.label}</span>
+                      <p className="text-white/40 text-xs">{opt.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button className="btn-primary" onClick={() => focus === 'custom' ? setStep('customSplit') : setStep('setup')}>
+                Continuar
+              </button>
+            </div>
+          )}
+
+          {/* Custom Split */}
+          {step === 'customSplit' && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Monte sua divisão ✏️</h1>
+                <p className="text-white/50">O que você quer treinar em cada dia?</p>
+              </div>
+              <div className="space-y-3">
+                {['A', 'B', 'C', 'D', 'E'].slice(0, Math.min(days.length, 5)).map((letter) => (
+                  <div key={letter} className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-primary-400 w-8">Dia {letter}</span>
+                    <input
+                      type="text"
+                      value={customSplit[letter] || ''}
+                      onChange={(e) => setCustomSplit((prev) => ({ ...prev, [letter]: e.target.value }))}
+                      placeholder="Ex: Peito e Tríceps"
+                      className="input-field flex-1 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-white/30 text-center">
+                Exemplos: "Peito e Tríceps", "Costas e Bíceps", "Perna completa", "Ombros e Braços"
+              </p>
+              <button className="btn-primary" onClick={() => setStep('setup')}>
                 Continuar
               </button>
             </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -6,6 +6,7 @@ import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { useAIStore } from '@/stores/useAIStore';
+import { useWaterStore } from '@/stores/useWaterStore';
 import { MotivationalQuote } from '@/components/ui/MotivationalQuote';
 import { WeightChart } from '@/components/ui/WeightChart';
 import { WeightPrompt } from '@/components/ui/WeightPrompt';
@@ -30,7 +31,11 @@ export function Dashboard() {
   const weightEntries = useWeightStore((s) => s.entries);
   const hasTodayWeight = useWeightStore((s) => s.hasTodayEntry());
   const aiEnabled = useAIStore((s) => s.isEnabled);
+  const waterGlasses = useWaterStore((s) => s.getToday());
+  const addGlass = useWaterStore((s) => s.addGlass);
+  const removeGlass = useWaterStore((s) => s.removeGlass);
   const [showWeightPrompt, setShowWeightPrompt] = useState(!hasTodayWeight);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const today = getToday();
   const totalWorkouts = sessions.filter((s) => s.completedAt).length;
@@ -194,7 +199,7 @@ export function Dashboard() {
           </div>
           <div>
             <p className="text-2xl font-bold text-blue-400">{water}L</p>
-            <p className="text-xs text-white/40">água/dia</p>
+            <p className="text-xs text-white/40">meta de água</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
@@ -212,6 +217,21 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Water Tracker */}
+      <WaterTracker
+        glasses={waterGlasses}
+        goal={Math.round(water * 4)}
+        onAdd={() => {
+          addGlass();
+          const newCount = waterGlasses + 1;
+          const goal = Math.round(water * 4);
+          if (newCount >= goal && waterGlasses < goal) setShowConfetti(true);
+        }}
+        onRemove={removeGlass}
+        showConfetti={showConfetti}
+        onConfettiDone={() => setShowConfetti(false)}
+      />
 
       {/* BMI */}
       <div className="card flex items-center justify-between">
@@ -240,6 +260,74 @@ export function Dashboard() {
 
       {/* Weight Prompt */}
       {showWeightPrompt && <WeightPrompt onClose={() => setShowWeightPrompt(false)} />}
+    </div>
+  );
+}
+
+function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfettiDone }: {
+  glasses: number; goal: number; onAdd: () => void; onRemove: () => void;
+  showConfetti: boolean; onConfettiDone: () => void;
+}) {
+  const progress = Math.min(glasses / goal, 1);
+  const ml = glasses * 250;
+
+  useEffect(() => {
+    if (showConfetti) {
+      const t = setTimeout(onConfettiDone, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [showConfetti]);
+
+  return (
+    <div className="card space-y-3 relative overflow-hidden">
+      {showConfetti && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+        >
+          <p className="text-4xl animate-bounce">🎉💧🎉</p>
+        </motion.div>
+      )}
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-white/80">💧 Água</h2>
+        <p className="text-xs text-white/40">{ml}ml / {goal * 250}ml</p>
+      </div>
+      <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress * 100}%` }}
+          transition={{ type: 'spring', stiffness: 100 }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onRemove}
+          disabled={glasses <= 0}
+          className="w-10 h-10 rounded-full bg-dark-300 flex items-center justify-center text-white/50 disabled:opacity-30"
+        >
+          −
+        </button>
+        <div className="flex gap-1">
+          {Array.from({ length: goal }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-2.5 h-2.5 rounded-full transition-all ${i < glasses ? 'bg-blue-400 scale-110' : 'bg-dark-300'}`}
+            />
+          ))}
+        </div>
+        <button
+          onClick={onAdd}
+          className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-lg"
+        >
+          +
+        </button>
+      </div>
+      {glasses >= goal && (
+        <p className="text-center text-xs text-green-400 font-medium">✅ Meta atingida! Parabéns!</p>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Profile, WeekDay, Goal, ExperienceLevel } from '@/types';
+import type { Profile, WeekDay, Goal, ExperienceLevel, TrainingFocus } from '@/types';
 
 interface ProfileState {
   profile: Profile | null;
@@ -46,4 +46,11 @@ export const EXPERIENCE_OPTIONS: { value: ExperienceLevel; label: string; emoji:
   { value: 'beginner', label: 'Iniciante', emoji: '🌱', description: 'Começando agora ou voltando após muito tempo parado' },
   { value: 'intermediate', label: 'Intermediário', emoji: '💪', description: 'Treino consistente há 6+ meses' },
   { value: 'advanced', label: 'Avançado', emoji: '🏆', description: 'Treino sério há 2+ anos' },
+];
+
+export const FOCUS_OPTIONS: { value: TrainingFocus; label: string; emoji: string; description: string }[] = [
+  { value: 'balanced', label: 'Equilibrado', emoji: '⚖️', description: 'Volume igual pra todos os grupos musculares' },
+  { value: 'upper', label: 'Foco em superiores', emoji: '🦾', description: 'Mais volume pra peito, costas, ombros e braços' },
+  { value: 'lower', label: 'Foco em inferiores', emoji: '🦵', description: 'Mais volume pra glúteos, quadríceps e posterior' },
+  { value: 'custom', label: 'Personalizado', emoji: '✏️', description: 'Eu escolho o que quero em cada dia' },
 ];

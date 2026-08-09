@@ -12,6 +12,8 @@ type Phase = 'token' | 'generating' | 'summary';
 interface GeneratedWorkout {
   type: string;
   focus: string;
+  cardio?: { type: string; durationMin: number; intensity: string };
+  estimatedCalories?: number;
   exercises: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[];
 }
 
@@ -85,6 +87,15 @@ export function AISetup() {
       .map(([g, names]) => `${g}: ${names.join(', ')}`)
       .join('\n');
 
+    const focusLabel = profile.trainingFocus === 'upper' ? 'foco em superiores (mais volume de peito/costas/ombros/braços)'
+      : profile.trainingFocus === 'lower' ? 'foco em inferiores (mais volume de glúteos/quadríceps/posterior)'
+      : profile.trainingFocus === 'custom' ? 'personalizado (ver divisão abaixo)'
+      : 'equilibrado (volume igual para todos os grupos)';
+
+    const customSplitInfo = profile.trainingFocus === 'custom' && profile.customSplit
+      ? '\nDIVISÃO PERSONALIZADA PELO USUÁRIO:\n' + Object.entries(profile.customSplit).map(([k, v]) => `- Treino ${k}: ${v}`).join('\n')
+      : '';
+
     const prompt = `Você é um preparador físico esportivo com pós-graduação em fisiologia do exercício.
 
 PERFIL DO ALUNO:
@@ -94,6 +105,8 @@ PERFIL DO ALUNO:
 - Objetivo: ${goalLabel}
 - Dias disponíveis: ${trainingDays}x por semana
 - Nível: ${levelLabel}
+- Preferência: ${focusLabel}
+${customSplitInfo}
 
 DIRETRIZES BASEADAS EM EVIDÊNCIA POR FAIXA ETÁRIA E SEXO:
 ${profile.age >= 40 ? `- Acima de 40 anos: priorizar aquecimento articular, evitar cargas excessivas em compressão vertebral, incluir exercícios de mobilidade e estabilização. Preferir séries moderadas (10-15 reps) em vez de carga máxima. Recuperação entre sessões é mais lenta — evitar treinar o mesmo grupo em dias consecutivos.` : ''}
@@ -123,10 +136,18 @@ IMPORTANTE: O número de treinos distintos NÃO precisa ser igual ao número de 
 
 REGRAS DE MONTAGEM:
 1. Após escolher o split vencedor, monte os treinos
-2. Cada treino: 5-8 exercícios (menos para iniciante, mais para avançado)
-3. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, volume adequado de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}
-4. Cada exercício DEVE vir da lista abaixo (nome exato)
-5. Explique a rotação semanal
+2. Cada treino: 5-8 exercícios de musculação (menos para iniciante, mais para avançado)
+3. Respeite a preferência do aluno: ${focusLabel}
+${profile.trainingFocus === 'custom' ? '4. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : `4. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, volume adequado de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}`}
+5. Cada exercício DEVE vir da lista abaixo (nome exato)
+6. Explique a rotação semanal
+7. Cada treino DEVE incluir cardio ao final. Defina tipo (esteira/bike/elíptico) e duração (em minutos) baseado no perfil:
+   - Objetivo emagrecer: 20-30min cardio moderado
+   - Objetivo manter: 15-20min cardio leve
+   - Objetivo ganhar massa: 10-15min cardio leve (apenas aquecimento/saúde cardiovascular)
+   - >40 anos: preferir bike ou elíptico (menos impacto articular)
+   - <30 anos: qualquer modalidade
+8. Estime calorias queimadas por treino (musculação + cardio) baseado no peso do aluno (${profile.weight}kg)
 
 Exercícios disponíveis (use nomes EXATOS):
 ${catalogCompact}
@@ -144,7 +165,13 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
   "explanation": "Justificativa de por que este split venceu (2-3 frases)",
   "rotation": "Como rotacionar na semana (ex: Sem1: A,B,C,A,B / Sem2: C,A,B,C,A)",
   "workouts": [
-    {"type": "A", "focus": "foco", "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]}
+    {
+      "type": "A",
+      "focus": "foco do treino",
+      "cardio": {"type": "Esteira", "durationMin": 20, "intensity": "moderado"},
+      "estimatedCalories": 350,
+      "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]
+    }
   ]
 }`;
 
@@ -356,6 +383,17 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
                       </p>
                     ))}
                   </div>
+                  {w.cardio && (
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+                      <span className="text-xs">🏃</span>
+                      <p className="text-xs text-white/50">
+                        {w.cardio.type} — {w.cardio.durationMin}min ({w.cardio.intensity})
+                      </p>
+                    </div>
+                  )}
+                  {w.estimatedCalories && (
+                    <p className="text-xs text-orange-400/70 mt-1">🔥 ~{w.estimatedCalories} kcal estimadas</p>
+                  )}
                 </div>
               ))}
 

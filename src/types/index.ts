@@ -8,6 +8,12 @@ export type BiologicalSex = 'male' | 'female';
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 
+export type TrainingFocus = 'upper' | 'lower' | 'balanced' | 'custom';
+
+export interface CustomSplit {
+  [key: string]: string; // e.g. "A": "Peito e Tríceps", "B": "Costas e Bíceps"
+}
+
 export interface Profile {
   name: string;
   age: number;
@@ -17,6 +23,8 @@ export interface Profile {
   trainingDays: WeekDay[];
   sex?: BiologicalSex;
   experienceLevel?: ExperienceLevel;
+  trainingFocus?: TrainingFocus;
+  customSplit?: CustomSplit;
 }
 
 export interface Exercise {
