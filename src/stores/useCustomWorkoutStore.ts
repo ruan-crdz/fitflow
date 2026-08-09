@@ -122,29 +122,44 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
           if (parsed.v !== 1) return false;
 
           if (parsed.workouts) {
+            // Full import: replace everything
             const slots: WorkoutType[] = [];
             const cw: Record<string, CustomExercise[] | null> = { A: null, B: null, C: null, D: null, E: null };
             for (const w of parsed.workouts) {
               if (!['A', 'B', 'C', 'D', 'E'].includes(w.type)) continue;
-              slots.push(w.type);
+              if (!w.exercises || w.exercises.length === 0) continue;
+              slots.push(w.type as WorkoutType);
               cw[w.type] = w.exercises.map((e: CustomExercise, i: number) => ({
                 id: `imp_${w.type}_${i}_${Date.now()}`,
-                name: e.name, sets: e.sets, repsMin: e.repsMin,
-                repsMax: e.repsMax, muscleGroup: e.muscleGroup, image: e.image,
+                name: e.name || 'Exercício',
+                sets: e.sets || 3,
+                repsMin: e.repsMin || 8,
+                repsMax: e.repsMax || 12,
+                muscleGroup: e.muscleGroup || 'Geral',
+                image: e.image,
               }));
             }
+            if (slots.length === 0) return false;
             set({ activeSlots: slots, customWorkouts: cw as Record<WorkoutType, CustomExercise[] | null> });
           } else if (parsed.type && parsed.exercises) {
+            // Single workout import: overwrite that slot
             const type = parsed.type as WorkoutType;
+            if (!parsed.exercises.length) return false;
             const exercises = parsed.exercises.map((e: CustomExercise, i: number) => ({
               id: `imp_${type}_${i}_${Date.now()}`,
-              name: e.name, sets: e.sets, repsMin: e.repsMin,
-              repsMax: e.repsMax, muscleGroup: e.muscleGroup, image: e.image,
+              name: e.name || 'Exercício',
+              sets: e.sets || 3,
+              repsMin: e.repsMin || 8,
+              repsMax: e.repsMax || 12,
+              muscleGroup: e.muscleGroup || 'Geral',
+              image: e.image,
             }));
-            const state = get();
-            const prev = state.customWorkouts || { A: null, B: null, C: null, D: null, E: null };
-            const slots = state.activeSlots.includes(type) ? state.activeSlots : [...state.activeSlots, type];
+            const prev = get().customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+            const currentSlots = get().activeSlots;
+            const slots = currentSlots.includes(type) ? currentSlots : [...currentSlots, type];
             set({ customWorkouts: { ...prev, [type]: exercises }, activeSlots: slots });
+          } else {
+            return false;
           }
           return true;
         } catch {

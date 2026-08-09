@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
-import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { useCustomWorkoutStore, type CustomExercise } from '@/stores/useCustomWorkoutStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
@@ -20,7 +20,7 @@ export function AIReeval() {
   const apiKey = useAIStore((s) => s.apiKey);
   const profile = useProfileStore((s) => s.profile)!;
   const sessions = useHistoryStore((s) => s.sessions);
-  const { activeSlots, getExercises, setExercises } = useCustomWorkoutStore();
+  const { activeSlots, getExercises } = useCustomWorkoutStore();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -170,30 +170,17 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
 
   const applyRecommendation = async (result: { removeDays?: string[]; newSplit?: string; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
     const toast = useToastStore.getState().show;
-    const store = useCustomWorkoutStore.getState();
 
-    // Remove days if AI recommended fewer
-    if (result.removeDays && result.removeDays.length > 0) {
-      for (const day of result.removeDays) {
-        if (['A', 'B', 'C', 'D', 'E'].includes(day) && store.activeSlots.includes(day as WorkoutType)) {
-          store.removeSlot(day as WorkoutType);
-        }
-      }
-    }
-
-    // Ensure all needed slots exist
     if (result.exercises) {
       const neededTypes = Object.keys(result.exercises).filter((t) => ['A', 'B', 'C', 'D', 'E'].includes(t)) as WorkoutType[];
-      const currentSlots = useCustomWorkoutStore.getState().activeSlots;
-      for (const type of neededTypes) {
-        if (!currentSlots.includes(type)) {
-          useCustomWorkoutStore.getState().addSlot();
-        }
-      }
+
+      // Build new customWorkouts and set activeSlots in one atomic update
+      const prev = useCustomWorkoutStore.getState().customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+      const newCw = { ...prev };
 
       for (const [type, exercises] of Object.entries(result.exercises)) {
         if (!['A', 'B', 'C', 'D', 'E'].includes(type)) continue;
-        const mapped = exercises.map((ex, i) => {
+        newCw[type as WorkoutType] = exercises.map((ex, i) => {
           const catalogItem = EXERCISE_CATALOG.find(
             (c) => c.name.toLowerCase() === ex.name.toLowerCase()
               || c.name.toLowerCase().includes(ex.name.toLowerCase().slice(0, 12)),
@@ -201,16 +188,39 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
           return {
             id: `reeval_${type}_${i}_${Date.now()}`,
             name: catalogItem?.name || ex.name,
-            sets: ex.sets,
-            repsMin: ex.repsMin,
-            repsMax: ex.repsMax,
+            sets: ex.sets || 3,
+            repsMin: ex.repsMin || 8,
+            repsMax: ex.repsMax || 12,
             muscleGroup: catalogItem?.muscleGroup || ex.muscleGroup,
             image: catalogItem?.image,
           };
         });
-        setExercises(type as WorkoutType, mapped);
       }
-      toast('Treinos atualizados com a nova recomendação!', 'success');
+
+      // Remove days not in the new split
+      if (result.removeDays) {
+        for (const day of result.removeDays) {
+          if (['A', 'B', 'C', 'D', 'E'].includes(day)) {
+            newCw[day as WorkoutType] = null;
+          }
+        }
+      }
+
+      // Determine final active slots from what the AI recommended
+      const finalSlots = neededTypes.length > 0 ? neededTypes : useCustomWorkoutStore.getState().activeSlots;
+
+      useCustomWorkoutStore.setState({ customWorkouts: newCw as Record<WorkoutType, CustomExercise[] | null>, activeSlots: finalSlots });
+      toast('Treinos atualizados!', 'success');
+    } else if (result.removeDays && result.removeDays.length > 0) {
+      // Only removing days without new exercises
+      const store = useCustomWorkoutStore.getState();
+      const slotsToRemove = result.removeDays.filter((d) => ['A', 'B', 'C', 'D', 'E'].includes(d)) as WorkoutType[];
+      const newSlots = store.activeSlots.filter((s) => !slotsToRemove.includes(s));
+      const prev = store.customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+      const newCw = { ...prev };
+      for (const d of slotsToRemove) newCw[d] = null;
+      useCustomWorkoutStore.setState({ customWorkouts: newCw as Record<WorkoutType, CustomExercise[] | null>, activeSlots: newSlots.length >= 2 ? newSlots : newSlots });
+      toast('Treinos reduzidos conforme recomendação!', 'success');
     }
   };
 
