@@ -423,17 +423,11 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             key={type}
             whileTap={{ scale: 0.92 }}
             onClick={() => !editing && setSelected(type)}
-            className={`flex-1 min-w-[52px] py-3 rounded-xl font-semibold transition-all relative ${
+            className={`flex-1 min-w-[52px] py-3 rounded-xl font-semibold transition-all ${
               selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : editing ? 'bg-dark-200 text-white/20 opacity-50' : 'bg-dark-200 text-white/40'
             }`}
           >
             {type}
-            {activeTypes.length > 2 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setRemoveTarget(type); }}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500/80 text-white text-[10px] font-bold flex items-center justify-center shadow-sm"
-              >×</button>
-            )}
           </motion.button>
         ))}
         {activeTypes.length < 5 && (
@@ -543,10 +537,15 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           ))}
 
           {editing && (
-            <div className="pt-4">
+            <div className="pt-4 space-y-2">
               <button onClick={() => resetWorkout(selected)} className="w-full py-2 text-white/30 text-xs">
                 Restaurar treino padrão
               </button>
+              {activeTypes.length > 2 && (
+                <button onClick={() => setRemoveTarget(selected)} className="w-full py-2 text-red-400/50 text-xs">
+                  Remover treino {selected}
+                </button>
+              )}
             </div>
           )}
 
