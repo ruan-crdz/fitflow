@@ -83,6 +83,7 @@ export async function askAI(
   apiKey: string,
   profile: Profile,
   question: string,
+  jsonMode = false,
 ): Promise<string> {
   const systemMessage = SYSTEM_PROMPT + '\n' + buildContext(profile);
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -99,6 +100,7 @@ export async function askAI(
       ],
       max_tokens: 4000,
       temperature: 0.7,
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
   if (!response.ok) {

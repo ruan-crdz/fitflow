@@ -176,12 +176,10 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
 }`;
 
     try {
-      const response = await askAI(key, profile, prompt);
-      const match = response.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        if (parsed.workouts?.length > 0) {
-          setWorkouts(parsed.workouts);
+      const response = await askAI(key, profile, prompt, true);
+      const parsed = JSON.parse(response);
+      if (parsed.workouts?.length > 0) {
+        setWorkouts(parsed.workouts);
 
           // Show evaluation scores
           if (parsed.evaluation?.length) {
@@ -229,10 +227,6 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
           addMessage('Hmm, não consegui gerar os treinos.');
           setHasError(true);
         }
-      } else {
-        addMessage('❌ Resposta da IA veio em formato inesperado.');
-        setHasError(true);
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       if (msg.includes('401') || msg.includes('Incorrect API')) {
