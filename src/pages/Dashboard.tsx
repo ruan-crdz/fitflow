@@ -70,16 +70,22 @@ export function Dashboard() {
   };
 
   return (
-    <div className="px-5 pt-12 pb-6 space-y-6">
-      {/* Header */}
+    <div className="px-5 pt-14 pb-6 space-y-5">
+      {/* Header - cleaner, bigger touch target */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-white/40 text-sm">Olá,</p>
-          <h1 className="text-2xl font-bold">{profile.name} {profile.sex === 'male' ? '💪' : '♥'}</h1>
+          <p className="text-white/30 text-xs font-medium tracking-wide uppercase">
+            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}
+          </p>
+          <h1 className="text-[26px] font-bold mt-0.5 leading-tight">{profile.name} {profile.sex === 'male' ? '💪' : '♥'}</h1>
         </div>
-        <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate('/profile')}
+          className="w-11 h-11 rounded-full bg-primary-500/15 border border-primary-500/20 flex items-center justify-center"
+        >
           <span className="text-lg">{profile.sex === 'male' ? '🏋️' : '🧘'}</span>
-        </div>
+        </motion.button>
       </div>
 
       <MotivationalQuote />
@@ -95,13 +101,23 @@ export function Dashboard() {
         <motion.button
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
+          whileTap={{ scale: 0.97 }}
           onClick={handleResumeWorkout}
-          className="w-full p-5 rounded-2xl bg-gradient-to-r from-primary-600 to-primary-500 text-left"
+          className="w-full p-5 rounded-2xl bg-gradient-to-r from-primary-600 to-primary-500 text-left shadow-lg shadow-primary-500/20"
         >
-          <p className="text-sm text-white/70">Treino em andamento</p>
-          <p className="text-xl font-bold mt-1">
-            Continuar {WORKOUT_MAP[activeSession.workoutType].label} →
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-white/70">Treino em andamento</p>
+              <p className="text-xl font-bold mt-1">
+                Continuar {WORKOUT_MAP[activeSession.workoutType].label}
+              </p>
+            </div>
+            <motion.span
+              animate={{ x: [0, 5, 0] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="text-2xl"
+            >→</motion.span>
+          </div>
         </motion.button>
       )}
 
@@ -115,26 +131,31 @@ export function Dashboard() {
                   🏋️
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs text-white/40 uppercase tracking-wide">Treino de hoje</p>
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold">Treino de hoje</p>
                   <p className="text-lg font-bold mt-0.5">
                     {todayWorkout && WORKOUT_MAP[todayWorkout].label}
                   </p>
                   <p className="text-sm text-primary-400">{todayWorkout && WORKOUT_MAP[todayWorkout].focus}</p>
                 </div>
               </div>
-              <button
+              <motion.button
+                whileTap={{ scale: 0.96 }}
                 className="btn-primary"
                 onClick={() => todayWorkout && handleStartWorkout(todayWorkout)}
               >
                 Iniciar Treino
-              </button>
+              </motion.button>
             </>
           ) : todayAlreadyDone ? (
-            <div className="text-center py-6">
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              className="text-center py-6"
+            >
               <span className="text-5xl">✅</span>
               <p className="text-lg font-semibold mt-3">Treino concluído!</p>
               <p className="text-white/40 text-sm mt-1">Descanse e se recupere 💤</p>
-            </div>
+            </motion.div>
           ) : (
             <div className="text-center py-6">
               <span className="text-5xl">😴</span>
@@ -148,17 +169,18 @@ export function Dashboard() {
       {/* Quick Start */}
       {!activeSession && !todayAlreadyDone && (
         <div className="space-y-2">
-          <p className="text-sm text-white/30 font-medium">Ou escolha um treino:</p>
+          <p className="text-xs text-white/25 font-semibold uppercase tracking-wider">Ou escolha um treino</p>
           <div className="grid grid-cols-3 gap-3">
             {(['A', 'B', 'C'] as WorkoutType[]).map((type) => (
-              <button
+              <motion.button
                 key={type}
+                whileTap={{ scale: 0.92 }}
                 onClick={() => handleStartWorkout(type)}
-                className="card text-center py-4 hover:border-primary-400 transition-colors"
+                className="card text-center py-4 hover:border-primary-400/40 transition-colors active:bg-primary-500/5"
               >
                 <span className="text-2xl font-bold text-primary-400">{type}</span>
                 <p className="text-[10px] text-white/40 mt-1">{WORKOUT_MAP[type].focus}</p>
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
@@ -275,8 +297,8 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
     <div className="card space-y-3 relative overflow-hidden">
       {showConfetti && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
         >
@@ -285,7 +307,7 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
       )}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-white/80">💧 Água</h2>
-        <p className="text-xs text-white/40">{ml}ml / {goal * 250}ml</p>
+        <p className="text-xs text-white/40 font-mono">{ml}ml / {goal * 250}ml</p>
       </div>
       <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
         <motion.div
@@ -296,27 +318,31 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
         />
       </div>
       <div className="flex items-center justify-between">
-        <button
+        <motion.button
+          whileTap={{ scale: 0.85 }}
           onClick={onRemove}
           disabled={glasses <= 0}
-          className="w-10 h-10 rounded-full bg-dark-300 flex items-center justify-center text-white/50 disabled:opacity-30"
+          className="w-12 h-12 rounded-full bg-dark-300 flex items-center justify-center text-white/50 text-xl disabled:opacity-30"
         >
           −
-        </button>
-        <div className="flex gap-1">
+        </motion.button>
+        <div className="flex gap-1 flex-wrap justify-center max-w-[200px]">
           {Array.from({ length: goal }).map((_, i) => (
-            <div
+            <motion.div
               key={i}
-              className={`w-2.5 h-2.5 rounded-full transition-all ${i < glasses ? 'bg-blue-400 scale-110' : 'bg-dark-300'}`}
+              animate={{ scale: i < glasses ? 1.2 : 1, backgroundColor: i < glasses ? 'rgb(96 165 250)' : 'rgb(var(--color-bg-rgb))' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className={`w-2.5 h-2.5 rounded-full border border-white/10 ${i < glasses ? '' : 'bg-dark-300'}`}
             />
           ))}
         </div>
-        <button
+        <motion.button
+          whileTap={{ scale: 0.85 }}
           onClick={onAdd}
-          className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-lg"
+          className="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-xl"
         >
           +
-        </button>
+        </motion.button>
       </div>
       {glasses >= goal && (
         <p className="text-center text-xs text-green-400 font-medium">✅ Meta atingida! Parabéns!</p>

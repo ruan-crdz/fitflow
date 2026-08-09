@@ -348,34 +348,36 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
     : EXERCISE_CATALOG;
 
   return (
-    <div className="px-5 pt-12 pb-6">
+    <div className="px-5 pt-14 pb-6">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold">Seus Treinos 📋</h1>
-        <button
+        <h1 className="text-[26px] font-bold">Seus Treinos</h1>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={() => setEditing(!editing)}
-          className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
-            editing ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/60 border border-white/10'
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
           }`}
         >
           {editing ? '✓ Salvar' : '✏️ Editar'}
-        </button>
+        </motion.button>
       </div>
-      <p className="text-white/40 text-sm mb-6">
+      <p className="text-white/30 text-xs mb-6">
         {editing ? 'Reordene, substitua ou remova exercícios' : 'Toque em Editar para personalizar'}
       </p>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      {/* Tabs - pill style with spring animation */}
+      <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
         {activeTypes.map((type) => (
-          <button
+          <motion.button
             key={type}
+            whileTap={{ scale: 0.92 }}
             onClick={() => !editing && setSelected(type)}
-            className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-              selected === type ? 'bg-primary-500 text-white' : editing ? 'bg-dark-200 text-white/20 opacity-50' : 'bg-dark-200 text-white/40'
+            className={`flex-1 min-w-[60px] py-3 rounded-xl font-semibold transition-all relative ${
+              selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : editing ? 'bg-dark-200 text-white/20 opacity-50' : 'bg-dark-200 text-white/40'
             }`}
           >
-            Treino {type}
-          </button>
+            {type}
+          </motion.button>
         ))}
       </div>
 

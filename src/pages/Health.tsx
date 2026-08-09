@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from 'framer-motion';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useFoodStore, FoodEntry } from '@/stores/useFoodStore';
 import { useWaterStore } from '@/stores/useWaterStore';
+import { useToastStore } from '@/stores/useToastStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
@@ -48,6 +49,7 @@ export function Health() {
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     };
     addEntry(entry);
+    useToastStore.getState().show(`${entry.name} adicionado`, 'success');
     setManualName('');
     setManualCalories('');
     setManualProtein('');
@@ -59,6 +61,7 @@ export function Health() {
   const handleCameraCapture = async (file: File) => {
     if (!apiKey) return;
     setCameraLoading(true);
+    const toast = useToastStore.getState().show;
 
     try {
       const base64 = await fileToBase64(file);
@@ -69,57 +72,70 @@ export function Health() {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: [
             {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: `Analise esta foto de alimento. Estime as calorias e macronutrientes (proteína, carboidratos, gorduras em gramas).
-Responda APENAS em JSON: {"name": "nome do alimento", "calories": 300, "protein": 20, "carbs": 30, "fat": 10}
-Se não conseguir identificar o alimento, responda: {"name": "Não identificado", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}`,
+                  text: `Você é um nutricionista esportivo expert. Analise esta foto de alimento com MÁXIMA precisão.
+
+INSTRUÇÕES:
+1. Identifique TODOS os alimentos visíveis na foto
+2. Estime a porção/quantidade baseado no tamanho visual (use referências como prato, colher, copo)
+3. Calcule calorias e macros para a PORÇÃO VISÍVEL (não para 100g)
+4. Se houver múltiplos itens, some tudo em uma única entrada
+5. Considere métodos de preparo visíveis (grelhado, frito, cozido, cru)
+
+RESPOSTA OBRIGATÓRIA em JSON puro:
+{"name": "descrição curta do prato", "calories": número, "protein": gramas, "carbs": gramas, "fat": gramas, "confidence": "high"|"medium"|"low"}
+
+Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "confidence": "low"}`,
                 },
                 {
                   type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' },
+                  image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'high' },
                 },
               ],
             },
           ],
-          max_tokens: 200,
+          max_tokens: 300,
+          response_format: { type: 'json_object' },
         }),
       });
 
       if (!response.ok) throw new Error('Erro na API');
       const data = await response.json();
       const content = data.choices[0].message.content;
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        if (parsed.calories > 0) {
-          addEntry({
-            id: `food_${Date.now()}`,
-            name: parsed.name,
-            calories: parsed.calories,
-            protein: parsed.protein || 0,
-            carbs: parsed.carbs || 0,
-            fat: parsed.fat || 0,
-            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            imageData: base64.slice(0, 500), // thumbnail hint
-          });
-        }
+      const parsed = JSON.parse(content);
+      if (parsed.calories > 0) {
+        addEntry({
+          id: `food_${Date.now()}`,
+          name: parsed.name,
+          calories: parsed.calories,
+          protein: parsed.protein || 0,
+          carbs: parsed.carbs || 0,
+          fat: parsed.fat || 0,
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        });
+        toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
+      } else {
+        toast('Não consegui identificar o alimento. Tente outra foto.', 'error');
       }
     } catch {
-      // Silently fail, user can add manually
+      toast('Erro ao analisar foto. Tente novamente.', 'error');
     } finally {
       setCameraLoading(false);
     }
   };
 
   return (
-    <div className="px-5 pt-12 pb-6 space-y-6">
-      <h1 className="text-2xl font-bold">Saúde 🩺</h1>
+    <div className="px-5 pt-14 pb-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-[26px] font-bold">Saúde</h1>
+        <span className="text-2xl">🩺</span>
+      </div>
 
       {/* Calorie Progress */}
       <div className="card space-y-4">
@@ -187,19 +203,21 @@ Se não conseguir identificar o alimento, responda: {"name": "Não identificado"
           <h2 className="font-semibold text-white/80">Refeições</h2>
           <div className="flex gap-2">
             {apiKey && (
-              <button
+              <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-1.5 rounded-lg bg-primary-500/20 text-primary-300 text-xs font-medium"
+                className="px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/20 text-primary-300 text-xs font-semibold flex items-center gap-1.5"
               >
-                📷 Câmera
-              </button>
+                <span>📷</span> Foto IA
+              </motion.button>
             )}
-            <button
+            <motion.button
+              whileTap={{ scale: 0.9 }}
               onClick={() => setShowAddModal(true)}
-              className="px-3 py-1.5 rounded-lg bg-primary-500/20 text-primary-300 text-xs font-medium"
+              className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium"
             >
-              + Adicionar
-            </button>
+              + Manual
+            </motion.button>
           </div>
         </div>
 
@@ -217,68 +235,56 @@ Se não conseguir identificar o alimento, responda: {"name": "Não identificado"
         />
 
         {cameraLoading && (
-          <div className="card text-center py-6">
-            <p className="text-sm text-white/60 animate-pulse">🤖 Analisando alimento...</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card text-center py-8"
+          >
+            <motion.p
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="text-sm text-primary-300 font-medium"
+            >
+              🤖 Analisando alimento com IA...
+            </motion.p>
+            <p className="text-[10px] text-white/30 mt-2">GPT-4o Vision (alta precisão)</p>
+          </motion.div>
         )}
 
         {entries.length === 0 && !cameraLoading && (
-          <div className="card text-center py-8">
-            <p className="text-3xl mb-2">🍽️</p>
-            <p className="text-sm text-white/40">Nenhuma refeição registrada hoje</p>
-            <p className="text-xs text-white/25 mt-1">Use a câmera ou adicione manualmente</p>
+          <div className="card text-center py-10">
+            <p className="text-4xl mb-3">🍽️</p>
+            <p className="text-sm text-white/50 font-medium">Nenhuma refeição registrada</p>
+            <p className="text-xs text-white/25 mt-1">Tire uma foto ou adicione manualmente</p>
           </div>
         )}
 
         <AnimatePresence>
           {entries.map((entry) => (
-            <motion.div
-              key={entry.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -100 }}
-              className="card flex items-center justify-between"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-white/30">{entry.time}</span>
-                  <p className="font-medium text-sm">{entry.name}</p>
-                </div>
-                <p className="text-xs text-white/40 mt-0.5">
-                  P:{entry.protein}g • C:{entry.carbs}g • G:{entry.fat}g
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <p className="text-sm font-bold text-orange-400">{entry.calories} kcal</p>
-                <button
-                  onClick={() => removeEntry(entry.id)}
-                  className="text-white/20 text-lg"
-                >
-                  ×
-                </button>
-              </div>
-            </motion.div>
+            <SwipeableEntry key={entry.id} entry={entry} onDelete={removeEntry} />
           ))}
         </AnimatePresence>
       </div>
 
-      {/* Add Food Modal */}
+      {/* Add Food Modal - Bottom Sheet */}
       <AnimatePresence>
         {showAddModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-8"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
             onClick={() => setShowAddModal(false)}
           >
             <motion.div
-              initial={{ y: 100 }}
+              initial={{ y: '100%' }}
               animate={{ y: 0 }}
-              exit={{ y: 100 }}
-              className="bg-dark-200 rounded-2xl p-6 space-y-4 w-full max-w-sm"
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
               <h3 className="text-lg font-bold">Adicionar alimento</h3>
               <input
                 type="text"
@@ -290,34 +296,77 @@ Se não conseguir identificar o alimento, responda: {"name": "Não identificado"
               />
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] text-white/40">Calorias (kcal)</label>
-                  <input type="number" value={manualCalories} onChange={(e) => setManualCalories(e.target.value)} placeholder="300" className="input-field text-sm" />
+                  <label className="text-[10px] text-white/40 font-medium">Calorias (kcal)</label>
+                  <input type="number" value={manualCalories} onChange={(e) => setManualCalories(e.target.value)} placeholder="300" className="input-field text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-white/40">Proteína (g)</label>
-                  <input type="number" value={manualProtein} onChange={(e) => setManualProtein(e.target.value)} placeholder="30" className="input-field text-sm" />
+                  <label className="text-[10px] text-white/40 font-medium">Proteína (g)</label>
+                  <input type="number" value={manualProtein} onChange={(e) => setManualProtein(e.target.value)} placeholder="30" className="input-field text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-white/40">Carboidratos (g)</label>
-                  <input type="number" value={manualCarbs} onChange={(e) => setManualCarbs(e.target.value)} placeholder="40" className="input-field text-sm" />
+                  <label className="text-[10px] text-white/40 font-medium">Carboidratos (g)</label>
+                  <input type="number" value={manualCarbs} onChange={(e) => setManualCarbs(e.target.value)} placeholder="40" className="input-field text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-white/40">Gorduras (g)</label>
-                  <input type="number" value={manualFat} onChange={(e) => setManualFat(e.target.value)} placeholder="10" className="input-field text-sm" />
+                  <label className="text-[10px] text-white/40 font-medium">Gorduras (g)</label>
+                  <input type="number" value={manualFat} onChange={(e) => setManualFat(e.target.value)} placeholder="10" className="input-field text-sm mt-1" />
                 </div>
               </div>
-              <button
+              <motion.button
+                whileTap={{ scale: 0.97 }}
                 className="btn-primary"
                 disabled={!manualName.trim() || !manualCalories}
                 onClick={handleManualAdd}
               >
                 Adicionar
-              </button>
+              </motion.button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function SwipeableEntry({ entry, onDelete }: { entry: FoodEntry; onDelete: (id: string) => void }) {
+  const x = useMotionValue(0);
+  const bg = useTransform(x, [-100, 0], ['rgba(239,68,68,0.3)', 'rgba(0,0,0,0)']);
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.x < -80) {
+      onDelete(entry.id);
+      useToastStore.getState().show('Refeição removida', 'info');
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -200, transition: { duration: 0.2 } }}
+      style={{ background: bg }}
+      className="rounded-2xl overflow-hidden"
+    >
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -100, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={handleDragEnd}
+        style={{ x }}
+        className="card flex items-center justify-between"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-white/25 font-mono">{entry.time}</span>
+            <p className="font-medium text-sm truncate">{entry.name}</p>
+          </div>
+          <p className="text-[11px] text-white/35 mt-0.5">
+            P:{entry.protein}g • C:{entry.carbs}g • G:{entry.fat}g
+          </p>
+        </div>
+        <p className="text-sm font-bold text-orange-400 ml-3">{entry.calories}</p>
+      </motion.div>
+    </motion.div>
   );
 }
 

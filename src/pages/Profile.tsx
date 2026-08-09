@@ -56,12 +56,14 @@ export function Profile() {
   };
 
   return (
-    <div className="px-5 pt-12 pb-6 space-y-6">
+    <div className="px-5 pt-14 pb-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Perfil 👤</h1>
+        <h1 className="text-[26px] font-bold">Perfil</h1>
         <button
           onClick={() => (editing ? handleSave() : setEditing(true))}
-          className="px-4 py-2 rounded-xl bg-primary-500/20 text-primary-300 text-sm font-medium"
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
+          }`}
         >
           {editing ? 'Salvar' : 'Editar'}
         </button>
