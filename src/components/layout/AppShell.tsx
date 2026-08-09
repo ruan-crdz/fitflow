@@ -19,6 +19,7 @@ export function AppShell({ children }: AppShellProps) {
     { path: '/dashboard', icon: '🏠', label: 'Home' },
     { path: '/plans', icon: '📋', label: 'Treinos' },
     ...(aiEnabled ? [{ path: '/ai', icon: '🤖', label: 'FlowAI' }] : []),
+    { path: '/badges', icon: '🏅', label: 'Conquistas' },
     { path: '/history', icon: '📊', label: 'Histórico' },
     { path: '/profile', icon: '👤', label: 'Perfil' },
   ];

@@ -7,6 +7,7 @@ import { WORKOUTS } from '@/constants/workouts';
 import { EXERCISE_CATALOG, MUSCLE_GROUPS } from '@/constants/exerciseCatalog';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
+import { useBadgeStore } from '@/stores/useBadgeStore';
 import type { WorkoutType } from '@/types';
 
 interface CatalogItem {
@@ -236,6 +237,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
   const handleAcceptAdd = () => {
     if (aiAddSuggestion) {
       handleAddFromCatalog(aiAddSuggestion);
+      useBadgeStore.getState().unlock('ai_user');
       setShowAIBuilder(false);
     }
   };
@@ -344,7 +346,10 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold">Seus Treinos 📋</h1>
         <button
-          onClick={() => setEditing(!editing)}
+          onClick={() => {
+            if (editing) useBadgeStore.getState().unlock('customizer');
+            setEditing(!editing);
+          }}
           className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
             editing ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/60 border border-white/10'
           }`}

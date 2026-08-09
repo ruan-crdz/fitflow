@@ -8,12 +8,17 @@ import { AIPostWorkout } from '@/components/workout/AIPostWorkout';
 import { ShareCard } from '@/components/workout/ShareCard';
 import { formatDuration, getToday } from '@/utils/date';
 import { WORKOUT_MAP } from '@/constants/workouts';
+import { checkBadges } from '@/stores/useBadgeStore';
+import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import confetti from '@/utils/confetti';
 
 export function WorkoutComplete() {
   const navigate = useNavigate();
   const { activeSession, endSession } = useSessionStore();
   const addSession = useHistoryStore((s) => s.addSession);
+  const sessions = useHistoryStore((s) => s.sessions);
+  const getCurrentStreak = useHistoryStore((s) => s.getCurrentStreak);
+  const customWorkouts = useCustomWorkoutStore((s) => s.customWorkouts);
   const [rating, setRating] = useState(0);
   const [duration] = useState(() => activeSession ? Date.now() - activeSession.startedAt : 0);
 
@@ -37,6 +42,22 @@ export function WorkoutComplete() {
     });
     endSession();
     confetti();
+
+    const completedSessions = sessions.filter((s) => s.completedAt);
+    const startDate = new Date(activeSession.startedAt);
+    const dayOfWeek = startDate.getDay();
+    checkBadges({
+      totalWorkouts: completedSessions.length + 1,
+      streak: getCurrentStreak(),
+      workoutTypes: new Set([...completedSessions.map((s) => s.workoutType), activeSession.workoutType]),
+      startHour: startDate.getHours(),
+      durationMs: duration,
+      rating: rating || undefined,
+      hasCustomized: Object.values(customWorkouts).some((v) => v !== null && v.length > 0),
+      hasUsedAI: false,
+      isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+    });
+
     navigate('/dashboard');
   };
 
