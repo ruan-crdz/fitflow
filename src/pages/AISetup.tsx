@@ -63,8 +63,10 @@ export function AISetup() {
   };
 
   const [retryCount, setRetryCount] = useState(0);
+  const [hasError, setHasError] = useState(false);
 
   const generateWorkout = async (key: string) => {
+    setHasError(false);
     if (messages.length === 0) {
       addMessage(`Olá, ${profile.name}! 👋`);
       await delay(800);
@@ -164,15 +166,19 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
           await delay(400);
           if (parsed.rotation) addMessage(`🔄 Rotação: ${parsed.rotation}`);
 
-          // Save workouts to store
-          for (const w of parsed.workouts) {
+          // Save workouts to store, assign types sequentially to guarantee A,B,C...
+          const typeLetters: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+          parsed.workouts.forEach((w: GeneratedWorkout, wi: number) => {
+            const type = typeLetters[wi];
+            if (!type) return;
+            w.type = type;
             const mapped = w.exercises.map((ex: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }, i: number) => {
               const catalogItem = EXERCISE_CATALOG.find(
                 (c) => c.name.toLowerCase() === ex.name.toLowerCase()
                   || c.name.toLowerCase().includes(ex.name.toLowerCase().slice(0, 12)),
               );
               return {
-                id: `ai_${w.type}_${i}_${Date.now()}`,
+                id: `ai_${type}_${i}_${Date.now()}`,
                 name: catalogItem?.name || ex.name,
                 sets: ex.sets || 3,
                 repsMin: ex.repsMin || 8,
@@ -181,16 +187,17 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
                 image: catalogItem?.image,
               };
             });
-            const validTypes = ['A', 'B', 'C', 'D', 'E'] as const;
-            if (validTypes.includes(w.type)) {
-              setExercises(w.type as typeof validTypes[number], mapped);
-            }
-          }
+            setExercises(type, mapped);
+          });
 
           setPhase('summary');
         } else {
-          addMessage('Hmm, não consegui gerar. Tente novamente ou monte manualmente.');
+          addMessage('Hmm, não consegui gerar os treinos.');
+          setHasError(true);
         }
+      } else {
+        addMessage('❌ Resposta da IA veio em formato inesperado.');
+        setHasError(true);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
@@ -211,6 +218,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
       } else {
         addMessage(`❌ ${msg}`);
       }
+      setHasError(true);
     }
   };
 
@@ -289,11 +297,27 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
                   <p className="text-sm text-white/80 leading-relaxed">{msg}</p>
                 </motion.div>
               ))}
-              {workouts.length === 0 && (
+              {!hasError && workouts.length === 0 && (
                 <div className="flex gap-1.5 px-4 py-3">
                   <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              )}
+              {hasError && (
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => { setRetryCount(0); generateWorkout(apiKey!); }}
+                    className="btn-primary flex-1 py-3 text-sm"
+                  >
+                    🔄 Tentar novamente
+                  </button>
+                  <button
+                    onClick={() => navigate('/plans')}
+                    className="flex-1 py-3 rounded-xl bg-dark-200 text-white/50 text-sm"
+                  >
+                    Pular
+                  </button>
                 </div>
               )}
             </div>
