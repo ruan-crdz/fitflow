@@ -95,6 +95,13 @@ PERFIL DO ALUNO:
 - Dias disponíveis: ${trainingDays}x por semana
 - Nível: ${levelLabel}
 
+DIRETRIZES BASEADAS EM EVIDÊNCIA POR FAIXA ETÁRIA E SEXO:
+${profile.age >= 40 ? `- Acima de 40 anos: priorizar aquecimento articular, evitar cargas excessivas em compressão vertebral, incluir exercícios de mobilidade e estabilização. Preferir séries moderadas (10-15 reps) em vez de carga máxima. Recuperação entre sessões é mais lenta — evitar treinar o mesmo grupo em dias consecutivos.` : ''}
+${profile.age >= 50 ? `- Acima de 50 anos: atenção especial a exercícios de equilíbrio e saúde óssea. Evitar impacto excessivo. Incluir trabalho de core/estabilização em todo treino.` : ''}
+${profile.age < 25 ? `- Jovem (<25 anos): pode tolerar maior volume e frequência. Aproveitar janela hormonal para compostos pesados.` : ''}
+${profile.sex === 'female' ? `- Mulher: considerar proporção de fibras tipo I vs II (mais resistência em membros inferiores). Maior volume de glúteo/posterior é fisiologicamente justificado. Se >40 anos, treino de força é essencial para prevenção de osteoporose — priorizar exercícios com carga axial (agachamento, terra).` : ''}
+${profile.sex === 'male' ? `- Homem: distribuição natural de massa favorece tronco superior. Equilibrar com volume adequado de membros inferiores. Se >40 anos, incluir mobilidade de ombro e cuidado com articulações.` : ''}
+
 SUA TAREFA — AVALIAÇÃO DE SPLIT:
 Antes de montar o treino, avalie TODAS estas opções de divisão e dê um score de 0-10 para cada uma considerando o perfil acima:
 

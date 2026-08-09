@@ -21,15 +21,22 @@ function buildContext(profile: Profile): string {
     ? `\n- Fase do ciclo: ${CYCLE_PHASES.find((c) => c.value === cycle.phase)?.label} (${CYCLE_PHASES.find((c) => c.value === cycle.phase)?.tip})`
     : '';
 
+  const sexLabel = profile.sex === 'male' ? 'masculino' : 'feminino';
+  const levelLabel = profile.experienceLevel === 'advanced' ? 'avançado'
+    : profile.experienceLevel === 'intermediate' ? 'intermediário' : 'iniciante';
+  const goalLabel = profile.goal === 'lose' ? 'perder gordura'
+    : profile.goal === 'gain' ? 'ganhar massa' : 'manter peso';
+
   return `
-Dados da usuária:
+Dados do aluno:
 - Nome: ${profile.name}
+- Sexo biológico: ${sexLabel}
 - Idade: ${profile.age} anos
 - Peso: ${profile.weight}kg
 - Altura: ${profile.height}cm
-- Objetivo: ${profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa' : 'manter peso'}
-- Treina 3x/semana (ABC: Superior, Posterior+Glúteos, Quad+Glúteos)
-- Nível: iniciante retornando à academia${cycleInfo}`;
+- Objetivo: ${goalLabel}
+- Dias de treino: ${profile.trainingDays.length}x por semana
+- Nível: ${levelLabel}${cycleInfo}`;
 }
 
 export interface ChatMessage {
