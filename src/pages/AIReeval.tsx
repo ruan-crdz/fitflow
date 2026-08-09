@@ -70,19 +70,26 @@ ${workoutSummary}
 COMO CONDUZIR A CONVERSA:
 1. Seja empático, caloroso e profissional. Aja como alguém que realmente se importa.
 2. Faça UMA pergunta por vez. Espere a resposta antes de prosseguir.
-3. Investigue: disposição, recuperação, dores, motivação, objetivos mudaram?, quer mais desafio?
+3. Investigue: disposição, recuperação, dores, motivação, objetivos mudaram?, quer mais desafio? quer algo mais leve?
 4. Após 3-5 trocas, dê sua avaliação profissional com recomendações concretas.
 5. Se recomendar mudanças, no final envie um bloco JSON com o formato:
 
-[REEVAL_RESULT:{"recommendation":"texto resumo","addDay":true/false,"newSplit":"ABCD ou ABCDE","exercises":{"D":[{"name":"...","sets":3,"repsMin":8,"repsMax":12,"muscleGroup":"..."}]}}]
+[REEVAL_RESULT:{"recommendation":"texto resumo","newSplit":"ABC ou ABCD ou ABCDE","removeDays":["D","E"],"exercises":{"A":[...],"B":[...],"C":[...]}}]
+
+CAMPOS DO JSON:
+- "newSplit": a nova divisão recomendada (ex: "ABC", "ABCD", "ABCDE")
+- "removeDays": array de dias a REMOVER (ex: ["D","E"] se reduzir de ABCDE pra ABC). Omita se não remover nada.
+- "exercises": objeto com os treinos novos. Inclua TODOS os dias do newSplit. Cada dia é um array de exercícios com {name, sets, repsMin, repsMax, muscleGroup}.
 
 REGRAS DE INTELIGÊNCIA:
 - Iniciante com <20 treinos: NÃO recomende 5x. Sugira melhorias na execução.
 - Intermediário (20-60 treinos): Pode considerar 4x se o aluno relata boa recuperação.
 - Avançado (60+ treinos): Pode recomendar até 5x com periodização adequada.
 - NUNCA recomende mais dias sem evidências de boa recuperação.
+- Se o aluno pede algo mais leve/rápido, REDUZA os dias (ex: ABCD → ABC).
 - Se o aluno está satisfeito e progredindo, valide isso! Não force mudanças.
 - Use linguagem motivacional mas honesta. Não faça promessas irrealistas.
+- É TOTALMENTE VÁLIDO reduzir de 4-5 dias pra 3. Menos com qualidade > mais sem consistência.
 
 EXERCÍCIOS DISPONÍVEIS NO APP (use APENAS estes nomes):
 ${EXERCISE_CATALOG.map((e) => `${e.name} (${e.muscleGroup})`).join(', ')}
@@ -161,16 +168,26 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
     setLoading(false);
   };
 
-  const applyRecommendation = async (result: { addDay?: boolean; newSplit?: string; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
+  const applyRecommendation = async (result: { removeDays?: string[]; newSplit?: string; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
     const toast = useToastStore.getState().show;
     const store = useCustomWorkoutStore.getState();
+
+    // Remove days if AI recommended fewer
+    if (result.removeDays && result.removeDays.length > 0) {
+      for (const day of result.removeDays) {
+        if (['A', 'B', 'C', 'D', 'E'].includes(day) && store.activeSlots.includes(day as WorkoutType)) {
+          store.removeSlot(day as WorkoutType);
+        }
+      }
+    }
 
     // Ensure all needed slots exist
     if (result.exercises) {
       const neededTypes = Object.keys(result.exercises).filter((t) => ['A', 'B', 'C', 'D', 'E'].includes(t)) as WorkoutType[];
+      const currentSlots = useCustomWorkoutStore.getState().activeSlots;
       for (const type of neededTypes) {
-        if (!store.activeSlots.includes(type)) {
-          store.addSlot();
+        if (!currentSlots.includes(type)) {
+          useCustomWorkoutStore.getState().addSlot();
         }
       }
 
@@ -194,9 +211,6 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
         setExercises(type as WorkoutType, mapped);
       }
       toast('Treinos atualizados com a nova recomendação!', 'success');
-    } else if (result.addDay) {
-      const newSlot = store.addSlot();
-      if (newSlot) toast(`Treino ${newSlot} adicionado!`, 'success');
     }
   };
 
