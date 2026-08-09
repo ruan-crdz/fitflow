@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
@@ -30,6 +30,11 @@ export function AISetup() {
   const trainingDays = profile.trainingDays.length || 3;
   const sexLabel = profile.sex === 'male' ? 'homem' : 'mulher';
   const goalLabel = profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa muscular' : 'manter peso';
+  const levelLabel = profile.experienceLevel === 'advanced' ? 'avançado' : profile.experienceLevel === 'intermediate' ? 'intermediário' : 'iniciante';
+
+  useEffect(() => {
+    if (apiKey && phase === 'generating') generateWorkout(apiKey);
+  }, []);
 
   const handleTokenSubmit = async () => {
     const key = tokenInput.trim();
@@ -60,7 +65,7 @@ export function AISetup() {
   const generateWorkout = async (key: string) => {
     addMessage(`Olá, ${profile.name}! 👋`);
     await delay(800);
-    addMessage(`Vi que você treina ${trainingDays}x por semana. Deixa eu calcular a melhor separação de treinos pra você...`);
+    addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu calcular a melhor separação de treinos pra você...`);
     await delay(1200);
     addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
     await delay(1000);
@@ -76,25 +81,38 @@ PERFIL:
 - Peso: ${profile.weight}kg, Altura: ${profile.height}cm
 - Objetivo: ${goalLabel}
 - Dias disponíveis: ${trainingDays}x por semana
+- Nível de experiência: ${levelLabel}
+
+REGRA CRÍTICA DE DIVISÃO (número de treinos distintos):
+- Iniciante com 1-4 dias → ABC (3 treinos, rotaciona)
+- Iniciante com 5+ dias → ABC (3 treinos, repete na semana)
+- Intermediário com 1-3 dias → ABC (3 treinos)
+- Intermediário com 4 dias → ABCD (4 treinos)
+- Intermediário com 5+ dias → ABCDE (5 treinos)
+- Avançado com 1-3 dias → ABC (3 treinos)
+- Avançado com 4 dias → ABCD (4 treinos)
+- Avançado com 5-7 dias → ABCDE (5 treinos)
+
+Use EXATAMENTE a regra acima para decidir quantos treinos criar (3, 4 ou 5).
 
 REGRAS:
-1. Crie EXATAMENTE 3 treinos (A, B, C) com divisão inteligente para ${trainingDays} dias/semana
-2. Para ${trainingDays} dias: explique como rotacionar A/B/C na semana
-3. Cada treino deve ter 6-8 exercícios
-4. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, mais volume de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}
-5. Cada exercício DEVE ser da lista abaixo (nome exato)
-6. Justifique a divisão escolhida em 1-2 frases
+1. Cada treino deve ter 6-8 exercícios
+2. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, mais volume de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}
+3. Cada exercício DEVE ser da lista abaixo (nome exato)
+4. Justifique a divisão escolhida em 1-2 frases
+5. Explique como rotacionar na semana
 
 Exercícios disponíveis: ${catalogNames}
 
-Responda em JSON puro:
+Responda APENAS JSON puro (sem markdown, sem \`\`\`):
 {
+  "split": "ABC" ou "ABCD" ou "ABCDE",
   "explanation": "Justificativa da divisão em 2 frases",
-  "rotation": "Como rotacionar na semana (ex: Sem1: A,B,C,A,B / Sem2: C,A,B,C,A)",
+  "rotation": "Como rotacionar na semana",
   "workouts": [
     {"type": "A", "focus": "foco do treino", "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]},
     {"type": "B", "focus": "...", "exercises": [...]},
-    {"type": "C", "focus": "...", "exercises": [...]}
+    ...
   ]
 }`;
 
@@ -127,8 +145,9 @@ Responda em JSON puro:
                 image: catalogItem?.image,
               };
             });
-            if (w.type === 'A' || w.type === 'B' || w.type === 'C') {
-              setExercises(w.type, mapped);
+            const validTypes = ['A', 'B', 'C', 'D', 'E'] as const;
+            if (validTypes.includes(w.type)) {
+              setExercises(w.type as typeof validTypes[number], mapped);
             }
           }
 

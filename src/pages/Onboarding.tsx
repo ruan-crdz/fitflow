@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS } from '@/stores/useProfileStore';
-import type { WeekDay, Goal, BiologicalSex } from '@/types';
+import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
+import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
 
-type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'days' | 'setup';
+type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'setup';
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -17,6 +17,7 @@ export function Onboarding() {
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [goal, setGoal] = useState<Goal>('lose');
+  const [experience, setExperience] = useState<ExperienceLevel>('beginner');
   const [days, setDays] = useState<WeekDay[]>([]);
 
   const toggleDay = (day: WeekDay) => {
@@ -28,7 +29,7 @@ export function Onboarding() {
   const saveProfile = () => {
     setProfile({
       name, age: Number(age), weight: Number(weight), height: Number(height),
-      goal, trainingDays: days, sex,
+      goal, trainingDays: days, sex, experienceLevel: experience,
     });
   };
 
@@ -236,6 +237,36 @@ export function Onboarding() {
                   >
                     <span className="text-2xl">{opt.emoji}</span>
                     <span className="font-medium text-lg">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button className="btn-primary" onClick={() => setStep('experience')}>
+                Continuar
+              </button>
+            </div>
+          )}
+
+          {/* Experience Level */}
+          {step === 'experience' && (
+            <div className="space-y-8">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Sua experiência 🏋️</h1>
+                <p className="text-white/50">Qual seu nível de intimidade com a academia?</p>
+              </div>
+              <div className="space-y-3">
+                {EXPERIENCE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setExperience(opt.value)}
+                    className={`w-full p-4 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                      experience === opt.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
+                    }`}
+                  >
+                    <span className="text-2xl">{opt.emoji}</span>
+                    <div>
+                      <span className="font-medium text-lg">{opt.label}</span>
+                      <p className="text-white/40 text-xs">{opt.description}</p>
+                    </div>
                   </button>
                 ))}
               </div>

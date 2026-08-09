@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Profile, WeekDay, Goal } from '@/types';
+import type { Profile, WeekDay, Goal, ExperienceLevel } from '@/types';
 
 interface ProfileState {
   profile: Profile | null;
@@ -40,4 +40,10 @@ export const GOAL_OPTIONS: { value: Goal; label: string; emoji: string }[] = [
   { value: 'lose', label: 'Perder gordura', emoji: '🔥' },
   { value: 'maintain', label: 'Manter', emoji: '⚖️' },
   { value: 'gain', label: 'Ganhar massa', emoji: '💪' },
+];
+
+export const EXPERIENCE_OPTIONS: { value: ExperienceLevel; label: string; emoji: string; description: string }[] = [
+  { value: 'beginner', label: 'Iniciante', emoji: '🌱', description: 'Começando agora ou voltando após muito tempo parado' },
+  { value: 'intermediate', label: 'Intermediário', emoji: '💪', description: 'Treino consistente há 6+ meses' },
+  { value: 'advanced', label: 'Avançado', emoji: '🏆', description: 'Treino sério há 2+ anos' },
 ];

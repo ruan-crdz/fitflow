@@ -24,7 +24,7 @@ interface CustomWorkoutState {
 export const useCustomWorkoutStore = create<CustomWorkoutState>()(
   persist(
     (set, get) => ({
-      customWorkouts: { A: null, B: null, C: null },
+      customWorkouts: { A: null, B: null, C: null, D: null, E: null },
 
       getExercises: (type) => {
         const custom = get().customWorkouts[type];
@@ -61,14 +61,16 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
     }),
     {
       name: 'fitflow-custom-workouts',
-      version: 1,
-      migrate: (persisted: unknown) => {
+      version: 2,
+      migrate: (persisted: unknown, _version: number) => {
         const state = persisted as Record<string, unknown>;
         if (state?.customWorkouts) {
           const cw = state.customWorkouts as Record<string, unknown[] | null>;
           for (const key of Object.keys(cw)) {
             if (Array.isArray(cw[key]) && cw[key]!.length === 0) cw[key] = null;
           }
+          if (!('D' in cw)) cw.D = null;
+          if (!('E' in cw)) cw.E = null;
         }
         return state as unknown as CustomWorkoutState;
       },

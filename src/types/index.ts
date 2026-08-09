@@ -1,10 +1,12 @@
 export type WeekDay = 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' | 'dom';
 
-export type WorkoutType = 'A' | 'B' | 'C';
+export type WorkoutType = 'A' | 'B' | 'C' | 'D' | 'E';
 
 export type Goal = 'lose' | 'maintain' | 'gain';
 
 export type BiologicalSex = 'male' | 'female';
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 
 export interface Profile {
   name: string;
@@ -14,6 +16,7 @@ export interface Profile {
   goal: Goal;
   trainingDays: WeekDay[];
   sex?: BiologicalSex;
+  experienceLevel?: ExperienceLevel;
 }
 
 export interface Exercise {

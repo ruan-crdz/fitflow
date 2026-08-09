@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS } from '@/stores/useProfileStore';
+import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { ExportData } from '@/components/ui/ExportData';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
-import type { WeekDay, Goal, BiologicalSex } from '@/types';
+import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
 
 export function Profile() {
   const navigate = useNavigate();
@@ -24,6 +24,7 @@ export function Profile() {
   const [weight, setWeight] = useState(String(profile?.weight || ''));
   const [height, setHeight] = useState(String(profile?.height || ''));
   const [goal, setGoal] = useState<Goal>(profile?.goal || 'lose');
+  const [experience, setExperience] = useState<ExperienceLevel>(profile?.experienceLevel || 'beginner');
   const [days, setDays] = useState<WeekDay[]>(profile?.trainingDays || []);
 
   if (!profile) return null;
@@ -47,6 +48,7 @@ export function Profile() {
       weight: Number(weight),
       height: Number(height),
       goal,
+      experienceLevel: experience,
       trainingDays: days,
     });
     setEditing(false);
@@ -126,6 +128,26 @@ export function Profile() {
                   onClick={() => setGoal(opt.value)}
                   className={`w-full p-3 rounded-xl border text-left flex items-center gap-2 transition-all text-sm ${
                     goal === opt.value
+                      ? 'border-primary-500 bg-primary-500/10'
+                      : 'border-white/10 bg-dark-200'
+                  }`}
+                >
+                  <span>{opt.emoji}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm text-white/40 mb-2 block">Nível de experiência</label>
+            <div className="space-y-2">
+              {EXPERIENCE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setExperience(opt.value)}
+                  className={`w-full p-3 rounded-xl border text-left flex items-center gap-2 transition-all text-sm ${
+                    experience === opt.value
                       ? 'border-primary-500 bg-primary-500/10'
                       : 'border-white/10 bg-dark-200'
                   }`}

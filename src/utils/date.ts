@@ -37,8 +37,8 @@ export function getTodayWorkoutType(trainingDays: WeekDay[]): WorkoutType | null
   const index = trainingDays.indexOf(today);
   if (index === -1) return null;
 
-  const types: WorkoutType[] = ['A', 'B', 'C'];
-  return types[index];
+  const types: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
+  return types[index % types.length];
 }
 
 export function formatDuration(ms: number): string {

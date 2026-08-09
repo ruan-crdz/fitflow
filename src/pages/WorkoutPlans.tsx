@@ -44,12 +44,16 @@ export function WorkoutPlans() {
   const [swapTargetLoading, setSwapTargetLoading] = useState(false);
   const [manualSwapTargetId, setManualSwapTargetId] = useState<string | null>(null);
 
-  const { getExercises, setExercises, resetWorkout, swapExercise } = useCustomWorkoutStore();
+  const { getExercises, setExercises, resetWorkout, swapExercise, customWorkouts } = useCustomWorkoutStore();
   const apiKey = useAIStore((s) => s.apiKey);
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
 
-  const defaultWorkout = WORKOUTS.find((w) => w.type === selected)!;
+  const activeTypes = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[]).filter(
+    (t) => customWorkouts[t] !== null || WORKOUTS.find((w) => w.type === t),
+  );
+
+  const defaultWorkout = WORKOUTS.find((w) => w.type === selected) || { type: selected, label: `Treino ${selected}`, focus: 'Personalizado', exercises: [] };
   const exercises = getExercises(selected);
 
   // Maps compound muscle groups from workouts to catalog filter names
@@ -362,7 +366,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
-        {(['A', 'B', 'C'] as WorkoutType[]).map((type) => (
+        {activeTypes.map((type) => (
           <button
             key={type}
             onClick={() => !editing && setSelected(type)}
