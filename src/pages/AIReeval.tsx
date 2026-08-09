@@ -51,6 +51,8 @@ export function AIReeval() {
 
     return `Você é um psicólogo esportivo e personal trainer de elite. Seu papel é conduzir uma REAVALIAÇÃO profunda do programa de treino do aluno.
 
+O aluno se chama ${profile.name}. Use o nome dele naturalmente na conversa.
+
 PERFIL DO ALUNO:
 - Nome: ${profile.name}
 - Sexo: ${profile.sex === 'male' ? 'Masculino' : 'Feminino'}
@@ -86,7 +88,8 @@ REGRAS DE INTELIGÊNCIA:
 EXERCÍCIOS DISPONÍVEIS NO APP (use APENAS estes nomes):
 ${EXERCISE_CATALOG.map((e) => `${e.name} (${e.muscleGroup})`).join(', ')}
 
-Comece se apresentando brevemente e fazendo sua primeira pergunta investigativa.
+Comece cumprimentando ${profile.name} pelo nome e fazendo sua primeira pergunta investigativa.
+NUNCA use placeholders como [nome], [seu nome] etc. Use o nome real: ${profile.name}.
 Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.`;
   };
 
