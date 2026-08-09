@@ -5,6 +5,8 @@ import { useFoodStore, FoodEntry } from '@/stores/useFoodStore';
 import { useWaterStore } from '@/stores/useWaterStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { useAIStore } from '@/stores/useAIStore';
+import { useMealStore, SavedMeal } from '@/stores/useMealStore';
+import { askAI } from '@/utils/ai';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 
@@ -18,12 +20,12 @@ export function Health() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
-  const [manualName, setManualName] = useState('');
-  const [manualCalories, setManualCalories] = useState('');
-  const [manualProtein, setManualProtein] = useState('');
-  const [manualCarbs, setManualCarbs] = useState('');
-  const [manualFat, setManualFat] = useState('');
+  const [mealInput, setMealInput] = useState('');
+  const [mealLoading, setMealLoading] = useState(false);
+  const [mealResult, setMealResult] = useState<{ name: string; description: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { shortcuts, recents, addShortcut, addRecent } = useMealStore();
 
   const calories = calculateTDEE(profile);
   const macros = calculateMacros(calories, profile.goal);
@@ -37,25 +39,82 @@ export function Health() {
   const remaining = calories - net;
   const progressCalories = Math.min(totals.calories / calories, 1);
 
-  const handleManualAdd = () => {
-    if (!manualName.trim() || !manualCalories) return;
+  const handleAIMealCalc = async () => {
+    if (!mealInput.trim() || !apiKey) return;
+    setMealLoading(true);
+    setMealResult(null);
+    const profile = useProfileStore.getState().profile!;
+    try {
+      const prompt = `Calcule os macros e calorias TOTAIS desta refeição:
+
+"${mealInput.trim()}"
+
+REGRAS:
+- Some TUDO (todos os ingredientes listados) em uma única entrada
+- Use tabelas nutricionais brasileiras (TACO) como referência
+- Considere os pesos informados. Se não informou peso, estime porção padrão
+- Arredonde para inteiros
+
+Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`;
+
+      const response = await askAI(apiKey, profile, prompt, true);
+      const parsed = JSON.parse(response);
+      if (parsed.calories > 0) {
+        setMealResult({ ...parsed, description: mealInput.trim() });
+      } else {
+        useToastStore.getState().show('Não consegui calcular. Detalhe melhor.', 'error');
+      }
+    } catch {
+      useToastStore.getState().show('Erro ao calcular. Verifique sua chave IA.', 'error');
+    }
+    setMealLoading(false);
+  };
+
+  const handleConfirmMeal = () => {
+    if (!mealResult) return;
     const entry: FoodEntry = {
       id: `food_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      name: manualName.trim(),
-      calories: Number(manualCalories) || 0,
-      protein: Number(manualProtein) || 0,
-      carbs: Number(manualCarbs) || 0,
-      fat: Number(manualFat) || 0,
+      name: mealResult.name,
+      calories: mealResult.calories,
+      protein: mealResult.protein,
+      carbs: mealResult.carbs,
+      fat: mealResult.fat,
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     };
     addEntry(entry);
-    useToastStore.getState().show(`${entry.name} adicionado`, 'success');
-    setManualName('');
-    setManualCalories('');
-    setManualProtein('');
-    setManualCarbs('');
-    setManualFat('');
+    addRecent({ id: `recent_${Date.now()}`, name: mealResult.name, description: mealResult.description, calories: mealResult.calories, protein: mealResult.protein, carbs: mealResult.carbs, fat: mealResult.fat });
+    useToastStore.getState().show(`✅ ${mealResult.name} — ${mealResult.calories} kcal`, 'success');
+    setShowSavePrompt(true);
+  };
+
+  const handleSaveAsShortcut = () => {
+    if (!mealResult) return;
+    addShortcut({ id: `shortcut_${Date.now()}`, name: mealResult.name, description: mealResult.description, calories: mealResult.calories, protein: mealResult.protein, carbs: mealResult.carbs, fat: mealResult.fat });
+    useToastStore.getState().show('⭐ Salvo como atalho!', 'success');
+    closeModal();
+  };
+
+  const handleQuickAdd = (meal: SavedMeal) => {
+    const entry: FoodEntry = {
+      id: `food_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: meal.name,
+      calories: meal.calories,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    };
+    addEntry(entry);
+    useToastStore.getState().show(`✅ ${meal.name} — ${meal.calories} kcal`, 'success');
     setShowAddModal(false);
+  };
+
+  const closeModal = () => {
+    setShowAddModal(false);
+    setMealInput('');
+    setMealResult(null);
+    setShowSavePrompt(false);
+    setMealLoading(false);
   };
 
   const handleCameraCapture = async (file: File) => {
@@ -271,7 +330,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
               onClick={() => setShowAddModal(true)}
               className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium"
             >
-              + Manual
+              + Adicionar
             </motion.button>
           </div>
         </div>
@@ -319,7 +378,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         </AnimatePresence>
       </div>
 
-      {/* Add Food Modal - Bottom Sheet */}
+      {/* Add Food Modal - AI Powered */}
       <AnimatePresence>
         {showAddModal && (
           <motion.div
@@ -327,52 +386,138 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
-            onClick={() => setShowAddModal(false)}
+            onClick={closeModal}
           >
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md"
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
-              <h3 className="text-lg font-bold">Adicionar alimento</h3>
-              <input
-                type="text"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
-                placeholder="Nome (ex: Frango grelhado)"
-                className="input-field text-sm"
-                autoFocus
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] text-white/40 font-medium">Calorias (kcal)</label>
-                  <input type="number" value={manualCalories} onChange={(e) => setManualCalories(e.target.value)} placeholder="300" className="input-field text-sm mt-1" />
+
+              {/* Save prompt after adding */}
+              {showSavePrompt && mealResult ? (
+                <div className="space-y-4 text-center">
+                  <p className="text-3xl">⭐</p>
+                  <p className="font-semibold">Refeição adicionada!</p>
+                  <p className="text-sm text-white/50">Quer salvar como atalho rápido?</p>
+                  <p className="text-xs text-white/30 bg-dark-300 rounded-xl px-3 py-2">{mealResult.description}</p>
+                  <div className="flex gap-3">
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={closeModal} className="flex-1 py-3 rounded-xl bg-white/5 text-white/50 text-sm font-medium">
+                      Não
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={handleSaveAsShortcut} className="flex-1 btn-primary text-sm">
+                      ⭐ Salvar atalho
+                    </motion.button>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] text-white/40 font-medium">Proteína (g)</label>
-                  <input type="number" value={manualProtein} onChange={(e) => setManualProtein(e.target.value)} placeholder="30" className="input-field text-sm mt-1" />
+              ) : !mealResult ? (
+                <>
+                  <h3 className="text-lg font-bold">Adicionar refeição</h3>
+
+                  {/* Quick shortcuts */}
+                  {shortcuts.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">⭐ Atalhos</p>
+                      <div className="flex flex-wrap gap-2">
+                        {shortcuts.map((meal) => (
+                          <motion.button
+                            key={meal.id}
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => handleQuickAdd(meal)}
+                            className="px-3 py-2 rounded-xl bg-primary-500/10 border border-primary-500/20 text-xs text-primary-300 font-medium"
+                          >
+                            {meal.name} <span className="text-white/30">({meal.calories}kcal)</span>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recents */}
+                  {recents.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">🕐 Recentes</p>
+                      <div className="flex flex-wrap gap-2">
+                        {recents.slice(0, 6).map((meal) => (
+                          <motion.button
+                            key={meal.id}
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => handleQuickAdd(meal)}
+                            className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50"
+                          >
+                            {meal.name} <span className="text-white/25">({meal.calories}kcal)</span>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Input */}
+                  <div className="space-y-3 pt-2 border-t border-white/5">
+                    <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">🤖 Descreva o prato</p>
+                    <textarea
+                      value={mealInput}
+                      onChange={(e) => setMealInput(e.target.value)}
+                      placeholder={"Ex: 150g arroz, 150g feijão, 200g frango grelhado, salada\n\nOu: 1 marmita fit de frango com batata doce"}
+                      className="input-field text-sm min-h-[80px] resize-none"
+                      rows={3}
+                      autoFocus
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      className="btn-primary flex items-center justify-center gap-2"
+                      disabled={!mealInput.trim() || mealLoading || !apiKey}
+                      onClick={handleAIMealCalc}
+                    >
+                      {mealLoading ? (
+                        <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} className="inline-block">⚡</motion.span> Calculando...</>
+                      ) : (
+                        <><span>🧠</span> Calcular com IA</>
+                      )}
+                    </motion.button>
+                    {!apiKey && <p className="text-[10px] text-red-400/60 text-center">Configure sua chave IA no Perfil</p>}
+                  </div>
+                </>
+              ) : (
+                /* Result card */
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">Resultado</h3>
+                  <div className="card bg-dark-300/50 space-y-3">
+                    <p className="font-semibold text-white/90">{mealResult.name}</p>
+                    <p className="text-xs text-white/30">{mealResult.description}</p>
+                    <div className="grid grid-cols-4 gap-2 text-center pt-2 border-t border-white/5">
+                      <div>
+                        <p className="text-lg font-bold text-orange-400">{mealResult.calories}</p>
+                        <p className="text-[9px] text-white/30">kcal</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-red-400">{mealResult.protein}g</p>
+                        <p className="text-[9px] text-white/30">proteína</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-yellow-400">{mealResult.carbs}g</p>
+                        <p className="text-[9px] text-white/30">carbs</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-green-400">{mealResult.fat}g</p>
+                        <p className="text-[9px] text-white/30">gordura</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setMealResult(null); setMealInput(''); }} className="flex-1 py-3 rounded-xl bg-white/5 text-white/50 text-sm font-medium">
+                      Refazer
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirmMeal} className="flex-1 btn-primary text-sm">
+                      ✅ Adicionar
+                    </motion.button>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] text-white/40 font-medium">Carboidratos (g)</label>
-                  <input type="number" value={manualCarbs} onChange={(e) => setManualCarbs(e.target.value)} placeholder="40" className="input-field text-sm mt-1" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-white/40 font-medium">Gorduras (g)</label>
-                  <input type="number" value={manualFat} onChange={(e) => setManualFat(e.target.value)} placeholder="10" className="input-field text-sm mt-1" />
-                </div>
-              </div>
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                className="btn-primary"
-                disabled={!manualName.trim() || !manualCalories}
-                onClick={handleManualAdd}
-              >
-                Adicionar
-              </motion.button>
+              )}
             </motion.div>
           </motion.div>
         )}
