@@ -16,6 +16,7 @@ export function Profile() {
   const { themeId, setTheme } = useThemeStore();
   const { phase, setPhase } = useCycleStore();
   const [editing, setEditing] = useState(false);
+  const [showReset, setShowReset] = useState(false);
   const [aiKeyInput, setAiKeyInput] = useState('');
 
   const [name, setName] = useState(profile?.name || '');
@@ -335,6 +336,33 @@ export function Profile() {
 
           {/* Export Data */}
           <ExportData />
+
+          {/* Reset Account */}
+          <button
+            onClick={() => setShowReset(true)}
+            className="w-full py-3 text-red-400/60 text-sm mt-4"
+          >
+            Excluir conta e recomeçar
+          </button>
+          {showReset && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
+              <div className="bg-dark-200 rounded-2xl p-6 space-y-4 max-w-sm w-full">
+                <h3 className="text-lg font-bold text-red-400">Excluir todos os dados?</h3>
+                <p className="text-sm text-white/50">Isso vai apagar perfil, treinos, histórico e configurações. Não tem volta.</p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowReset(false)} className="flex-1 py-3 rounded-xl bg-dark-300 text-white/50 text-sm font-medium">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => { localStorage.clear(); window.location.href = '/fitflow/'; }}
+                    className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 text-sm font-bold"
+                  >
+                    Excluir tudo
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

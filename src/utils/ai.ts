@@ -94,7 +94,10 @@ export async function askAI(
       temperature: 0.7,
     }),
   });
-  if (!response.ok) throw new Error('Erro na API');
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Erro ${response.status}`);
+  }
   const data = await response.json();
   if (data.choices[0].finish_reason === 'length') {
     throw new Error('Resposta cortada — tente novamente');

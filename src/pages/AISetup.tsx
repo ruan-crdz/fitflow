@@ -62,16 +62,26 @@ export function AISetup() {
     // No need to do anything, the store falls back to WORKOUTS constant
   };
 
-  const generateWorkout = async (key: string) => {
-    addMessage(`Olá, ${profile.name}! 👋`);
-    await delay(800);
-    addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu avaliar a melhor estratégia de divisão pra você...`);
-    await delay(1200);
-    addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
-    await delay(1000);
-    addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... 🧬`);
+  const [retryCount, setRetryCount] = useState(0);
 
-    const catalogNames = EXERCISE_CATALOG.map((e) => `${e.name} (${e.muscleGroup})`).join(', ');
+  const generateWorkout = async (key: string) => {
+    if (messages.length === 0) {
+      addMessage(`Olá, ${profile.name}! 👋`);
+      await delay(800);
+      addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu avaliar a melhor estratégia de divisão pra você...`);
+      await delay(1200);
+      addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
+      await delay(1000);
+      addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... 🧬`);
+    }
+
+    const grouped: Record<string, string[]> = {};
+    for (const e of EXERCISE_CATALOG) {
+      (grouped[e.muscleGroup] ??= []).push(e.name);
+    }
+    const catalogCompact = Object.entries(grouped)
+      .map(([g, names]) => `${g}: ${names.join(', ')}`)
+      .join('\n');
 
     const prompt = `Você é um preparador físico esportivo com pós-graduação em fisiologia do exercício.
 
@@ -109,7 +119,8 @@ REGRAS DE MONTAGEM:
 4. Cada exercício DEVE vir da lista abaixo (nome exato)
 5. Explique a rotação semanal
 
-Exercícios disponíveis: ${catalogNames}
+Exercícios disponíveis (use nomes EXATOS):
+${catalogCompact}
 
 Responda APENAS JSON puro (sem markdown, sem \`\`\`):
 {
@@ -181,8 +192,25 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
           addMessage('Hmm, não consegui gerar. Tente novamente ou monte manualmente.');
         }
       }
-    } catch {
-      addMessage('Erro ao gerar treino. Verifique seu token e tente novamente.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      if (msg.includes('401') || msg.includes('Incorrect API')) {
+        addMessage('❌ Token inválido ou expirado. Verifique no site da OpenAI.');
+      } else if (msg.includes('429') || msg.includes('Rate limit')) {
+        addMessage('⏳ Muitas requisições. Aguarde 1 minuto e tente novamente.');
+      } else if (msg.includes('insufficient_quota')) {
+        addMessage('💳 Sem créditos na conta OpenAI. Adicione saldo em platform.openai.com.');
+      } else if (msg.includes('cortada')) {
+        if (retryCount < 1) {
+          addMessage('✂️ Resposta cortada pela API. Tentando novamente...');
+          setRetryCount((c) => c + 1);
+          await delay(1000);
+          return generateWorkout(key);
+        }
+        addMessage('✂️ Resposta cortada duas vezes. Tente novamente mais tarde.');
+      } else {
+        addMessage(`❌ ${msg}`);
+      }
     }
   };
 
