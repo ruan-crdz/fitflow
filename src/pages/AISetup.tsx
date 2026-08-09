@@ -65,54 +65,66 @@ export function AISetup() {
   const generateWorkout = async (key: string) => {
     addMessage(`Olá, ${profile.name}! 👋`);
     await delay(800);
-    addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu calcular a melhor separação de treinos pra você...`);
+    addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu avaliar a melhor estratégia de divisão pra você...`);
     await delay(1200);
     addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
     await delay(1000);
-    addMessage(`Calculando a divisão ideal com base científica... 🧬`);
+    addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... 🧬`);
 
     const catalogNames = EXERCISE_CATALOG.map((e) => `${e.name} (${e.muscleGroup})`).join(', ');
 
-    const prompt = `Você é um preparador físico criando um programa de treino.
+    const prompt = `Você é um preparador físico esportivo com pós-graduação em fisiologia do exercício.
 
-PERFIL:
+PERFIL DO ALUNO:
 - Sexo biológico: ${sexLabel}
 - Idade: ${profile.age} anos
 - Peso: ${profile.weight}kg, Altura: ${profile.height}cm
 - Objetivo: ${goalLabel}
 - Dias disponíveis: ${trainingDays}x por semana
-- Nível de experiência: ${levelLabel}
+- Nível: ${levelLabel}
 
-REGRA CRÍTICA DE DIVISÃO (número de treinos distintos):
-- Iniciante com 1-4 dias → ABC (3 treinos, rotaciona)
-- Iniciante com 5+ dias → ABC (3 treinos, repete na semana)
-- Intermediário com 1-3 dias → ABC (3 treinos)
-- Intermediário com 4 dias → ABCD (4 treinos)
-- Intermediário com 5+ dias → ABCDE (5 treinos)
-- Avançado com 1-3 dias → ABC (3 treinos)
-- Avançado com 4 dias → ABCD (4 treinos)
-- Avançado com 5-7 dias → ABCDE (5 treinos)
+SUA TAREFA — AVALIAÇÃO DE SPLIT:
+Antes de montar o treino, avalie TODAS estas opções de divisão e dê um score de 0-10 para cada uma considerando o perfil acima:
 
-Use EXATAMENTE a regra acima para decidir quantos treinos criar (3, 4 ou 5).
+1. Full Body (2-3 treinos distintos, rotaciona nos ${trainingDays} dias)
+2. Upper/Lower (2 treinos + possível Full Body no 5º dia)
+3. ABC (3 treinos, rotaciona se >3 dias)
+4. ABCD (4 treinos, sobram dias para repetir se >4 dias)
+5. ABCDE (5 treinos distintos)
 
-REGRAS:
-1. Cada treino deve ter 6-8 exercícios
-2. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, mais volume de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}
-3. Cada exercício DEVE ser da lista abaixo (nome exato)
-4. Justifique a divisão escolhida em 1-2 frases
-5. Explique como rotacionar na semana
+CRITÉRIOS DE SCORING:
+- Recuperação adequada entre sessões do mesmo grupo muscular (48-72h)
+- Volume total semanal adequado ao nível (iniciante: 10-12 séries/grupo/semana; intermediário: 12-16; avançado: 16-20)
+- Frequência de estímulo por grupo muscular (2x/semana é ótimo para hipertrofia)
+- Complexidade proporcional à experiência (iniciante não precisa de divisão ultra-específica)
+- Aproveitamento dos dias disponíveis sem overtraining
+- Para iniciantes: full body ou ABC rotativo geralmente ganha porque permite maior frequência de estímulo por grupo
+
+IMPORTANTE: O número de treinos distintos NÃO precisa ser igual ao número de dias. Um iniciante que treina 5x pode fazer ABC rotativo (Sem1: A,B,C,A,B / Sem2: C,A,B,C,A). A IA DEVE escolher o split que maximize resultados, não o que "preenche" os dias.
+
+REGRAS DE MONTAGEM:
+1. Após escolher o split vencedor, monte os treinos
+2. Cada treino: 5-8 exercícios (menos para iniciante, mais para avançado)
+3. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, volume adequado de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}
+4. Cada exercício DEVE vir da lista abaixo (nome exato)
+5. Explique a rotação semanal
 
 Exercícios disponíveis: ${catalogNames}
 
 Responda APENAS JSON puro (sem markdown, sem \`\`\`):
 {
-  "split": "ABC" ou "ABCD" ou "ABCDE",
-  "explanation": "Justificativa da divisão em 2 frases",
-  "rotation": "Como rotacionar na semana",
+  "evaluation": [
+    {"option": "Full Body", "score": 8, "reason": "razão curta"},
+    {"option": "Upper/Lower", "score": 6, "reason": "razão curta"},
+    {"option": "ABC", "score": 9, "reason": "razão curta"},
+    {"option": "ABCD", "score": 5, "reason": "razão curta"},
+    {"option": "ABCDE", "score": 3, "reason": "razão curta"}
+  ],
+  "chosenSplit": "ABC",
+  "explanation": "Justificativa de por que este split venceu (2-3 frases)",
+  "rotation": "Como rotacionar na semana (ex: Sem1: A,B,C,A,B / Sem2: C,A,B,C,A)",
   "workouts": [
-    {"type": "A", "focus": "foco do treino", "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]},
-    {"type": "B", "focus": "...", "exercises": [...]},
-    ...
+    {"type": "A", "focus": "foco", "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]}
   ]
 }`;
 
@@ -123,9 +135,22 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
         const parsed = JSON.parse(match[0]);
         if (parsed.workouts?.length > 0) {
           setWorkouts(parsed.workouts);
-          addMessage(`Pronto! Montei sua divisão:`);
-          await delay(600);
+
+          // Show evaluation scores
+          if (parsed.evaluation?.length) {
+            const winner = parsed.evaluation.reduce((a: { score: number }, b: { score: number }) => a.score > b.score ? a : b);
+            const scoreBoard = parsed.evaluation
+              .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+              .map((e: { option: string; score: number }) => `${e.option}: ${e.score}/10`)
+              .join(' • ');
+            addMessage(`📊 Avaliação: ${scoreBoard}`);
+            await delay(600);
+            addMessage(`🏆 Vencedor: ${parsed.chosenSplit || winner.option}`);
+            await delay(400);
+          }
+
           if (parsed.explanation) addMessage(`📋 ${parsed.explanation}`);
+          await delay(400);
           if (parsed.rotation) addMessage(`🔄 Rotação: ${parsed.rotation}`);
 
           // Save workouts to store
