@@ -385,7 +385,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 overflow-y-auto"
             onClick={closeModal}
           >
             <motion.div
@@ -393,7 +393,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md max-h-[85vh] overflow-y-auto"
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 pb-[env(safe-area-inset-bottom,24px)] space-y-4 w-full max-w-md max-h-[60dvh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
