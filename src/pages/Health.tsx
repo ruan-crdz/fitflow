@@ -374,8 +374,8 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         )}
 
         <AnimatePresence>
-          {entries.map((entry) => (
-            <SwipeableEntry key={entry.id} entry={entry} onDelete={removeEntry} onDuplicate={addEntry} />
+          {groupEntries(entries).map((group) => (
+            <GroupedEntry key={group.name} group={group} onAdd={addEntry} onRemove={removeEntry} />
           ))}
         </AnimatePresence>
       </div>
@@ -391,7 +391,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             className="fixed inset-0 z-50 bg-[rgb(var(--color-bg-rgb))] flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-[env(safe-area-inset-top,12px)] pb-3 border-b border-white/5">
+            <div className="flex items-center justify-between px-5 pt-14 pb-3 border-b border-white/5">
               <button onClick={closeModal} className="text-white/50 text-sm font-medium">Cancelar</button>
               <h3 className="font-bold">Adicionar refeição</h3>
               <div className="w-16" />
@@ -540,7 +540,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
             {/* Bottom action */}
             {!mealResult && !showSavePrompt && (
-              <div className="px-5 pb-[env(safe-area-inset-bottom,16px)] pt-3 border-t border-white/5">
+              <div className="px-5 pb-24 pt-3 border-t border-white/5">
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   className="btn-primary w-full flex items-center justify-center gap-2"
@@ -563,24 +563,61 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
   );
 }
 
-function SwipeableEntry({ entry, onDelete, onDuplicate }: { entry: FoodEntry; onDelete: (id: string) => void; onDuplicate: (entry: FoodEntry) => void }) {
+interface EntryGroup {
+  name: string;
+  entries: FoodEntry[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  qty: number;
+}
+
+function groupEntries(entries: FoodEntry[]): EntryGroup[] {
+  const map = new Map<string, FoodEntry[]>();
+  for (const e of entries) {
+    const key = e.name.toLowerCase();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(e);
+  }
+  return Array.from(map.values()).map((items) => ({
+    name: items[0].name,
+    entries: items,
+    totalCalories: items.reduce((a, e) => a + e.calories, 0),
+    totalProtein: items.reduce((a, e) => a + e.protein, 0),
+    totalCarbs: items.reduce((a, e) => a + e.carbs, 0),
+    totalFat: items.reduce((a, e) => a + e.fat, 0),
+    qty: items.length,
+  }));
+}
+
+function GroupedEntry({ group, onAdd, onRemove }: { group: EntryGroup; onAdd: (entry: FoodEntry) => void; onRemove: (id: string) => void }) {
   const x = useMotionValue(0);
   const bg = useTransform(x, [-100, 0], ['rgba(239,68,68,0.3)', 'rgba(0,0,0,0)']);
+  const lastEntry = group.entries[group.entries.length - 1];
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     if (info.offset.x < -80) {
-      onDelete(entry.id);
-      useToastStore.getState().show('Refeição removida', 'info');
+      // Remove all entries in the group
+      group.entries.forEach((e) => onRemove(e.id));
+      useToastStore.getState().show(`${group.name} removido`, 'info');
     }
   };
 
   const handleAdd = () => {
-    onDuplicate({
-      ...entry,
+    onAdd({
+      ...lastEntry,
       id: `food_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     });
-    useToastStore.getState().show(`+1 ${entry.name}`, 'success');
+    useToastStore.getState().show(`+1 ${group.name}`, 'success');
+  };
+
+  const handleRemoveOne = () => {
+    onRemove(lastEntry.id);
+    if (group.qty <= 1) {
+      useToastStore.getState().show(`${group.name} removido`, 'info');
+    }
   };
 
   return (
@@ -601,16 +638,16 @@ function SwipeableEntry({ entry, onDelete, onDuplicate }: { entry: FoodEntry; on
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-white/25 font-mono">{entry.time}</span>
-            <p className="font-medium text-sm truncate">{entry.name}</p>
+            {group.qty > 1 && <span className="text-[10px] font-bold text-primary-400 bg-primary-500/10 px-1.5 py-0.5 rounded">x{group.qty}</span>}
+            <p className="font-medium text-sm truncate">{group.name}</p>
           </div>
           <p className="text-[11px] text-white/35 mt-0.5">
-            P:{entry.protein}g • C:{entry.carbs}g • G:{entry.fat}g
+            P:{group.totalProtein}g • C:{group.totalCarbs}g • G:{group.totalFat}g
           </p>
         </div>
-        <p className="text-sm font-bold text-orange-400 shrink-0">{entry.calories}</p>
+        <p className="text-sm font-bold text-orange-400 shrink-0">{group.totalCalories}</p>
         <div className="flex items-center gap-1 shrink-0 ml-1">
-          <button onClick={() => { onDelete(entry.id); }} className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 text-xs font-bold active:scale-90 transition-transform">−</button>
+          <button onClick={handleRemoveOne} className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 text-xs font-bold active:scale-90 transition-transform">−</button>
           <button onClick={handleAdd} className="w-7 h-7 rounded-full bg-green-500/10 flex items-center justify-center text-green-400 text-xs font-bold active:scale-90 transition-transform">+</button>
         </div>
       </motion.div>
