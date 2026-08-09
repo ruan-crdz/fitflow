@@ -18,8 +18,8 @@ export function AppShell({ children }: AppShellProps) {
   const navItems = [
     { path: '/dashboard', icon: '🏠', label: 'Home' },
     { path: '/plans', icon: '📋', label: 'Treinos' },
+    { path: '/health', icon: '🩺', label: 'Saúde' },
     ...(aiEnabled ? [{ path: '/ai', icon: '🤖', label: 'FlowAI' }] : []),
-    { path: '/history', icon: '📊', label: 'Histórico' },
     { path: '/profile', icon: '👤', label: 'Perfil' },
   ];
   return (
