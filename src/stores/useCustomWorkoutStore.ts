@@ -27,7 +27,8 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
       customWorkouts: { A: null, B: null, C: null, D: null, E: null },
 
       getExercises: (type) => {
-        const custom = get().customWorkouts[type];
+        const cw = get().customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+        const custom = cw[type];
         if (custom && custom.length > 0) {
           return custom.map((e) => ({
             ...e,
@@ -39,38 +40,43 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
       },
 
       setExercises: (type, exercises) =>
-        set((state) => ({
-          customWorkouts: { ...state.customWorkouts, [type]: exercises },
-        })),
+        set((state) => {
+          const prev = state.customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+          return { customWorkouts: { ...prev, [type]: exercises } };
+        }),
 
       resetWorkout: (type) =>
-        set((state) => ({
-          customWorkouts: { ...state.customWorkouts, [type]: null },
-        })),
+        set((state) => {
+          const prev = state.customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+          return { customWorkouts: { ...prev, [type]: null } };
+        }),
 
       swapExercise: (type, oldId, newExercise) =>
         set((state) => {
-          const current = state.customWorkouts[type]
+          const prev = state.customWorkouts || { A: null, B: null, C: null, D: null, E: null };
+          const current = prev[type]
             || WORKOUTS.find((w) => w.type === type)!.exercises.map((e) => ({
               id: e.id, name: e.name, sets: e.sets, repsMin: e.repsMin,
               repsMax: e.repsMax, muscleGroup: e.muscleGroup, image: e.image,
             }));
           const updated = current.map((e) => (e.id === oldId ? newExercise : e));
-          return { customWorkouts: { ...state.customWorkouts, [type]: updated } };
+          return { customWorkouts: { ...prev, [type]: updated } };
         }),
     }),
     {
       name: 'fitflow-custom-workouts',
-      version: 2,
-      migrate: (persisted: unknown, _version: number) => {
+      version: 3,
+      migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>;
+        const base = { A: null, B: null, C: null, D: null, E: null };
         if (state?.customWorkouts) {
           const cw = state.customWorkouts as Record<string, unknown[] | null>;
           for (const key of Object.keys(cw)) {
             if (Array.isArray(cw[key]) && cw[key]!.length === 0) cw[key] = null;
           }
-          if (!('D' in cw)) cw.D = null;
-          if (!('E' in cw)) cw.E = null;
+          state.customWorkouts = { ...base, ...cw };
+        } else {
+          state.customWorkouts = base;
         }
         return state as unknown as CustomWorkoutState;
       },
