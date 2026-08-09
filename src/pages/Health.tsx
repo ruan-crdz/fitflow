@@ -440,11 +440,12 @@ function MacroBar({ label, current, goal, color }: { label: string; current: num
   );
 }
 
-// Compresses image to max 1024px and JPEG 0.8 quality to keep payload small
 function compressAndEncode(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
       const MAX = 1024;
       let { width, height } = img;
       if (width > MAX || height > MAX) {
@@ -460,7 +461,7 @@ function compressAndEncode(file: File): Promise<string> {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       resolve(dataUrl.split(',')[1]);
     };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Falha ao ler imagem')); };
+    img.src = objectUrl;
   });
 }

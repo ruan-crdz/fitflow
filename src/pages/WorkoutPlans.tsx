@@ -165,6 +165,8 @@ export function WorkoutPlans() {
     A: `Treino A é SUPERIOR COMPLETO. Ideal: 2-3 de Costas, 2 de Peitoral, 1-2 de Ombros, 1 de Bíceps, 1 de Tríceps, 1 de Abdômen.`,
     B: `Treino B é POSTERIOR + GLÚTEOS. Ideal: 2-3 de Posterior de Coxa, 2-3 de Glúteos, 1 de Panturrilhas, 1 de Abdômen.`,
     C: `Treino C é QUADRÍCEPS + GLÚTEOS. Ideal: 2-3 de Quadríceps, 1-2 de Glúteos, 1-2 de Posterior de Coxa, 1 de Panturrilhas, 1 de Abdômen.`,
+    D: `Treino D é ${workoutFocus}. Analise os exercícios atuais e sugira melhorias mantendo o foco do treino.`,
+    E: `Treino E é ${workoutFocus}. Analise os exercícios atuais e sugira melhorias mantendo o foco do treino.`,
   };
 
   const handleAIBuild = async () => {
@@ -217,7 +219,7 @@ Exercícios disponíveis: ${availableNames}
 
 Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
 
-      const response = await askAI(apiKey, profile, prompt);
+      const response = await askAI(apiKey, profile, prompt, true);
       const match = response.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -338,7 +340,7 @@ NÃO troque puxada vertical por horizontal ou vice-versa. NÃO troque empurrar p
 Responda APENAS JSON: {"name":"NOME EXATO da lista","reason":"frase curta biomecânica"}
 ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
-      const response = await askAI(apiKey, profile, prompt);
+      const response = await askAI(apiKey, profile, prompt, true);
       const match = response.match(/\{[^}]+\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);

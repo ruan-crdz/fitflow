@@ -21,7 +21,6 @@ export function AISetup() {
   const navigate = useNavigate();
   const profile = useProfileStore((s) => s.profile)!;
   const { setApiKey, apiKey } = useAIStore();
-  const { setExercises } = useCustomWorkoutStore();
 
   const [phase, setPhase] = useState<Phase>(apiKey ? 'generating' : 'token');
   const [tokenInput, setTokenInput] = useState('');
@@ -198,13 +197,16 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
           await delay(400);
           if (parsed.rotation) addMessage(`🔄 Rotação: ${parsed.rotation}`);
 
-          // Save workouts to store, assign types sequentially to guarantee A,B,C...
+          // Save workouts to store and update activeSlots atomically
           const typeLetters: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+          const generatedSlots: ('A' | 'B' | 'C' | 'D' | 'E')[] = [];
+          const newCw: Record<string, unknown> = { A: null, B: null, C: null, D: null, E: null };
           parsed.workouts.forEach((w: GeneratedWorkout, wi: number) => {
             const type = typeLetters[wi];
             if (!type) return;
             w.type = type;
-            const mapped = w.exercises.map((ex: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }, i: number) => {
+            generatedSlots.push(type);
+            newCw[type] = w.exercises.map((ex: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }, i: number) => {
               const catalogItem = EXERCISE_CATALOG.find(
                 (c) => c.name.toLowerCase() === ex.name.toLowerCase()
                   || c.name.toLowerCase().includes(ex.name.toLowerCase().slice(0, 12)),
@@ -219,8 +221,8 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
                 image: catalogItem?.image,
               };
             });
-            setExercises(type, mapped);
           });
+          useCustomWorkoutStore.setState({ customWorkouts: newCw as any, activeSlots: generatedSlots });
 
           setPhase('summary');
         } else {

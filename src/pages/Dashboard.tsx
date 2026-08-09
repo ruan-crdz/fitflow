@@ -18,6 +18,7 @@ import { calculateWaterIntake } from '@/utils/water';
 import { getTodayWorkoutType, isTrainingDay, getToday } from '@/utils/date';
 import { useTrainingReminder } from '@/hooks/useTrainingReminder';
 import { WORKOUT_MAP } from '@/constants/workouts';
+import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import type { WorkoutType } from '@/types';
 
 export function Dashboard() {
@@ -32,6 +33,7 @@ export function Dashboard() {
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
+  const activeSlots = useCustomWorkoutStore((s) => s.activeSlots);
   const [showWeightPrompt, setShowWeightPrompt] = useState(!hasTodayWeight);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -171,7 +173,7 @@ export function Dashboard() {
         <div className="space-y-2">
           <p className="text-xs text-white/25 font-semibold uppercase tracking-wider">Ou escolha um treino</p>
           <div className="grid grid-cols-3 gap-3">
-            {(['A', 'B', 'C'] as WorkoutType[]).map((type) => (
+            {activeSlots.map((type) => (
               <motion.button
                 key={type}
                 whileTap={{ scale: 0.92 }}
@@ -179,7 +181,7 @@ export function Dashboard() {
                 className="card text-center py-4 hover:border-primary-400/40 transition-colors active:bg-primary-500/5"
               >
                 <span className="text-2xl font-bold text-primary-400">{type}</span>
-                <p className="text-[10px] text-white/40 mt-1">{WORKOUT_MAP[type].focus}</p>
+                <p className="text-[10px] text-white/40 mt-1">{WORKOUT_MAP[type]?.focus || `Treino ${type}`}</p>
               </motion.button>
             ))}
           </div>

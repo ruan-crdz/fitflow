@@ -39,6 +39,10 @@ export function AIReeval() {
   }, [messages]);
 
   useEffect(() => {
+    if (!apiKey) {
+      setMessages([{ role: 'ai', content: 'Configure sua chave IA no Perfil para usar a reavaliação.' }]);
+      return;
+    }
     startConversation();
   }, []);
 

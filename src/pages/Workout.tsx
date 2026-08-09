@@ -42,11 +42,16 @@ export function Workout() {
     return null;
   }
 
-  const workout = WORKOUT_MAP[activeSession.workoutType];
+  const workout = WORKOUT_MAP[activeSession.workoutType] || { label: `Treino ${activeSession.workoutType}`, focus: 'Personalizado' };
   const exercises = getExercises(activeSession.workoutType);
-  const currentIndex = activeSession.currentExerciseIndex;
+  const currentIndex = Math.min(activeSession.currentExerciseIndex, exercises.length - 1);
   const exercise = exercises[currentIndex];
   const isLastExercise = currentIndex === exercises.length - 1;
+
+  if (!exercise) {
+    navigate('/dashboard');
+    return null;
+  }
 
   const completedSets = activeSession.setsCompleted[exercise.id] || 0;
   const allSetsComplete = completedSets >= exercise.sets;
