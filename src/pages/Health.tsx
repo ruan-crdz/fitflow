@@ -373,7 +373,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
         <AnimatePresence>
           {entries.map((entry) => (
-            <SwipeableEntry key={entry.id} entry={entry} onDelete={removeEntry} />
+            <SwipeableEntry key={entry.id} entry={entry} onDelete={removeEntry} onDuplicate={addEntry} />
           ))}
         </AnimatePresence>
       </div>
@@ -526,7 +526,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
   );
 }
 
-function SwipeableEntry({ entry, onDelete }: { entry: FoodEntry; onDelete: (id: string) => void }) {
+function SwipeableEntry({ entry, onDelete, onDuplicate }: { entry: FoodEntry; onDelete: (id: string) => void; onDuplicate: (entry: FoodEntry) => void }) {
   const x = useMotionValue(0);
   const bg = useTransform(x, [-100, 0], ['rgba(239,68,68,0.3)', 'rgba(0,0,0,0)']);
 
@@ -535,6 +535,15 @@ function SwipeableEntry({ entry, onDelete }: { entry: FoodEntry; onDelete: (id: 
       onDelete(entry.id);
       useToastStore.getState().show('Refeição removida', 'info');
     }
+  };
+
+  const handleAdd = () => {
+    onDuplicate({
+      ...entry,
+      id: `food_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    });
+    useToastStore.getState().show(`+1 ${entry.name}`, 'success');
   };
 
   return (
@@ -551,7 +560,7 @@ function SwipeableEntry({ entry, onDelete }: { entry: FoodEntry; onDelete: (id: 
         dragElastic={0.1}
         onDragEnd={handleDragEnd}
         style={{ x }}
-        className="card flex items-center justify-between"
+        className="card flex items-center gap-2"
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -562,7 +571,11 @@ function SwipeableEntry({ entry, onDelete }: { entry: FoodEntry; onDelete: (id: 
             P:{entry.protein}g • C:{entry.carbs}g • G:{entry.fat}g
           </p>
         </div>
-        <p className="text-sm font-bold text-orange-400 ml-3">{entry.calories}</p>
+        <p className="text-sm font-bold text-orange-400 shrink-0">{entry.calories}</p>
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          <button onClick={() => { onDelete(entry.id); }} className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 text-xs font-bold active:scale-90 transition-transform">−</button>
+          <button onClick={handleAdd} className="w-7 h-7 rounded-full bg-green-500/10 flex items-center justify-center text-green-400 text-xs font-bold active:scale-90 transition-transform">+</button>
+        </div>
       </motion.div>
     </motion.div>
   );
