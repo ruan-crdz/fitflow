@@ -407,10 +407,10 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             }`}
           >
             {type}
-            {editing && activeTypes.length > 2 && (
+            {activeTypes.length > 2 && (
               <button
                 onClick={(e) => { e.stopPropagation(); setRemoveTarget(type); }}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500/80 text-white text-[10px] font-bold flex items-center justify-center shadow-sm"
               >×</button>
             )}
           </motion.button>
@@ -766,15 +766,16 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
       <ConfirmModal
         open={!!removeTarget}
         title={`Remover Treino ${removeTarget}?`}
-        message="Todos os exercícios desse treino serão apagados."
+        message="Você pode adicionar de volta depois. Os exercícios serão resetados."
         confirmText="Remover"
         cancelText="Cancelar"
         danger
         onConfirm={() => {
           if (removeTarget) {
+            const remaining = activeTypes.filter((t) => t !== removeTarget);
             removeSlot(removeTarget);
             toast(`Treino ${removeTarget} removido`, 'info');
-            if (selected === removeTarget) setSelected(activeTypes[0] === removeTarget ? activeTypes[1] || 'A' : activeTypes[0]);
+            if (selected === removeTarget) setSelected(remaining[0] || 'A');
           }
           setRemoveTarget(null);
         }}
