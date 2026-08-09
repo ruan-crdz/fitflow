@@ -59,12 +59,16 @@ export function Health() {
   };
 
   const handleCameraCapture = async (file: File) => {
-    if (!apiKey) return;
+    if (!apiKey) {
+      useToastStore.getState().show('Configure sua chave IA no Perfil primeiro', 'error');
+      return;
+    }
     setCameraLoading(true);
     const toast = useToastStore.getState().show;
 
     try {
-      const base64 = await fileToBase64(file);
+      const base64 = await compressAndEncode(file);
+
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -75,23 +79,29 @@ export function Health() {
           model: 'gpt-4o',
           messages: [
             {
+              role: 'system',
+              content: 'Você é um nutricionista esportivo. Sempre responda em JSON válido.',
+            },
+            {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: `Você é um nutricionista esportivo expert. Analise esta foto de alimento com MÁXIMA precisão.
+                  text: `Analise esta foto de alimento/bebida com MÁXIMA precisão.
 
 INSTRUÇÕES:
-1. Identifique TODOS os alimentos visíveis na foto
-2. Estime a porção/quantidade baseado no tamanho visual (use referências como prato, colher, copo)
-3. Calcule calorias e macros para a PORÇÃO VISÍVEL (não para 100g)
-4. Se houver múltiplos itens, some tudo em uma única entrada
-5. Considere métodos de preparo visíveis (grelhado, frito, cozido, cru)
+1. Identifique TODOS os itens visíveis (comida, bebida, snack, doce, embalagem)
+2. Se for uma EMBALAGEM ou produto industrializado (chocolate, salgadinho, cerveja, refrigerante etc), use as informações nutricionais conhecidas do produto
+3. Estime a porção baseado no que está visível (1 unidade, 1 lata, 1 prato etc)
+4. Para pratos caseiros, estime baseado no tamanho do prato/recipiente
+5. Considere método de preparo (grelhado, frito, cozido)
 
-RESPOSTA OBRIGATÓRIA em JSON puro:
-{"name": "descrição curta do prato", "calories": número, "protein": gramas, "carbs": gramas, "fat": gramas, "confidence": "high"|"medium"|"low"}
+Exemplos:
+- Sonho de Valsa (1 bombom): ~125kcal, P:1g, C:14g, G:7g
+- Cerveja Brahma 350ml: ~150kcal, P:1g, C:11g, G:0g
+- Prato com arroz+feijão+carne: ~550kcal, P:35g, C:60g, G:15g
 
-Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "confidence": "low"}`,
+RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`,
                 },
                 {
                   type: 'image_url',
@@ -105,7 +115,50 @@ Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "pro
         }),
       });
 
-      if (!response.ok) throw new Error('Erro na API');
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        const msg = err?.error?.message || `Status ${response.status}`;
+        // Fallback to gpt-4o-mini if model not available
+        if (response.status === 404 || msg.includes('model')) {
+          const fallback = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: 'Você é um nutricionista. Responda em JSON válido.' },
+                { role: 'user', content: [
+                  { type: 'text', text: 'Identifique este alimento/produto e estime calorias e macros da porção visível. JSON: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0}' },
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' } },
+                ] },
+              ],
+              max_tokens: 200,
+              response_format: { type: 'json_object' },
+            }),
+          });
+          if (!fallback.ok) throw new Error(msg);
+          const fallbackData = await fallback.json();
+          const content = fallbackData.choices[0].message.content;
+          const parsed = JSON.parse(content);
+          if (parsed.calories > 0) {
+            addEntry({
+              id: `food_${Date.now()}`,
+              name: parsed.name,
+              calories: parsed.calories,
+              protein: parsed.protein || 0,
+              carbs: parsed.carbs || 0,
+              fat: parsed.fat || 0,
+              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            });
+            toast(`✅ ${parsed.name} — ${parsed.calories} kcal`, 'success');
+          } else {
+            toast('Não identificado. Tente foto mais nítida.', 'error');
+          }
+          return;
+        }
+        throw new Error(msg);
+      }
+
       const data = await response.json();
       const content = data.choices[0].message.content;
       const parsed = JSON.parse(content);
@@ -119,12 +172,13 @@ Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "pro
           fat: parsed.fat || 0,
           time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         });
-        toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
+        toast(`✅ ${parsed.name} — ${parsed.calories} kcal`, 'success');
       } else {
-        toast('Não consegui identificar o alimento. Tente outra foto.', 'error');
+        toast('Não consegui identificar. Tente outra foto.', 'error');
       }
-    } catch {
-      toast('Erro ao analisar foto. Tente novamente.', 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast(`❌ Falha: ${msg.slice(0, 60)}`, 'error');
     } finally {
       setCameraLoading(false);
     }
@@ -204,11 +258,12 @@ Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "pro
           <div className="flex gap-2">
             {apiKey && (
               <motion.button
-                whileTap={{ scale: 0.9 }}
+                whileTap={{ scale: 0.85 }}
                 onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/20 text-primary-300 text-xs font-semibold flex items-center gap-1.5"
+                disabled={cameraLoading}
+                className="px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/20 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
               >
-                <span>📷</span> Foto IA
+                <span>📷</span> {cameraLoading ? 'Analisando...' : 'Foto IA'}
               </motion.button>
             )}
             <motion.button
@@ -225,7 +280,6 @@ Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "pro
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -236,18 +290,17 @@ Se não conseguir identificar: {"name": "Não identificado", "calories": 0, "pro
 
         {cameraLoading && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card text-center py-8"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="card text-center py-8 border-primary-500/30 bg-primary-500/5"
           >
-            <motion.p
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="text-sm text-primary-300 font-medium"
-            >
-              🤖 Analisando alimento com IA...
-            </motion.p>
-            <p className="text-[10px] text-white/30 mt-2">GPT-4o Vision (alta precisão)</p>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
+              className="text-3xl inline-block mb-3"
+            >🔍</motion.div>
+            <p className="text-sm text-primary-300 font-semibold">Analisando com IA...</p>
+            <p className="text-[10px] text-white/30 mt-1">Identificando alimento e estimando macros</p>
           </motion.div>
         )}
 
@@ -387,14 +440,27 @@ function MacroBar({ label, current, goal, color }: { label: string; current: num
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
+// Compresses image to max 1024px and JPEG 0.8 quality to keep payload small
+function compressAndEncode(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1024;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        const ratio = Math.min(MAX / width, MAX / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl.split(',')[1]);
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
   });
 }
