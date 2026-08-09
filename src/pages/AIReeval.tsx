@@ -21,7 +21,6 @@ export function AIReeval() {
   const profile = useProfileStore((s) => s.profile)!;
   const sessions = useHistoryStore((s) => s.sessions);
   const { activeSlots, getExercises, setExercises } = useCustomWorkoutStore();
-  const addSlot = useCustomWorkoutStore((s) => s.addSlot);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -162,15 +161,19 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
     setLoading(false);
   };
 
-  const applyRecommendation = async (result: { addDay?: boolean; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
+  const applyRecommendation = async (result: { addDay?: boolean; newSplit?: string; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
     const toast = useToastStore.getState().show;
+    const store = useCustomWorkoutStore.getState();
 
-    if (result.addDay) {
-      const newSlot = addSlot();
-      if (newSlot) toast(`Treino ${newSlot} adicionado!`, 'success');
-    }
-
+    // Ensure all needed slots exist
     if (result.exercises) {
+      const neededTypes = Object.keys(result.exercises).filter((t) => ['A', 'B', 'C', 'D', 'E'].includes(t)) as WorkoutType[];
+      for (const type of neededTypes) {
+        if (!store.activeSlots.includes(type)) {
+          store.addSlot();
+        }
+      }
+
       for (const [type, exercises] of Object.entries(result.exercises)) {
         if (!['A', 'B', 'C', 'D', 'E'].includes(type)) continue;
         const mapped = exercises.map((ex, i) => {
@@ -191,6 +194,9 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
         setExercises(type as WorkoutType, mapped);
       }
       toast('Treinos atualizados com a nova recomendação!', 'success');
+    } else if (result.addDay) {
+      const newSlot = store.addSlot();
+      if (newSlot) toast(`Treino ${newSlot} adicionado!`, 'success');
     }
   };
 
