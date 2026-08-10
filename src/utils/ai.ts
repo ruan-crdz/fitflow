@@ -39,10 +39,14 @@ Regras:
 - Quando o aluno reportar sintomas (mal-estar, dor de cabeça, fraqueza), analise os dados nutricionais e de hidratação para dar contexto`;
 
 function getSystemPrompt(): string {
-  const { assistantName, personalityPrompt } = getAIConfigPrompt();
+  const { assistantName, personalityPrompt, personality } = getAIConfigPrompt();
+  const toneLine = personality === 'tough'
+    ? 'Seu tom é de bronca forte, cobrança prática e energia de acordar o aluno para agir agora.'
+    : 'Seu tom é como uma personal trainer amiga: próxima, encorajadora, mas embasada.';
   return BASE_SYSTEM_PROMPT
     .replace('GymPilot AI', assistantName)
     .replace('Você é direta, motivadora e científica.', `Personalidade configurada: ${personalityPrompt}`)
+    .replace('Seu tom é como uma personal trainer amiga: próxima, encorajadora, mas embasada.', toneLine)
     + `\n- Sempre que precisar falar seu nome, use exatamente: ${assistantName}.\n`
     + SCIENCE_GUARDRAILS;
 }
