@@ -9,16 +9,17 @@ export function AIIntro() {
   const markIntroSeen = useAIStore((s) => s.markIntroSeen);
   const profile = useProfileStore((s) => s.profile);
   const [step, setStep] = useState(0);
+  const isMale = profile?.sex === 'male';
 
   const lines = [
     'Inicializando GymPilot AI...',
-    'Conectando à inteligência artificial...',
+    'Conectando a inteligencia artificial...',
     'Sistemas online.',
-    `Olá, ${profile?.name || 'usuária'}. Prazer em conhecê-la.`,
+    `Ola, ${profile?.name || (isMale ? 'usuario' : 'usuaria')}. Prazer em conhecer voce.`,
     'Sou sua assistente fitness pessoal.',
-    'Estou aqui para tirar dúvidas, dar dicas de treino, nutrição e motivação.',
-    'Tudo baseado em ciência. Tudo adaptado a você.',
-    'Vamos juntas? 💜',
+    'Estou aqui para tirar duvidas, dar dicas de treino, nutricao e motivacao.',
+    'Tudo baseado em ciencia. Tudo adaptado a voce.',
+    isMale ? 'Vamos juntos?' : 'Vamos juntas?',
   ];
 
   useEffect(() => {
@@ -34,7 +35,14 @@ export function AIIntro() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center px-8 bg-dark-500">
+    <div className="relative min-h-[100dvh] flex flex-col items-center justify-center px-8 bg-dark-500">
+      <button
+        onClick={handleContinue}
+        className="fixed right-5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-10 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm font-semibold"
+      >
+        Pular
+      </button>
+
       <div className="w-full max-w-sm space-y-4">
         <AnimatePresence>
           {lines.slice(0, step + 1).map((line, i) => (
@@ -49,6 +57,11 @@ export function AIIntro() {
             >
               {i < 3 && <span className="text-primary-500 mr-2">{'>'}</span>}
               {line}
+              {i === lines.length - 1 && (
+                <span className={isMale ? 'ml-2' : 'ml-2 text-primary-400 text-base'}>
+                  {isMale ? '💪' : '♥'}
+                </span>
+              )}
             </motion.p>
           ))}
         </AnimatePresence>
@@ -61,7 +74,7 @@ export function AIIntro() {
             onClick={handleContinue}
             className="btn-primary mt-8"
           >
-            Começar a conversar 🤖
+            Comecar a conversar
           </motion.button>
         )}
       </div>
