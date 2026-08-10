@@ -46,7 +46,7 @@ export function App() {
           <Routes>
             <Route
               path="*"
-              element={startOnboarding ? <Onboarding /> : <BackupRestore onNewUser={() => setStartOnboarding(true)} />}
+              element={startOnboarding ? <Onboarding onBack={() => setStartOnboarding(false)} /> : <BackupRestore onNewUser={() => setStartOnboarding(true)} />}
             />
           </Routes>
         </HashRouter>

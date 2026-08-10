@@ -6,7 +6,11 @@ import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus } fro
 
 type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'focus' | 'customSplit' | 'setup';
 
-export function Onboarding() {
+interface OnboardingProps {
+  onBack?: () => void;
+}
+
+export function Onboarding({ onBack }: OnboardingProps) {
   const navigate = useNavigate();
   const setProfile = useProfileStore((s) => s.setProfile);
 
@@ -48,7 +52,15 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center px-6 py-12">
+    <div className="min-h-[100dvh] flex flex-col justify-center px-6 py-12 relative">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute left-5 top-12 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-semibold"
+        >
+          ← Voltar
+        </button>
+      )}
       <AnimatePresence mode="wait">
         <motion.div
           key={step}
