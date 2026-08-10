@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useCustomWorkoutStore, type WorkoutImportItem, type WorkoutImportPreview } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
@@ -52,8 +52,6 @@ export function WorkoutPlans() {
   const [importPreview, setImportPreview] = useState<WorkoutImportPreview | null>(null);
   const [selectedImportIndex, setSelectedImportIndex] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<WorkoutType | null>(null);
-  const [draggingExerciseId, setDraggingExerciseId] = useState<string | null>(null);
-  const [draggingSlot, setDraggingSlot] = useState<WorkoutType | null>(null);
 
   // AI Builder states
   const [showAIBuilder, setShowAIBuilder] = useState(false);
@@ -211,16 +209,6 @@ export function WorkoutPlans() {
     repsMax: e.repsMax, muscleGroup: e.muscleGroup, image: e.image,
   }));
 
-  const getDropIndex = (currentIndex: number, offset: number, itemSize: number, maxIndex: number) => (
-    Math.max(0, Math.min(maxIndex, currentIndex + Math.round(offset / itemSize)))
-  );
-
-  const handleExerciseDragEnd = (index: number, info: PanInfo) => {
-    setDraggingExerciseId(null);
-    const targetIndex = getDropIndex(index, info.offset.y, 76, exercises.length - 1);
-    if (targetIndex !== index) reorderExercises(selected, index, targetIndex);
-  };
-
   const handleMoveUp = (index: number) => {
     if (index > 0) reorderExercises(selected, index, index - 1);
   };
@@ -229,13 +217,12 @@ export function WorkoutPlans() {
     if (index < exercises.length - 1) reorderExercises(selected, index, index + 1);
   };
 
-  const handleSlotDragEnd = (index: number, type: WorkoutType, info: PanInfo) => {
-    setDraggingSlot(null);
-    const targetIndex = getDropIndex(index, info.offset.x, 64, activeTypes.length - 1);
-    if (targetIndex === index) return;
+  const handleMoveSlot = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= activeTypes.length) return;
     reorderSlots(index, targetIndex);
     setSelected((['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[targetIndex]);
-    toast(`Treino ${type} reordenado`, 'success');
+    toast('Ordem dos treinos atualizada', 'success');
   };
 
   const handleDelete = (id: string) => setDeleteTarget(id);
@@ -595,21 +582,37 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
       {/* Tabs + Add Day */}
       <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
         {activeTypes.map((type, index) => (
-          <motion.button
-            key={type}
-            drag={editing ? 'x' : false}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.35}
-            onDragStart={() => setDraggingSlot(type)}
-            onDragEnd={(_, info) => handleSlotDragEnd(index, type, info)}
-            whileTap={{ scale: 0.92 }}
-            onClick={() => !editing && setSelected(type)}
-            className={`flex-1 min-w-[52px] py-3 rounded-xl font-semibold transition-all ${
-              selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : editing ? 'bg-dark-200 text-white/20 opacity-50' : 'bg-dark-200 text-white/40'
-            } ${draggingSlot === type ? 'z-10 scale-105 border border-primary-400/50' : ''}`}
-          >
-            {type}
-          </motion.button>
+          <div key={type} className={`${editing ? 'min-w-[104px]' : 'flex-1 min-w-[52px]'}`}>
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setSelected(type)}
+              className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
+              }`}
+            >
+              {type}
+            </motion.button>
+            {editing && (
+              <div className="grid grid-cols-2 gap-1 mt-1">
+                <button
+                  onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, -1); }}
+                  disabled={index === 0}
+                  className="h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
+                  aria-label={`Mover treino ${type} para a esquerda`}
+                >
+                  ←
+                </button>
+                <button
+                  onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, 1); }}
+                  disabled={index === activeTypes.length - 1}
+                  className="h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
+                  aria-label={`Mover treino ${type} para a direita`}
+                >
+                  →
+                </button>
+              </div>
+            )}
+          </div>
         ))}
         {activeTypes.length < 5 && (
           <motion.button
@@ -669,13 +672,8 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             <motion.div
               key={exercise.id}
               layout
-              drag={editing ? 'y' : false}
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={0.18}
-              onDragStart={() => setDraggingExerciseId(exercise.id)}
-              onDragEnd={(_, info) => handleExerciseDragEnd(i, info)}
               onClick={() => {
-                if (!editing || draggingExerciseId) return;
+                if (!editing) return;
                 openExerciseConfig({
                   name: exercise.name,
                   muscleGroup: exercise.muscleGroup,
@@ -685,16 +683,27 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.03 }}
-              className={`card ${editing ? 'cursor-grab active:cursor-grabbing' : ''} ${draggingExerciseId === exercise.id ? 'z-10 border-primary-400/40 bg-dark-100' : ''}`}
+              className={`card ${editing ? 'active:border-primary-400/40' : ''}`}
             >
               <div className="flex items-center gap-3">
                 {editing && (
-                  <div className="w-6 flex justify-center text-white/25 text-lg leading-none">
-                    ≡
-                    {false && <div className="hidden">
-                    <button onClick={() => handleMoveUp(i)} disabled={i === 0} className="text-white/40 text-xs disabled:opacity-20">▲</button>
-                    <button onClick={() => handleMoveDown(i)} disabled={i === exercises.length - 1} className="text-white/40 text-xs disabled:opacity-20">▼</button>
-                    </div>}
+                  <div className="grid grid-rows-2 gap-1 shrink-0">
+                    <button
+                      onClick={(event) => { event.stopPropagation(); handleMoveUp(i); }}
+                      disabled={i === 0}
+                      className="w-11 h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
+                      aria-label={`Mover ${exercise.name} para cima`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={(event) => { event.stopPropagation(); handleMoveDown(i); }}
+                      disabled={i === exercises.length - 1}
+                      className="w-11 h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
+                      aria-label={`Mover ${exercise.name} para baixo`}
+                    >
+                      ↓
+                    </button>
                   </div>
                 )}
                 {exercise.image ? (
