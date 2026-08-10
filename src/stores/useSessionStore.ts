@@ -8,6 +8,7 @@ interface SessionState {
   completeSet: (exerciseId: string, totalSets: number) => void;
   nextExercise: () => void;
   previousExercise: () => void;
+  goToExercise: (index: number) => void;
   endSession: () => void;
   getElapsedMs: () => number;
 }
@@ -61,6 +62,17 @@ export const useSessionStore = create<SessionState>()(
             activeSession: {
               ...state.activeSession,
               currentExerciseIndex: Math.max(0, state.activeSession.currentExerciseIndex - 1),
+            },
+          };
+        }),
+
+      goToExercise: (index) =>
+        set((state) => {
+          if (!state.activeSession) return state;
+          return {
+            activeSession: {
+              ...state.activeSession,
+              currentExerciseIndex: Math.max(0, index),
             },
           };
         }),

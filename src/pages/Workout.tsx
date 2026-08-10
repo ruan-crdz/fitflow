@@ -21,12 +21,13 @@ export function Workout() {
   const navigate = useNavigate();
   const [resting, setResting] = useState(false);
   const [showQuitModal, setShowQuitModal] = useState(false);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showAIChat, setShowAIChat] = useState(false);
   const [aiQuestion, setAIQuestion] = useState('');
   const [aiAnswer, setAIAnswer] = useState('');
   const [aiLoading, setAILoading] = useState(false);
   const [swapSuggestion, setSwapSuggestion] = useState<{ name: string; muscleGroup: string; image?: string } | null>(null);
-  const { activeSession, completeSet, nextExercise, previousExercise, endSession } =
+  const { activeSession, completeSet, nextExercise, previousExercise, goToExercise, endSession } =
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const apiKey = useAIStore((s) => s.apiKey);
@@ -85,6 +86,17 @@ export function Workout() {
     } else {
       nextExercise();
     }
+  };
+
+  const handlePrevious = () => {
+    setResting(false);
+    previousExercise();
+  };
+
+  const handlePickExercise = (index: number) => {
+    setResting(false);
+    goToExercise(index);
+    setShowExercisePicker(false);
   };
 
   const handleQuit = () => navigate('/dashboard');
@@ -277,16 +289,14 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
           {/* Navigation */}
           <div className="flex gap-3">
             <button
-              onClick={previousExercise}
-              disabled={currentIndex === 0}
-              className="btn-secondary flex-1 py-3 text-sm disabled:opacity-20"
+              onClick={handlePrevious}
+              className="btn-secondary flex-1 py-3 text-sm"
             >
               ← Anterior
             </button>
             <button
-              onClick={handleNext}
-              disabled={!allSetsComplete}
-              className="btn-secondary flex-1 py-3 text-sm disabled:opacity-20"
+              onClick={() => setShowExercisePicker(true)}
+              className="btn-secondary flex-1 py-3 text-sm"
             >
               Pular →
             </button>
@@ -295,6 +305,70 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
       </motion.div>
 
       <RestTimer active={resting} duration={getRestDuration(exercise, goal)} onSkip={() => setResting(false)} />
+
+      {/* Exercise Picker */}
+      <AnimatePresence>
+        {showExercisePicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70"
+            onClick={() => setShowExercisePicker(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="w-full max-w-md max-h-[78vh] overflow-y-auto rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">Escolher proximo exercicio</h2>
+                  <p className="text-xs text-white/35">Pule fila, aparelho ocupado ou ajuste a ordem na hora.</p>
+                </div>
+                <button onClick={() => setShowExercisePicker(false)} className="text-white/35 text-xl">×</button>
+              </div>
+
+              <div className="space-y-2">
+                {exercises.map((item, index) => {
+                  const done = activeSession.setsCompleted[item.id] || 0;
+                  const selectedItem = index === currentIndex;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handlePickExercise(index)}
+                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                        selectedItem
+                          ? 'bg-primary-500/15 border-primary-500/35'
+                          : 'bg-white/5 border-white/10 active:border-primary-400/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                          selectedItem ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/45'
+                        }`}>
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{item.name}</p>
+                          <p className="text-[10px] text-white/35 truncate">{item.muscleGroup}</p>
+                        </div>
+                        <span className="text-[10px] text-white/45 whitespace-nowrap">
+                          {Math.min(done, item.sets)}/{item.sets}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* AI Chat Panel */}
       <AnimatePresence>
