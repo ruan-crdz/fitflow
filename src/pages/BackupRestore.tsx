@@ -93,7 +93,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
         <div className="space-y-3">
           <div className="w-24 h-24 rounded-3xl bg-dark-100 border border-primary-500/25 mx-auto flex items-center justify-center overflow-hidden shadow-2xl shadow-primary-500/15">
             <img
-              src="/fitflow/icons/logo_2.png"
+              src="/fitflow/icons/logo.png"
               alt="GymPilot"
               className="w-20 h-20 object-contain"
             />
