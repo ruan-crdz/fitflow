@@ -1211,7 +1211,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
+            className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70"
             onClick={() => setShowShareMenu(false)}
           >
             <motion.div
@@ -1219,7 +1219,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md"
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-4 w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
@@ -1263,7 +1263,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70"
+            className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70"
             onClick={closeImportModal}
           >
             <motion.div
@@ -1271,7 +1271,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 space-y-4 w-full max-w-md max-h-[82vh] overflow-y-auto"
+              className="bg-[rgb(var(--color-bg-card-rgb))] rounded-t-[28px] p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-4 w-full max-w-md max-h-[82vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
