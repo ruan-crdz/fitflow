@@ -91,8 +91,12 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
     <div className="min-h-[100dvh] flex flex-col justify-center px-6 py-12">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 text-center">
         <div className="space-y-3">
-          <div className="w-20 h-20 rounded-3xl bg-primary-500/15 border border-primary-500/25 mx-auto flex items-center justify-center text-4xl">
-            💪
+          <div className="w-24 h-24 rounded-3xl bg-dark-100 border border-primary-500/25 mx-auto flex items-center justify-center overflow-hidden shadow-2xl shadow-primary-500/15">
+            <img
+              src="/fitflow/icons/logo_2.png"
+              alt="GymPilot"
+              className="w-20 h-20 object-contain"
+            />
           </div>
           <div>
             <h1 className="text-3xl font-bold">Bem-vindo ao GymPilot</h1>
