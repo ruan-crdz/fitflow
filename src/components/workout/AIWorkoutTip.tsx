@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
+import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 
 interface AIWorkoutTipProps {
   exerciseName: string;
@@ -21,6 +22,7 @@ export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
 
     setLoading(true);
     setTip(null);
+    const aiConfig = getAIConfigPrompt();
 
     fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -33,7 +35,7 @@ export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
         messages: [
           {
             role: 'system',
-            content: 'Você é uma personal trainer. Dê UMA dica curta (máx 15 palavras) de execução ou motivação para o exercício. Só a dica, sem explicação.',
+            content: `Voce e ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} De UMA dica curta (max 15 palavras) de execucao segura ou motivacao para o exercicio. So a dica, sem explicacao. ${SCIENCE_GUARDRAILS}`,
           },
           {
             role: 'user',

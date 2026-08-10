@@ -4,11 +4,14 @@ import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
+import { getAIConfigPrompt, SCIENCE_GUARDRAILS, useAIConfigStore } from '@/stores/useAIConfigStore';
 
 export function AIDashInsight() {
   const apiKey = useAIStore((s) => s.apiKey);
   const isEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
+  const assistantName = useAIConfigStore((s) => s.assistantName);
+  const personality = useAIConfigStore((s) => s.personality);
   const sessions = useHistoryStore((s) => s.sessions);
   const weightEntries = useWeightStore((s) => s.entries);
   const [insight, setInsight] = useState<string | null>(null);
@@ -18,10 +21,9 @@ export function AIDashInsight() {
     if (!apiKey || !isEnabled || !profile) return;
 
     const completedSessions = sessions.filter((s) => s.completedAt);
-    // Don't show insight if user hasn't done any workouts yet
     if (completedSessions.length === 0) return;
 
-    const storageKey = `fitflow-ai-insight-${new Date().toISOString().slice(0, 10)}`;
+    const storageKey = `fitflow-ai-insight-${assistantName}-${personality}-${new Date().toISOString().slice(0, 10)}`;
     const cached = sessionStorage.getItem(storageKey);
     if (cached) {
       setInsight(cached);
@@ -32,8 +34,9 @@ export function AIDashInsight() {
 
     const recentWeight = weightEntries.slice(-7);
     const weightTrend = recentWeight.length >= 2
-      ? `Peso: de ${recentWeight[0].weight}kg para ${recentWeight[recentWeight.length - 1].weight}kg nos últimos ${recentWeight.length} dias`
+      ? `Peso: de ${recentWeight[0].weight}kg para ${recentWeight[recentWeight.length - 1].weight}kg nos ultimos ${recentWeight.length} dias`
       : 'Sem dados de peso suficientes';
+    const aiConfig = getAIConfigPrompt();
 
     fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -46,15 +49,15 @@ export function AIDashInsight() {
         messages: [
           {
             role: 'system',
-            content: 'Você é a GymPilot AI, assistente fitness. Dê UM insight personalizado e motivador (máx 2 frases curtas) baseado nos dados. Use 1 emoji. Seja direta e positiva.',
+            content: `Voce e ${aiConfig.assistantName}. Sempre use esse nome se falar de voce. ${aiConfig.personalityPrompt} De UM insight personalizado e motivador, maximo 2 frases curtas, baseado apenas nos dados reais. ${SCIENCE_GUARDRAILS}`,
           },
           {
             role: 'user',
             content: `Perfil: ${profile.name}, ${profile.age} anos, ${profile.weight}kg, objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}. Treinos completos: ${completedSessions.length} total. ${weightTrend}`,
           },
         ],
-        max_tokens: 80,
-        temperature: 0.8,
+        max_tokens: 100,
+        temperature: 0.75,
       }),
     })
       .then((r) => r.json())
@@ -67,7 +70,7 @@ export function AIDashInsight() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [apiKey, isEnabled, profile, sessions, weightEntries]);
+  }, [apiKey, isEnabled, profile, sessions, weightEntries, assistantName, personality]);
 
   if (!isEnabled) return null;
 
@@ -79,7 +82,7 @@ export function AIDashInsight() {
     >
       <div className="flex items-center gap-2">
         <span className="text-sm">🤖</span>
-        <span className="text-xs font-semibold text-primary-300">GymPilot AI Insight</span>
+        <span className="text-xs font-semibold text-primary-300">{assistantName} Insight</span>
       </div>
       <p className="text-sm text-white/70 leading-relaxed">
         {loading ? (

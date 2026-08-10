@@ -14,6 +14,7 @@ import { AIWorkoutTip } from '@/components/workout/AIWorkoutTip';
 import { RestTimer } from '@/components/workout/RestTimer';
 import { getRestDuration } from '@/utils/rest';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { askAI } from '@/utils/ai';
 
@@ -30,6 +31,7 @@ export function Workout() {
   const { activeSession, completeSet, nextExercise, previousExercise, goToExercise, endSession } =
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
+  const assistantName = useAIConfigStore((s) => s.assistantName);
   const apiKey = useAIStore((s) => s.apiKey);
   const profile = useProfileStore((s) => s.profile);
   const goal = useProfileStore((s) => s.profile?.goal || 'maintain');
@@ -380,7 +382,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
             className="fixed inset-x-0 bottom-0 z-50 bg-dark-100 border-t border-white/10 rounded-t-3xl p-5 max-h-[60vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-primary-300">🤖 GymPilot AI — Treinando</span>
+              <span className="text-sm font-semibold text-primary-300">🤖 {assistantName} — Treinando</span>
               <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg">✕</button>
             </div>
             {aiAnswer && (

@@ -6,11 +6,12 @@ import { useWeightStore } from '@/stores/useWeightStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
+import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import type { Profile } from '@/types';
 
-const SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
+const BASE_SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
 Você é direta, motivadora e científica. Responde em português brasileiro.
 Seu tom é como uma personal trainer amiga: próxima, encorajadora, mas embasada.
 
@@ -36,6 +37,15 @@ Regras:
 - Adapte conselhos ao perfil do aluno
 - Se a fase do ciclo menstrual estiver informada, considere-a nas recomendações
 - Quando o aluno reportar sintomas (mal-estar, dor de cabeça, fraqueza), analise os dados nutricionais e de hidratação para dar contexto`;
+
+function getSystemPrompt(): string {
+  const { assistantName, personalityPrompt } = getAIConfigPrompt();
+  return BASE_SYSTEM_PROMPT
+    .replace('GymPilot AI', assistantName)
+    .replace('Você é direta, motivadora e científica.', `Personalidade configurada: ${personalityPrompt}`)
+    + `\n- Sempre que precisar falar seu nome, use exatamente: ${assistantName}.\n`
+    + SCIENCE_GUARDRAILS;
+}
 
 const ACTION_PROMPT = `
 
@@ -143,7 +153,7 @@ export async function sendMessage(
   const profile = useProfileStore.getState().profile;
   if (!profile) throw new Error('Perfil não encontrado');
 
-  const systemMessage = SYSTEM_PROMPT + ACTION_PROMPT + '\n' + buildContext(profile);
+  const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -177,7 +187,7 @@ export async function askAI(
   question: string,
   jsonMode = false,
 ): Promise<string> {
-  const systemMessage = SYSTEM_PROMPT + ACTION_PROMPT + '\n' + buildContext(profile);
+  const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {

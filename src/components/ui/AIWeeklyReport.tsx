@@ -4,6 +4,7 @@ import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
+import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 
 export function AIWeeklyReport() {
   const apiKey = useAIStore((s) => s.apiKey);
@@ -42,6 +43,7 @@ export function AIWeeklyReport() {
     if (weekSessions.length === 0) return;
 
     setLoading(true);
+    const aiConfig = getAIConfigPrompt();
 
     fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -54,7 +56,7 @@ export function AIWeeklyReport() {
         messages: [
           {
             role: 'system',
-            content: `Você é a GymPilot AI, personal trainer virtual. Faça um mini relatório semanal ULTRA motivador (máx 4 linhas). Celebre conquistas reais (ex: "3 treinos essa semana, monstro!"). Se houve progresso de peso no objetivo, destaque. Dê 1 meta específica pra próxima semana. Use emojis. Tom: amiga animada que puxa pra cima. NUNCA diga coisas óbvias ou desmotivantes como "o peso se manteve" sem contexto positivo.`,
+            content: `Voce e ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Faca um mini relatorio semanal motivador (max 4 linhas). Celebre conquistas reais, destaque progresso se existir e de 1 meta especifica para a proxima semana. Nunca invente dados. ${SCIENCE_GUARDRAILS}`,
           },
           {
             role: 'user',

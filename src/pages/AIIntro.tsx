@@ -3,16 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
+import { useAIConfigStore } from '@/stores/useAIConfigStore';
 
 export function AIIntro() {
   const navigate = useNavigate();
   const markIntroSeen = useAIStore((s) => s.markIntroSeen);
+  const assistantName = useAIConfigStore((s) => s.assistantName);
   const profile = useProfileStore((s) => s.profile);
   const [step, setStep] = useState(0);
   const isMale = profile?.sex === 'male';
 
   const lines = [
-    'Inicializando GymPilot AI...',
+    `Inicializando ${assistantName}...`,
     'Conectando a inteligencia artificial...',
     'Sistemas online.',
     `Ola, ${profile?.name || (isMale ? 'usuario' : 'usuaria')}. Prazer em conhecer voce.`,

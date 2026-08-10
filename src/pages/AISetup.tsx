@@ -6,6 +6,7 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { askAI } from '@/utils/ai';
+import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 
 type Phase = 'token' | 'generating' | 'summary';
 
@@ -152,6 +153,7 @@ Exercícios disponíveis (use nomes EXATOS):
 ${catalogCompact}
 
 Responda APENAS JSON puro (sem markdown, sem \`\`\`):
+${SCIENCE_GUARDRAILS}
 {
   "evaluation": [
     {"option": "Full Body", "score": 8, "reason": "razão curta"},

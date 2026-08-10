@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
+import { useAIConfigStore, AI_PERSONALITIES, type AIPersonality } from '@/stores/useAIConfigStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
@@ -16,6 +17,7 @@ export function Profile() {
   const navigate = useNavigate();
   const { profile, updateProfile } = useProfileStore();
   const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
+  const { assistantName, personality, setAssistantName, setPersonality, resetAIConfig } = useAIConfigStore();
   const { themeId, setTheme } = useThemeStore();
   const {
     fontScale,
@@ -47,6 +49,7 @@ export function Profile() {
   const [editing, setEditing] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [aiKeyInput, setAiKeyInput] = useState('');
+  const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
   const [healthError, setHealthError] = useState('');
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [manualSteps, setManualSteps] = useState(String(healthSummary.steps || ''));
@@ -477,7 +480,48 @@ export function Profile() {
           <div className="card space-y-3 border border-primary-500/20">
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
-              <h2 className="font-semibold text-white/80">GymPilot AI</h2>
+              <h2 className="font-semibold text-white/80">{assistantName}</h2>
+            </div>
+            <div className="space-y-3 rounded-xl bg-white/5 border border-white/10 p-3">
+              <label className="block">
+                <span className="text-xs text-white/40 font-semibold">Nome da IA</span>
+                <input
+                  value={assistantNameInput}
+                  onChange={(e) => setAssistantNameInput(e.target.value)}
+                  onBlur={() => setAssistantName(assistantNameInput)}
+                  className="input-field text-sm mt-1"
+                  placeholder="Ex: Terraformer"
+                />
+              </label>
+              <div className="space-y-2">
+                <p className="text-xs text-white/40 font-semibold">Personalidade</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(AI_PERSONALITIES) as AIPersonality[]).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setPersonality(key)}
+                      className={`rounded-xl border p-3 text-left transition-all ${
+                        personality === key ? 'bg-primary-500/10 border-primary-500/30' : 'bg-dark-200 border-white/10'
+                      }`}
+                    >
+                      <span className="block text-xs font-bold text-white/80">{AI_PERSONALITIES[key].label}</span>
+                      <span className="block text-[10px] text-white/35 mt-1 leading-relaxed">{AI_PERSONALITIES[key].description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[10px] text-white/35 leading-relaxed">
+                Os prompts exigem base cientifica para treino e dieta. O preset Coach BR tecnico nao imita pessoa real; usa comunicacao forte, tecnica e motivadora.
+              </p>
+              <button
+                onClick={() => {
+                  resetAIConfig();
+                  setAssistantNameInput('GymPilot AI');
+                }}
+                className="w-full py-2 rounded-xl bg-white/5 text-white/40 text-xs font-semibold"
+              >
+                Restaurar IA padrao
+              </button>
             </div>
             {isEnabled ? (
               <div className="space-y-3">

@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { sendMessage, type ChatMessage } from '@/utils/ai';
 import type { WorkoutType } from '@/types';
@@ -48,10 +49,12 @@ export function AIChat() {
   const messages = useAIStore((s) => s.messages);
   const setMessages = useAIStore((s) => s.setMessages);
   const clearMessages = useAIStore((s) => s.clearMessages);
+  const assistantName = useAIConfigStore((s) => s.assistantName);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState<ReplaceExerciseAction | null>(null);
+  const [feedbackByIndex, setFeedbackByIndex] = useState<Record<number, 'up' | 'down'>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const { activeSlots, getExercises, setExercises } = useCustomWorkoutStore();
 
@@ -150,6 +153,31 @@ export function AIChat() {
     setMessages([...messages, { role: 'assistant', content: 'Tudo bem, não alterei nada.' }]);
   };
 
+  const handleMessageFeedback = async (index: number, value: 'up' | 'down') => {
+    setFeedbackByIndex((prev) => ({ ...prev, [index]: value }));
+    if (value === 'up' || !apiKey || loading) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const retryMessages: ChatMessage[] = [
+        ...messages.slice(0, index + 1),
+        {
+          role: 'user',
+          content: 'Feedback negativo: o usuario nao gostou da ultima resposta. Refaça a resposta anterior com mais precisao, mais alinhada ao perfil, sem inventar dados, usando base cientifica e respeitando a personalidade configurada.',
+        },
+      ];
+      const reply = await sendMessage(apiKey, retryMessages);
+      const { cleanReply, action } = extractAction(reply);
+      setPendingAction(action);
+      setMessages([...messages, { role: 'assistant', content: cleanReply }]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro desconhecido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100dvh-5rem)]">
       {/* Header */}
@@ -160,7 +188,7 @@ export function AIChat() {
               <span className="text-base">🤖</span>
             </div>
             <div>
-              <h1 className="font-bold">GymPilot AI</h1>
+              <h1 className="font-bold">{assistantName}</h1>
               <p className="text-[10px] text-white/30">Assistente fitness pessoal</p>
             </div>
           </div>
@@ -194,22 +222,41 @@ export function AIChat() {
         )}
 
         {messages.map((msg, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-primary-500 text-white rounded-br-sm'
-                  : 'bg-dark-100 text-white/80 rounded-bl-sm'
-              }`}
+          <div key={i} className={`space-y-1 flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}
             >
-              {msg.content}
-            </div>
-          </motion.div>
+              <div
+                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-primary-500 text-white rounded-br-sm'
+                    : 'bg-dark-100 text-white/80 rounded-bl-sm'
+                }`}
+              >
+                {msg.content}
+              </div>
+            </motion.div>
+            {msg.role === 'assistant' && msg.content.trim() && (
+              <div className="flex gap-1 ml-1">
+                <button
+                  onClick={() => handleMessageFeedback(i, 'up')}
+                  className={`w-8 h-8 rounded-full border text-xs ${feedbackByIndex[i] === 'up' ? 'bg-green-500/20 border-green-500/40' : 'bg-white/5 border-white/10 text-white/40'}`}
+                  aria-label="Resposta boa"
+                >
+                  👍
+                </button>
+                <button
+                  onClick={() => handleMessageFeedback(i, 'down')}
+                  className={`w-8 h-8 rounded-full border text-xs ${feedbackByIndex[i] === 'down' ? 'bg-red-500/20 border-red-500/40' : 'bg-white/5 border-white/10 text-white/40'}`}
+                  aria-label="Refazer resposta"
+                >
+                  👎
+                </button>
+              </div>
+            )}
+          </div>
         ))}
 
         {loading && (
