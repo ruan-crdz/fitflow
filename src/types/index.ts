@@ -2,6 +2,12 @@ export type WeekDay = 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' | 'dom';
 
 export type WorkoutType = 'A' | 'B' | 'C' | 'D' | 'E';
 
+export type WorkoutSessionKind = 'structured' | 'free';
+
+export type ActivityLocation = 'academia' | 'casa' | 'rua' | 'outro';
+
+export type ActivityIntensity = 'leve' | 'moderada' | 'forte';
+
 export type Goal = 'lose' | 'maintain' | 'gain';
 
 export type BiologicalSex = 'male' | 'female';
@@ -50,7 +56,12 @@ export interface Workout {
 
 export interface WorkoutSession {
   id: string;
-  workoutType: WorkoutType;
+  kind?: WorkoutSessionKind;
+  workoutType?: WorkoutType;
+  activityName?: string;
+  activityLocation?: ActivityLocation;
+  activityIntensity?: ActivityIntensity;
+  notes?: string;
   date: string;
   startedAt: number;
   completedAt?: number;

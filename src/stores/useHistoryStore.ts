@@ -1,10 +1,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { WorkoutSession } from '@/types';
+import type { ActivityIntensity, ActivityLocation, WorkoutSession } from '@/types';
+
+interface FreeSessionInput {
+  activityName: string;
+  activityLocation: ActivityLocation;
+  activityIntensity: ActivityIntensity;
+  date: string;
+  durationMinutes: number;
+  notes?: string;
+}
 
 interface HistoryState {
   sessions: WorkoutSession[];
   addSession: (session: WorkoutSession) => void;
+  addFreeSession: (activity: FreeSessionInput) => void;
   getSessionsByDate: (date: string) => WorkoutSession[];
   getTotalWorkouts: () => number;
   getCurrentStreak: () => number;
@@ -16,6 +26,25 @@ export const useHistoryStore = create<HistoryState>()(
       sessions: [],
       addSession: (session) =>
         set((state) => ({ sessions: [session, ...state.sessions] })),
+      addFreeSession: (activity) =>
+        set((state) => {
+          const durationMs = Math.max(1, activity.durationMinutes) * 60 * 1000;
+          const completedAt = Date.now();
+          const session: WorkoutSession = {
+            id: `free_${completedAt}`,
+            kind: 'free',
+            activityName: activity.activityName.trim(),
+            activityLocation: activity.activityLocation,
+            activityIntensity: activity.activityIntensity,
+            notes: activity.notes?.trim() || undefined,
+            date: activity.date,
+            startedAt: completedAt - durationMs,
+            completedAt,
+            durationMs,
+            exercisesCompleted: {},
+          };
+          return { sessions: [session, ...state.sessions] };
+        }),
       getSessionsByDate: (date) =>
         get().sessions.filter((s) => s.date === date),
       getTotalWorkouts: () => get().sessions.filter((s) => s.completedAt).length,

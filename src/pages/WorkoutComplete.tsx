@@ -27,6 +27,7 @@ export function WorkoutComplete() {
   const handleFinish = () => {
     addSession({
       id: crypto.randomUUID(),
+      kind: 'structured',
       workoutType: activeSession.workoutType,
       date: getToday(),
       startedAt: activeSession.startedAt,

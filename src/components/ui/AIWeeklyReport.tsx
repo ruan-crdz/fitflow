@@ -33,6 +33,9 @@ export function AIWeeklyReport() {
     const weekStr = weekAgo.toISOString().slice(0, 10);
 
     const weekSessions = sessions.filter((s) => s.completedAt && s.date >= weekStr);
+    const weekSessionNames = weekSessions
+      .map((s) => (s.workoutType ? s.workoutType : s.activityName || 'atividade avulsa'))
+      .join(', ');
     const weekWeight = weightEntries.filter((e) => e.date >= weekStr);
 
     // Don't show report if no workouts were done this week
@@ -56,7 +59,7 @@ export function AIWeeklyReport() {
           {
             role: 'user',
             content: `Perfil: ${profile.name}, ${profile.weight}kg, objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
-Esta semana: ${weekSessions.length} treinos completados (${weekSessions.map((s) => s.workoutType).join(', ')}).
+Esta semana: ${weekSessions.length} treinos completados (${weekSessionNames}).
 Peso: ${weekWeight.length >= 2 ? `de ${weekWeight[0].weight}kg para ${weekWeight[weekWeight.length - 1].weight}kg` : weekWeight.length === 1 ? `${weekWeight[0].weight}kg registrado` : 'sem registros essa semana'}.`,
           },
         ],

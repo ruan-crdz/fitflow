@@ -87,7 +87,10 @@ function buildContext(profile: Profile): string {
   const streak = history.getCurrentStreak();
   const lastSessions = history.sessions.slice(0, 3);
   const historyText = lastSessions.length > 0
-    ? lastSessions.map((s) => `  • ${s.date} — Treino ${s.workoutType} (${s.durationMs ? Math.round(s.durationMs / 60000) + 'min' : '?'}${s.completedAt ? ', completo' : ', incompleto'})`).join('\n')
+    ? lastSessions.map((s) => {
+      const label = s.workoutType ? `Treino ${s.workoutType}` : s.activityName || 'Atividade avulsa';
+      return `  • ${s.date} — ${label} (${s.durationMs ? Math.round(s.durationMs / 60000) + 'min' : '?'}${s.completedAt ? ', completo' : ', incompleto'})`;
+    }).join('\n')
     : '  Nenhum treino registrado';
 
   // Current program

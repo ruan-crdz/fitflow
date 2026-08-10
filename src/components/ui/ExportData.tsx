@@ -15,9 +15,11 @@ export function ExportData() {
     const lines = ['Data,Treino,Foco,Duracao,Avaliacao'];
 
     completedSessions.forEach((s) => {
-      const workout = WORKOUT_MAP[s.workoutType];
+      const workout = s.workoutType ? WORKOUT_MAP[s.workoutType] : null;
+      const title = workout?.label || s.activityName || 'Atividade avulsa';
+      const focus = workout?.focus || [s.activityLocation, s.activityIntensity].filter(Boolean).join(' ');
       lines.push(
-        `${s.date},${workout.label},${workout.focus},${formatDuration(s.durationMs || 0)},${s.rating || '-'}`,
+        `${s.date},${title},${focus},${formatDuration(s.durationMs || 0)},${s.rating || '-'}`,
       );
     });
 

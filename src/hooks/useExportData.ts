@@ -10,13 +10,15 @@ export function useExportData() {
   const exportCSV = () => {
     const completedSessions = sessions.filter((s) => s.completedAt);
 
-    let csv = 'Data,Treino,Foco,Duração,Avaliação\n';
+    let csv = 'Data,Treino,Foco,Duracao,Avaliacao\n';
     completedSessions.forEach((s) => {
-      const workout = WORKOUT_MAP[s.workoutType];
-      csv += `${s.date},${workout.label},${workout.focus},${formatDuration(s.durationMs || 0)},${s.rating || '-'}\n`;
+      const workout = s.workoutType ? WORKOUT_MAP[s.workoutType] : null;
+      const title = workout?.label || s.activityName || 'Atividade avulsa';
+      const focus = workout?.focus || [s.activityLocation, s.activityIntensity].filter(Boolean).join(' ');
+      csv += `${s.date},${title},${focus},${formatDuration(s.durationMs || 0)},${s.rating || '-'}\n`;
     });
 
-    csv += '\n\nHistórico de Peso\nData,Peso (kg)\n';
+    csv += '\n\nHistorico de Peso\nData,Peso (kg)\n';
     weightEntries.forEach((e) => {
       csv += `${e.date},${e.weight}\n`;
     });
