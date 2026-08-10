@@ -72,6 +72,20 @@ function sanitizeExercises(exercises: CustomExercise[] | undefined, prefix: stri
   }));
 }
 
+function pickImportSlots(workouts: WorkoutImportItem[]): WorkoutType[] {
+  const used = new Set<WorkoutType>();
+  return workouts.slice(0, WORKOUT_TYPES.length).map((workout) => {
+    const preferred = workout.originalType;
+    if (preferred && WORKOUT_TYPES.includes(preferred) && !used.has(preferred)) {
+      used.add(preferred);
+      return preferred;
+    }
+    const fallback = WORKOUT_TYPES.find((type) => !used.has(type)) || 'A';
+    used.add(fallback);
+    return fallback;
+  });
+}
+
 export const useCustomWorkoutStore = create<CustomWorkoutState>()(
   persist(
     (set, get) => ({
@@ -243,13 +257,18 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
       importAllWorkouts: (workouts) => {
         if (workouts.length === 0) return false;
         const nextWorkouts: Record<WorkoutType, CustomExercise[] | null> = { ...EMPTY_WORKOUTS };
-        const slots: WorkoutType[] = [];
+        const importList = workouts
+          .slice(0, WORKOUT_TYPES.length)
+          .filter((workout) => workout.exercises.length > 0);
+        const slots = pickImportSlots(importList);
 
-        workouts.slice(0, WORKOUT_TYPES.length).forEach((workout, index) => {
-          const type = WORKOUT_TYPES[index];
-          slots.push(type);
+        importList.forEach((workout, index) => {
+          const type = slots[index];
           nextWorkouts[type] = sanitizeExercises(workout.exercises, `imp_all_${type}`);
         });
+
+        const importedEveryWorkout = slots.length > 0 && slots.every((type) => (nextWorkouts[type]?.length || 0) > 0);
+        if (!importedEveryWorkout) return false;
 
         set({ activeSlots: slots, customWorkouts: nextWorkouts });
         return true;
