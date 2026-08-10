@@ -18,6 +18,7 @@ interface IngredientInput {
   name: string;
   amount: string;
   unit: IngredientUnit;
+  calories?: string;
 }
 
 const FOOD_UNITS: { value: IngredientUnit; label: string }[] = [
@@ -77,31 +78,75 @@ export function Health() {
   const net = totals.calories - burned;
   const remaining = calories - net;
   const progressCalories = Math.min(totals.calories / calories, 1);
+  const validIngredients = ingredients.filter((i) => i.name.trim());
+  const hasAnyIngredient = validIngredients.length > 0;
+  const ingredientsWithoutCalories = validIngredients.filter((i) => !Number(i.calories));
+  const needsAIForMeal = ingredientsWithoutCalories.length > 0;
 
   const handleAIMealCalc = async () => {
-    const validIngredients = ingredients.filter((i) => i.name.trim());
-    if (validIngredients.length === 0 || !apiKey) return;
+    if (validIngredients.length === 0) return;
+    if (needsAIForMeal && !apiKey) {
+      useToastStore.getState().show('Preencha as kcal ou configure a IA no Perfil.', 'error');
+      return;
+    }
     setMealLoading(true);
     setMealResult(null);
     const profile = useProfileStore.getState().profile!;
     const description = validIngredients.map((i) => `${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]} de ` : ''}${i.name.trim()}`).join(', ');
-    try {
-      const prompt = `Calcule os macros e calorias TOTAIS desta refeição:
+    const manualItems = validIngredients.filter((i) => Number(i.calories) > 0);
+    const manualCalories = manualItems.reduce((sum, item) => sum + Number(item.calories || 0), 0);
+    const mealName = validIngredients.length === 1
+      ? validIngredients[0].name.trim()
+      : `Refeicao: ${validIngredients.slice(0, 3).map((i) => i.name.trim()).join(', ')}${validIngredients.length > 3 ? '...' : ''}`;
 
-${validIngredients.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porção padrão'} de ${i.name.trim()}`).join('\n')}
+    if (!needsAIForMeal) {
+      const result = {
+        name: mealName,
+        description,
+        calories: manualCalories,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      };
+      const entry: FoodEntry = {
+        id: `food_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: result.name,
+        calories: result.calories,
+        protein: result.protein,
+        carbs: result.carbs,
+        fat: result.fat,
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      };
+      addEntry(entry);
+      addRecent({ id: `recent_${Date.now()}`, ...result });
+      setMealResult(result);
+      setShowSavePrompt(true);
+      useToastStore.getState().show(`✅ ${result.name} — ${result.calories} kcal`, 'success');
+      setMealLoading(false);
+      return;
+    }
+    try {
+      const aiPrompt = `Calcule macros e calorias APENAS dos itens sem kcal manual.
+
+ITENS PARA CALCULAR:
+${ingredientsWithoutCalories.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porcao padrao'} de ${i.name.trim()}`).join('\n')}
+
+ITENS JA PREENCHIDOS PELO USUARIO, NAO RECALCULE:
+${manualItems.length ? manualItems.map((i) => `- ${i.name.trim()}: ${Number(i.calories)} kcal`).join('\n') : '- nenhum'}
 
 REGRAS:
-- Some TUDO (todos os ingredientes listados) em uma única entrada
-- Use tabelas nutricionais brasileiras (TACO) como referência
-- Considere os pesos informados. Se não informou peso, estime porção padrão
-- Arredonde para inteiros
+- Some no JSON final as kcal manuais (${manualCalories} kcal) + sua estimativa dos itens sem kcal.
+- Nao altere as kcal manuais informadas pelo usuario.
+- Use tabelas nutricionais brasileiras (TACO) como referencia.
+- Considere os pesos informados. Se nao informou peso, estime porcao padrao.
+- Arredonde para inteiros.
 
-Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`;
+Responda JSON: {"name":"nome curto do prato","calories":numero,"protein":gramas,"carbs":gramas,"fat":gramas}`;
 
-      const response = await askAI(apiKey, profile, prompt, true);
+      const response = await askAI(apiKey!, profile, aiPrompt, true);
       const parsed = JSON.parse(response);
       if (parsed.calories > 0) {
-        setMealResult({ ...parsed, description });
+        setMealResult({ ...parsed, name: parsed.name || mealName, description });
       } else {
         useToastStore.getState().show('Não consegui calcular. Detalhe melhor.', 'error');
       }
@@ -537,7 +582,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                   <div className="space-y-3">
                     <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">🍽️ Ingredientes</p>
                     {ingredients.map((ing, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                      <div key={idx} className="flex items-center gap-2 flex-wrap">
                         <input
                           type="text"
                           value={ing.name}
@@ -577,6 +622,18 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                             </option>
                           ))}
                         </select>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={ing.calories || ''}
+                          onChange={(e) => {
+                            const next = [...ingredients];
+                            next[idx] = { ...next[idx], calories: e.target.value };
+                            setIngredients(next);
+                          }}
+                          placeholder="kcal"
+                          className="input-field text-sm w-20 text-center"
+                        />
                         {ingredients.length > 1 && (
                           <button
                             onClick={() => setIngredients(ingredients.filter((_, i) => i !== idx))}
@@ -603,16 +660,18 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   className="btn-primary w-full flex items-center justify-center gap-2"
-                  disabled={!ingredients.some((i) => i.name.trim()) || mealLoading || !apiKey}
+                  disabled={!hasAnyIngredient || mealLoading || (needsAIForMeal && !apiKey)}
                   onClick={handleAIMealCalc}
                 >
                   {mealLoading ? (
                     <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} className="inline-block">⚡</motion.span> Calculando...</>
+                  ) : !needsAIForMeal ? (
+                    <><span>✓</span> Salvar refeição</>
                   ) : (
                     <><span>🧠</span> Calcular com IA</>
                   )}
                 </motion.button>
-                {!apiKey && <p className="text-[10px] text-red-400/60 text-center mt-2">Configure sua chave IA no Perfil</p>}
+                {needsAIForMeal && !apiKey && <p className="text-[10px] text-red-400/60 text-center mt-2">Preencha kcal em todos os itens ou configure sua chave IA no Perfil</p>}
               </div>
             )}
           </motion.div>
