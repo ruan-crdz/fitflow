@@ -23,6 +23,63 @@
     scroll-behavior: smooth;
   }
 
+  html[data-font-scale="large"] {
+    font-size: 17px;
+  }
+
+  html[data-font-scale="extra-large"] {
+    font-size: 18.5px;
+  }
+
+  html.a11y-reduce-motion,
+  html.a11y-reduce-motion * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  html.a11y-high-contrast {
+    --color-bg-rgb: 0 0 0;
+    --color-bg-card-rgb: 12 12 12;
+    --color-bg-mid-rgb: 8 8 8;
+  }
+
+  html.a11y-high-contrast body {
+    background-image: none !important;
+  }
+
+  html.a11y-high-contrast .card,
+  html.a11y-high-contrast .input-field,
+  html.a11y-high-contrast button {
+    border-color: rgba(255, 255, 255, 0.32) !important;
+  }
+
+  html.a11y-high-contrast .text-white\/30,
+  html.a11y-high-contrast .text-white\/35,
+  html.a11y-high-contrast .text-white\/40,
+  html.a11y-high-contrast .text-white\/50 {
+    color: rgba(255, 255, 255, 0.78) !important;
+  }
+
+  html.a11y-screen-reader body {
+    line-height: 1.65;
+  }
+
+  html.a11y-screen-reader button,
+  html.a11y-screen-reader a,
+  html.a11y-screen-reader input,
+  html.a11y-screen-reader textarea,
+  html.a11y-screen-reader select {
+    min-height: 44px;
+  }
+
+  html.a11y-screen-reader *:focus-visible,
+  html.a11y-high-contrast *:focus-visible {
+    outline: 3px solid rgb(var(--color-primary-light-rgb)) !important;
+    outline-offset: 3px !important;
+  }
+
   body {
     overscroll-behavior: none;
     min-height: 100dvh;

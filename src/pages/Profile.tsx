@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
+import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { useHealthIntegrationStore, type HealthPlatform } from '@/stores/useHealthIntegrationStore';
 import { ExportData } from '@/components/ui/ExportData';
@@ -16,6 +17,17 @@ export function Profile() {
   const { profile, updateProfile } = useProfileStore();
   const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
   const { themeId, setTheme } = useThemeStore();
+  const {
+    fontScale,
+    highContrast,
+    reduceMotion,
+    screenReaderMode,
+    setFontScale,
+    toggleHighContrast,
+    toggleReduceMotion,
+    toggleScreenReaderMode,
+    resetAccessibility,
+  } = useAccessibilityStore();
   const { phase, setPhase } = useCycleStore();
   const healthPlatform = useHealthIntegrationStore((s) => s.platform);
   const healthConnected = useHealthIntegrationStore((s) => s.isConnected);
@@ -322,6 +334,66 @@ export function Profile() {
             </div>
           </div>
 
+          {/* Accessibility Section */}
+          <div className="card space-y-4">
+            <div>
+              <h2 className="font-semibold text-white/80">Acessibilidade</h2>
+              <p className="text-xs text-white/35 mt-1">Ajustes para leitura, contraste, movimento e uso com leitor de tela.</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-white/40 font-semibold">Tamanho da fonte</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['normal', 'Normal'],
+                  ['large', 'Grande'],
+                  ['extra-large', 'Maior'],
+                ] as [FontScale, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setFontScale(value)}
+                    className={`py-3 rounded-xl border text-sm font-semibold transition-all ${
+                      fontScale === value
+                        ? 'bg-primary-500 text-white border-primary-400'
+                        : 'bg-white/5 text-white/60 border-white/10'
+                    }`}
+                    aria-pressed={fontScale === value}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <AccessibilityToggle
+                title="Alto contraste"
+                description="Deixa fundos mais escuros, bordas mais fortes e textos apagados mais legiveis."
+                enabled={highContrast}
+                onToggle={toggleHighContrast}
+              />
+              <AccessibilityToggle
+                title="Reduzir animacoes"
+                description="Diminui transicoes e movimentos para evitar desconforto."
+                enabled={reduceMotion}
+                onToggle={toggleReduceMotion}
+              />
+              <AccessibilityToggle
+                title="Modo leitor de tela"
+                description="Aumenta areas de toque, foco visual e espacamento para navegacao assistiva."
+                enabled={screenReaderMode}
+                onToggle={toggleScreenReaderMode}
+              />
+            </div>
+
+            <button
+              onClick={resetAccessibility}
+              className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-semibold"
+            >
+              Restaurar acessibilidade padrao
+            </button>
+          </div>
+
           {/* Health Integration */}
           <div className="card space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -484,6 +556,44 @@ export function Profile() {
         </div>
       )}
     </div>
+  );
+}
+
+function AccessibilityToggle({
+  title,
+  description,
+  enabled,
+  onToggle,
+}: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full rounded-xl border p-3 text-left flex items-center justify-between gap-3 transition-all ${
+        enabled ? 'bg-primary-500/10 border-primary-500/30' : 'bg-white/5 border-white/10'
+      }`}
+      aria-pressed={enabled}
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-white/80">{title}</span>
+        <span className="block text-xs text-white/40 mt-0.5 leading-relaxed">{description}</span>
+      </span>
+      <span
+        className={`relative w-12 h-7 rounded-full shrink-0 border transition-colors ${
+          enabled ? 'bg-primary-500 border-primary-400' : 'bg-dark-300 border-white/10'
+        }`}
+      >
+        <span
+          className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-5' : ''
+          }`}
+        />
+      </span>
+    </button>
   );
 }
 

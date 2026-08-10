@@ -1,5 +1,6 @@
 import { useLayoutEffect } from 'react';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
+import { useAccessibilityStore } from '@/stores/useAccessibilityStore';
 
 function hexToRgb(hex: string): string {
   const h = hex.replace('#', '');
@@ -64,12 +65,33 @@ function applyTheme(themeId: string) {
 // Apply theme immediately on module load (before React renders)
 applyTheme(useThemeStore.getState().themeId);
 
+function applyAccessibility() {
+  const settings = useAccessibilityStore.getState();
+  const root = document.documentElement;
+
+  root.dataset.fontScale = settings.fontScale;
+  root.classList.toggle('a11y-high-contrast', settings.highContrast);
+  root.classList.toggle('a11y-reduce-motion', settings.reduceMotion);
+  root.classList.toggle('a11y-screen-reader', settings.screenReaderMode);
+}
+
+applyAccessibility();
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeId = useThemeStore((s) => s.themeId);
+  const fontScale = useAccessibilityStore((s) => s.fontScale);
+  const highContrast = useAccessibilityStore((s) => s.highContrast);
+  const reduceMotion = useAccessibilityStore((s) => s.reduceMotion);
+  const screenReaderMode = useAccessibilityStore((s) => s.screenReaderMode);
 
   useLayoutEffect(() => {
     applyTheme(themeId);
+    applyAccessibility();
   }, [themeId]);
+
+  useLayoutEffect(() => {
+    applyAccessibility();
+  }, [fontScale, highContrast, reduceMotion, screenReaderMode]);
 
   return <>{children}</>;
 }
