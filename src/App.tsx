@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SplashScreen } from '@/components/ui/SplashScreen';
 import { Onboarding } from '@/pages/Onboarding';
+import { BackupRestore } from '@/pages/BackupRestore';
 import { Dashboard } from '@/pages/Dashboard';
 import { Workout } from '@/pages/Workout';
 import { WorkoutComplete } from '@/pages/WorkoutComplete';
@@ -21,6 +22,7 @@ import { Health } from '@/pages/Health';
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
   const [showSplash, setShowSplash] = useState(true);
+  const [startOnboarding, setStartOnboarding] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1800);
@@ -42,7 +44,10 @@ export function App() {
       <ThemeProvider>
         <HashRouter>
           <Routes>
-            <Route path="*" element={<Onboarding />} />
+            <Route
+              path="*"
+              element={startOnboarding ? <Onboarding /> : <BackupRestore onNewUser={() => setStartOnboarding(true)} />}
+            />
           </Routes>
         </HashRouter>
       </ThemeProvider>
