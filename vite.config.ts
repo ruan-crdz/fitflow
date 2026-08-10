@@ -9,12 +9,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ['icons/*.png'],
       manifest: {
         name: 'FitFlow',
         short_name: 'FitFlow',
         description: 'Seu treino inteligente e prático',
-        theme_color: '#7c3aed',
+        theme_color: '#e5a100',
         background_color: '#0f0f0f',
         display: 'standalone',
         orientation: 'portrait',

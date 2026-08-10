@@ -39,8 +39,8 @@ function sendReminder() {
   try {
     new Notification('FitFlow 💪', {
       body: 'Hoje é dia de treino! Bora se dedicar? 🔥',
-      icon: '/fitflow/pwa-192x192.png',
-      badge: '/fitflow/pwa-192x192.png',
+      icon: '/fitflow/icons/icon-192.png',
+      badge: '/fitflow/icons/icon-192.png',
       tag: 'training-reminder',
     });
   } catch {}
