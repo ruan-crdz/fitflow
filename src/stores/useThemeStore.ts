@@ -96,6 +96,16 @@ export const useThemeStore = create<ThemeState>()(
       setTheme: (id) => set({ themeId: id }),
       getTheme: () => THEMES.find((t) => t.id === get().themeId) || THEMES[0],
     }),
-    { name: 'fitflow-theme' },
+    {
+      name: 'fitflow-theme',
+      version: 2,
+      migrate: (persisted: unknown) => {
+        const state = persisted as Partial<ThemeState>;
+        return {
+          ...state,
+          themeId: state.themeId === 'purple' || !state.themeId ? 'smartfit' : state.themeId,
+        } as ThemeState;
+      },
+    },
   ),
 );
