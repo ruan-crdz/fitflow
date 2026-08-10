@@ -7,9 +7,21 @@ export function SplashScreen() {
         initial={{ scale: 0, rotate: -180 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-        className="w-24 h-24 rounded-3xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-2xl shadow-primary-500/30"
+        className="w-24 h-24 rounded-3xl bg-dark-100 border border-primary-500/20 flex items-center justify-center shadow-2xl shadow-primary-500/25"
       >
-        <span className="text-5xl">💪</span>
+        <div
+          className="w-16 h-16 bg-gradient-to-br from-primary-200 via-primary-500 to-primary-700"
+          style={{
+            WebkitMaskImage: 'url(/fitflow/icons/logo-mask.png)',
+            maskImage: 'url(/fitflow/icons/logo-mask.png)',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+          }}
+        />
       </motion.div>
       <motion.h1
         initial={{ opacity: 0, y: 20 }}
