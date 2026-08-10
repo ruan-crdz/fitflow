@@ -6,9 +6,10 @@ import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { EXERCISE_CATALOG, MUSCLE_GROUPS } from '@/constants/exerciseCatalog';
+import { WORKOUTS } from '@/constants/workouts';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
-import type { WorkoutType } from '@/types';
+import type { Exercise, WorkoutType } from '@/types';
 
 interface CatalogItem {
   name: string;
@@ -78,7 +79,8 @@ export function WorkoutPlans() {
   const [cardioBlocks, setCardioBlocks] = useState<CardioBlock[]>([{ minutes: '20', intensity: 'Moderado' }]);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 
-  const { getExercises, setExercises, reorderExercises, reorderSlots, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, exportWorkout, exportAll, previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
+  const { setExercises, reorderExercises, reorderSlots, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, exportWorkout, exportAll, previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
+  const customWorkouts = useCustomWorkoutStore((s) => s.customWorkouts);
   const apiKey = useAIStore((s) => s.apiKey);
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
@@ -86,16 +88,24 @@ export function WorkoutPlans() {
 
   const activeTypes = activeSlots;
 
-  const exercises = getExercises(selected);
+  const getVisibleExercises = (type: WorkoutType): Exercise[] => {
+    const custom = customWorkouts?.[type];
+    if (custom && custom.length > 0) {
+      return custom.map((exercise) => ({ ...exercise, info: '', source: '' }));
+    }
+    return WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
+  };
+
+  const exercises = getVisibleExercises(selected);
 
   const summarizeWorkout = (workout: WorkoutImportItem | WorkoutType) => {
-    const list = typeof workout === 'string' ? getExercises(workout) : workout.exercises;
+    const list = typeof workout === 'string' ? getVisibleExercises(workout) : workout.exercises;
     const sets = list.reduce((acc, e) => acc + e.sets, 0);
     return `${list.length} exercícios • ${sets} séries`;
   };
 
   const listWorkoutNames = (workout: WorkoutImportItem | WorkoutType) => {
-    const list = typeof workout === 'string' ? getExercises(workout) : workout.exercises;
+    const list = typeof workout === 'string' ? getVisibleExercises(workout) : workout.exercises;
     return list.slice(0, 4).map((e) => e.name).join(', ') + (list.length > 4 ? '...' : '');
   };
 
