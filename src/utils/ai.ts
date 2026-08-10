@@ -5,6 +5,7 @@ import { useWaterStore } from '@/stores/useWaterStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import type { Profile } from '@/types';
@@ -36,6 +37,14 @@ Regras:
 - Se a fase do ciclo menstrual estiver informada, considere-a nas recomendações
 - Quando o aluno reportar sintomas (mal-estar, dor de cabeça, fraqueza), analise os dados nutricionais e de hidratação para dar contexto`;
 
+const ACTION_PROMPT = `
+
+AÇÕES NO APP:
+- Se o aluno pedir para trocar, substituir ou renomear exercício no treino, confirme a intenção em texto curto e inclua no FINAL um bloco de ação oculto.
+- Formato exato: [ACTION:{"type":"replace_exercise","scope":"all|workout","workoutType":"A|B|C|D|E","fromName":"nome atual","toName":"nome exato do catálogo"}]
+- Use scope "workout" quando o aluno citar treino A/B/C/D/E; use scope "all" quando pedir troca geral.
+- O toName deve existir exatamente no catálogo. Não inclua ACTION se não houver pedido claro de alteração.`;
+
 function buildContext(profile: Profile): string {
   const cycle = useCycleStore.getState();
   const cycleInfo = cycle.phase !== 'none'
@@ -63,6 +72,7 @@ function buildContext(profile: Profile): string {
   const waterGoalGlasses = Math.round(calculateWaterIntake(profile.weight) * 4);
   const waterMl = waterGlasses * 250;
   const waterGoalMl = waterGoalGlasses * 250;
+  const health = useHealthIntegrationStore.getState().getTodaySummary();
 
   // Weight trend
   const weightEntries = useWeightStore.getState().entries;
@@ -99,6 +109,7 @@ Dados do aluno:
 - Dias de treino: ${profile.trainingDays.length}x por semana
 - Nível: ${levelLabel}${cycleInfo}
 - TDEE estimado: ${tdee} kcal/dia
+- Atividade hoje: ${health.steps} passos, ${health.activeCalories} kcal ativas, fonte ${health.source}
 ${weightTrend ? `- ${weightTrend}` : ''}
 
 ALIMENTAÇÃO HOJE:
@@ -129,7 +140,7 @@ export async function sendMessage(
   const profile = useProfileStore.getState().profile;
   if (!profile) throw new Error('Perfil não encontrado');
 
-  const systemMessage = SYSTEM_PROMPT + '\n' + buildContext(profile);
+  const systemMessage = SYSTEM_PROMPT + ACTION_PROMPT + '\n' + buildContext(profile);
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -163,7 +174,7 @@ export async function askAI(
   question: string,
   jsonMode = false,
 ): Promise<string> {
-  const systemMessage = SYSTEM_PROMPT + '\n' + buildContext(profile);
+  const systemMessage = SYSTEM_PROMPT + ACTION_PROMPT + '\n' + buildContext(profile);
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {

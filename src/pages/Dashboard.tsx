@@ -19,6 +19,9 @@ import { getTodayWorkoutType, isTrainingDay, getToday } from '@/utils/date';
 import { useTrainingReminder } from '@/hooks/useTrainingReminder';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { useFoodStore } from '@/stores/useFoodStore';
+import { DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_WIDGETS, useDashboardStore } from '@/stores/useDashboardStore';
+import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import type { WorkoutType } from '@/types';
 
 export function Dashboard() {
@@ -33,11 +36,34 @@ export function Dashboard() {
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
+  const foodLogs = useFoodStore((s) => s.logs);
+  const healthDaily = useHealthIntegrationStore((s) => s.daily);
   const activeSlots = useCustomWorkoutStore((s) => s.activeSlots);
+  const widgets = useDashboardStore((s) => s.widgets);
+  const toggleWidget = useDashboardStore((s) => s.toggleWidget);
+  const resetWidgets = useDashboardStore((s) => s.resetWidgets);
   const [showWeightPrompt, setShowWeightPrompt] = useState(!hasTodayWeight);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [editingDashboard, setEditingDashboard] = useState(false);
 
   const today = getToday();
+  const todayFoodEntries = foodLogs[today] || [];
+  const totals = todayFoodEntries.reduce(
+    (acc, entry) => ({
+      calories: acc.calories + entry.calories,
+      protein: acc.protein + entry.protein,
+      carbs: acc.carbs + entry.carbs,
+      fat: acc.fat + entry.fat,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+  const healthSummary = healthDaily[today] || {
+    date: today,
+    steps: 0,
+    activeCalories: 0,
+    source: 'none' as const,
+    syncedAt: 0,
+  };
   const totalWorkouts = sessions.filter((s) => s.completedAt).length;
   const todayCompleted = sessions.filter((s) => s.date === today && s.completedAt);
   const todayAlreadyDone = todayCompleted.length > 0;
@@ -61,6 +87,10 @@ export function Dashboard() {
   const macros = calculateMacros(calories, profile.goal);
   const bmi = calculateBMI(profile.weight, profile.height);
   const water = calculateWaterIntake(profile.weight);
+  const burned = healthSummary.activeCalories;
+  const remaining = calories - (totals.calories - burned);
+  const progressCalories = Math.min(totals.calories / calories, 1);
+  const isWidgetVisible = (widget: typeof DEFAULT_DASHBOARD_WIDGETS[number]) => widgets.includes(widget);
 
   const handleStartWorkout = (type: WorkoutType) => {
     startSession(type);
@@ -90,13 +120,13 @@ export function Dashboard() {
         </motion.button>
       </div>
 
-      <MotivationalQuote />
+      {isWidgetVisible('quote') && <MotivationalQuote />}
 
       {/* AI Insight */}
-      <AIDashInsight />
+      {isWidgetVisible('aiInsight') && <AIDashInsight />}
 
       {/* Weekly Report (Sundays) */}
-      <AIWeeklyReport />
+      {isWidgetVisible('weeklyReport') && <AIWeeklyReport />}
 
       {/* Active Session Banner */}
       {activeSession && (
@@ -124,7 +154,7 @@ export function Dashboard() {
       )}
 
       {/* Today's Training */}
-      {!activeSession && (
+      {!activeSession && isWidgetVisible('todayWorkout') && (
         <div className="card space-y-4 border-primary-500/20">
           {isTodayTraining && !todayAlreadyDone ? (
             <>
@@ -169,7 +199,7 @@ export function Dashboard() {
       )}
 
       {/* Quick Start */}
-      {!activeSession && !todayAlreadyDone && (
+      {!activeSession && !todayAlreadyDone && isWidgetVisible('quickStart') && (
         <div className="space-y-2">
           <p className="text-xs text-white/25 font-semibold uppercase tracking-wider">Ou escolha um treino</p>
           <div className="grid grid-cols-3 gap-3">
@@ -189,7 +219,7 @@ export function Dashboard() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
+      {isWidgetVisible('stats') && <div className="grid grid-cols-2 gap-3">
         <div className="card text-center">
           <p className="text-3xl font-bold text-primary-400">{totalWorkouts}</p>
           <p className="text-xs text-white/40 mt-1">Treinos feitos</p>
@@ -198,15 +228,53 @@ export function Dashboard() {
           <p className="text-3xl font-bold text-success">{streak}</p>
           <p className="text-xs text-white/40 mt-1">Semanas seguidas</p>
         </div>
-      </div>
+      </div>}
 
       {/* Streak Heatmap */}
-      <StreakHeatmap />
+      {isWidgetVisible('streak') && <StreakHeatmap />}
 
       {/* Load Progression */}
-      <LoadProgression />
+      {isWidgetVisible('load') && <LoadProgression />}
+
+      {/* Calories */}
+      {isWidgetVisible('calories') && (
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-white/80">Calorias do dia</h2>
+            <span className="text-xs text-white/40">Meta: {calories} kcal</span>
+          </div>
+          <div className="relative h-4 bg-dark-300 rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full rounded-full ${progressCalories >= 1 ? 'bg-red-500' : 'bg-gradient-to-r from-green-500 to-emerald-400'}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${progressCalories * 100}%` }}
+              transition={{ type: 'spring', stiffness: 80 }}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <p className="text-lg font-bold text-emerald-400">{totals.calories}</p>
+              <p className="text-[10px] text-white/40">Consumidas</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-orange-400">{burned}</p>
+              <p className="text-[10px] text-white/40">Queimadas</p>
+            </div>
+            <div>
+              <p className={`text-lg font-bold ${remaining > 0 ? 'text-blue-400' : 'text-red-400'}`}>{remaining}</p>
+              <p className="text-[10px] text-white/40">{remaining > 0 ? 'Restantes' : 'Excedido'}</p>
+            </div>
+          </div>
+          <div className="space-y-2 pt-2 border-t border-white/5">
+            <MacroBar label="Proteína" current={totals.protein} goal={macros.protein} color="bg-red-400" />
+            <MacroBar label="Carboidratos" current={totals.carbs} goal={macros.carbs} color="bg-yellow-400" />
+            <MacroBar label="Gorduras" current={totals.fat} goal={macros.fat} color="bg-green-400" />
+          </div>
+        </div>
+      )}
 
       {/* Nutrition */}
+      {false && (
       <div className="card space-y-4">
         <h2 className="font-semibold text-white/80">Nutrição diária</h2>
         <div className="grid grid-cols-2 gap-4">
@@ -234,9 +302,10 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Water Tracker */}
-      <WaterTracker
+      {isWidgetVisible('water') && <WaterTracker
         glasses={waterGlasses}
         goal={Math.round(water * 4)}
         onAdd={() => {
@@ -248,10 +317,10 @@ export function Dashboard() {
         onRemove={removeGlass}
         showConfetti={showConfetti}
         onConfettiDone={() => setShowConfetti(false)}
-      />
+      />}
 
       {/* BMI */}
-      <div className="card flex items-center justify-between">
+      {isWidgetVisible('bmi') && <div className="card flex items-center justify-between">
         <div>
           <p className="text-sm text-white/40">IMC</p>
           <p className="text-xl font-bold">{bmi}</p>
@@ -259,10 +328,10 @@ export function Dashboard() {
         <span className="text-sm px-3 py-1 rounded-full bg-primary-500/10 text-primary-300">
           {bmiCategory(bmi)}
         </span>
-      </div>
+      </div>}
 
       {/* Weight Chart */}
-      <div className="card space-y-3">
+      {isWidgetVisible('weight') && <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-white/80">Evolução do peso</h2>
           <button
@@ -273,10 +342,64 @@ export function Dashboard() {
           </button>
         </div>
         <WeightChart entries={weightEntries} />
+      </div>}
+
+      {editingDashboard && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-white/80">Editar dashboard</h2>
+            <button onClick={resetWidgets} className="text-xs text-primary-400 font-medium">Restaurar</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {DEFAULT_DASHBOARD_WIDGETS.map((widget) => (
+              <button
+                key={widget}
+                onClick={() => toggleWidget(widget)}
+                className={`px-3 py-2 rounded-xl border text-left text-xs font-medium transition-colors ${
+                  widgets.includes(widget)
+                    ? 'bg-primary-500/15 border-primary-500/30 text-primary-200'
+                    : 'bg-white/5 border-white/10 text-white/35'
+                }`}
+              >
+                {widgets.includes(widget) ? '✓ ' : '+ '}{DASHBOARD_WIDGET_LABELS[widget]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-center pb-2">
+        <button
+          onClick={() => setEditingDashboard((value) => !value)}
+          className={`px-5 py-3 rounded-full text-sm font-semibold border transition-colors ${
+            editingDashboard
+              ? 'bg-primary-500 text-white border-primary-400'
+              : 'bg-dark-100 text-white/70 border-white/10'
+          }`}
+        >
+          {editingDashboard ? 'Concluir' : 'Editar dashboard'}
+        </button>
       </div>
 
       {/* Weight Prompt */}
       {showWeightPrompt && <WeightPrompt onClose={() => setShowWeightPrompt(false)} />}
+    </div>
+  );
+}
+
+function MacroBar({ label, current, goal, color }: { label: string; current: number; goal: number; color: string }) {
+  const progress = Math.min(current / goal, 1);
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[10px] text-white/40 w-20">{label}</span>
+      <div className="flex-1 h-2 bg-dark-300 rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${color}`}
+          animate={{ width: `${progress * 100}%` }}
+          transition={{ type: 'spring', stiffness: 100 }}
+        />
+      </div>
+      <span className="text-[10px] text-white/50 w-16 text-right">{current}/{goal}g</span>
     </div>
   );
 }

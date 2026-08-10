@@ -11,8 +11,8 @@ import type { Goal } from '@/types';
 // Isolation: 60-75s
 // Goal adjustment: "lose" = -15s (metabolic stress), "gain" = +10s (full recovery)
 
-const COMPOUND_HEAVY = ['Stiff / RDL', 'Hip Thrust', 'Leg Press Horizontal', 'Agachamento Smith', 'Búlgaro'];
-const COMPOUND_MEDIUM = ['Graviton', 'Remada Sentada', 'Supino Máquina', 'Flexora em Pé', 'Panturrilha em Pé'];
+const COMPOUND_HEAVY = ['Stiff', 'Elevação Pélvica', 'Leg Press', 'Agachamento Smith', 'Agachamento Búlgaro'];
+const COMPOUND_MEDIUM = ['Graviton', 'Remada Sentada', 'Supino Máquina', 'Mesa Flexora', 'Panturrilha em Pé'];
 
 export function getRestDuration(exercise: Exercise, goal: Goal): number {
   const name = exercise.name;

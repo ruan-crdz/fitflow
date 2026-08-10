@@ -92,7 +92,7 @@ interface ThemeState {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      themeId: 'purple',
+      themeId: 'smartfit',
       setTheme: (id) => set({ themeId: id }),
       getTheme: () => THEMES.find((t) => t.id === get().themeId) || THEMES[0],
     }),

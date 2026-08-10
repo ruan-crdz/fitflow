@@ -6,9 +6,39 @@ import { useWaterStore } from '@/stores/useWaterStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useMealStore, SavedMeal } from '@/stores/useMealStore';
+import { WaterTracker } from '@/components/ui/WaterTracker';
+import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import { askAI } from '@/utils/ai';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
+
+type IngredientUnit = 'g' | 'un' | 'colher_sopa' | 'colher_cha' | 'ml' | 'copo' | 'xicara';
+
+interface IngredientInput {
+  name: string;
+  amount: string;
+  unit: IngredientUnit;
+}
+
+const FOOD_UNITS: { value: IngredientUnit; label: string }[] = [
+  { value: 'g', label: 'g' },
+  { value: 'un', label: 'un' },
+  { value: 'colher_sopa', label: 'colher' },
+  { value: 'colher_cha', label: 'chá' },
+  { value: 'ml', label: 'ml' },
+  { value: 'copo', label: 'copo' },
+  { value: 'xicara', label: 'xícara' },
+];
+
+const UNIT_LABEL: Record<IngredientUnit, string> = {
+  g: 'gramas',
+  un: 'unidade(s)',
+  colher_sopa: 'colher(es) de sopa',
+  colher_cha: 'colher(es) de chá',
+  ml: 'ml',
+  copo: 'copo(s)',
+  xicara: 'xícara(s)',
+};
 
 export function Health() {
   const profile = useProfileStore((s) => s.profile)!;
@@ -17,10 +47,11 @@ export function Health() {
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
   const apiKey = useAIStore((s) => s.apiKey);
+  const healthDaily = useHealthIntegrationStore((s) => s.daily);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
-  const [ingredients, setIngredients] = useState<{ name: string; grams: string }[]>([{ name: '', grams: '' }]);
+  const [ingredients, setIngredients] = useState<IngredientInput[]>([{ name: '', amount: '', unit: 'g' }]);
   const [mealLoading, setMealLoading] = useState(false);
   const [mealResult, setMealResult] = useState<{ name: string; description: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -33,8 +64,16 @@ export function Health() {
   const waterGoal = Math.round(water * 4);
 
   const entries = getTodayEntries();
+  const today = new Date().toISOString().slice(0, 10);
+  const healthSummary = healthDaily[today] || {
+    date: today,
+    steps: 0,
+    activeCalories: 0,
+    source: 'none' as const,
+    syncedAt: 0,
+  };
   const totals = getTodayTotals();
-  const burned = 0; // TODO: integrate with workout session data
+  const burned = healthSummary.activeCalories;
   const net = totals.calories - burned;
   const remaining = calories - net;
   const progressCalories = Math.min(totals.calories / calories, 1);
@@ -45,11 +84,11 @@ export function Health() {
     setMealLoading(true);
     setMealResult(null);
     const profile = useProfileStore.getState().profile!;
-    const description = validIngredients.map((i) => `${i.grams ? i.grams + 'g ' : ''}${i.name.trim()}`).join(', ');
+    const description = validIngredients.map((i) => `${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]} de ` : ''}${i.name.trim()}`).join(', ');
     try {
       const prompt = `Calcule os macros e calorias TOTAIS desta refeição:
 
-${validIngredients.map((i) => `- ${i.grams ? i.grams + 'g' : 'porção padrão'} de ${i.name.trim()}`).join('\n')}
+${validIngredients.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porção padrão'} de ${i.name.trim()}`).join('\n')}
 
 REGRAS:
 - Some TUDO (todos os ingredientes listados) em uma única entrada
@@ -113,7 +152,7 @@ Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas
 
   const closeModal = () => {
     setShowAddModal(false);
-    setIngredients([{ name: '', grams: '' }]);
+    setIngredients([{ name: '', amount: '', unit: 'g' }]);
     setMealResult(null);
     setShowSavePrompt(false);
     setMealLoading(false);
@@ -292,6 +331,10 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
       </div>
 
       {/* Water Tracker */}
+      <WaterTracker glasses={waterGlasses} goal={waterGoal} onAdd={addGlass} onRemove={removeGlass} />
+
+      {/* Old Water Tracker */}
+      {false && (
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-white/80">💧 Água</h2>
@@ -311,6 +354,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         </div>
         {waterGlasses >= waterGoal && <p className="text-center text-xs text-green-400">✅ Meta atingida!</p>}
       </div>
+      )}
 
       {/* Food Log */}
       <div className="space-y-3">
@@ -509,15 +553,30 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                         <input
                           type="number"
                           inputMode="numeric"
-                          value={ing.grams}
+                          value={ing.amount}
                           onChange={(e) => {
                             const next = [...ingredients];
-                            next[idx] = { ...next[idx], grams: e.target.value };
+                            next[idx] = { ...next[idx], amount: e.target.value };
                             setIngredients(next);
                           }}
-                          placeholder="g"
+                          placeholder="Qtd"
                           className="input-field text-sm w-16 text-center"
                         />
+                        <select
+                          value={ing.unit}
+                          onChange={(e) => {
+                            const next = [...ingredients];
+                            next[idx] = { ...next[idx], unit: e.target.value as IngredientUnit };
+                            setIngredients(next);
+                          }}
+                          className="input-field text-xs w-20 px-2 text-center"
+                        >
+                          {FOOD_UNITS.map((unit) => (
+                            <option key={unit.value} value={unit.value} className="bg-dark-200">
+                              {unit.label}
+                            </option>
+                          ))}
+                        </select>
                         {ingredients.length > 1 && (
                           <button
                             onClick={() => setIngredients(ingredients.filter((_, i) => i !== idx))}
@@ -528,7 +587,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                     ))}
                     <motion.button
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => setIngredients([...ingredients, { name: '', grams: '' }])}
+                      onClick={() => setIngredients([...ingredients, { name: '', amount: '', unit: 'g' }])}
                       className="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 text-sm font-medium active:bg-white/5 transition-colors"
                     >
                       + Adicionar ingrediente

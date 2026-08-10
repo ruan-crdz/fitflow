@@ -1,7 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
+import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
+import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { sendMessage, type ChatMessage } from '@/utils/ai';
+import type { WorkoutType } from '@/types';
 
 const SUGGESTIONS = [
   'O que comer antes do treino?',
@@ -12,6 +15,34 @@ const SUGGESTIONS = [
   'Quanto tempo pra ver resultado?',
 ];
 
+interface ReplaceExerciseAction {
+  type: 'replace_exercise';
+  scope: 'all' | 'workout';
+  workoutType?: WorkoutType;
+  fromName: string;
+  toName: string;
+}
+
+const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
+
+function extractAction(reply: string): { cleanReply: string; action: ReplaceExerciseAction | null } {
+  const match = reply.match(/\[ACTION:([\s\S]*?)\]/);
+  if (!match) return { cleanReply: reply, action: null };
+
+  try {
+    const parsed = JSON.parse(match[1]) as ReplaceExerciseAction;
+    if (parsed.type !== 'replace_exercise' || !parsed.fromName || !parsed.toName) {
+      return { cleanReply: reply.replace(match[0], '').trim(), action: null };
+    }
+    return {
+      cleanReply: reply.replace(match[0], '').trim(),
+      action: parsed.scope === 'workout' ? parsed : { ...parsed, scope: 'all' },
+    };
+  } catch {
+    return { cleanReply: reply.replace(match[0], '').trim(), action: null };
+  }
+}
+
 export function AIChat() {
   const apiKey = useAIStore((s) => s.apiKey);
   const messages = useAIStore((s) => s.messages);
@@ -20,7 +51,9 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingAction, setPendingAction] = useState<ReplaceExerciseAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { activeSlots, getExercises, setExercises } = useCustomWorkoutStore();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -38,12 +71,83 @@ export function AIChat() {
 
     try {
       const reply = await sendMessage(apiKey, newMessages);
-      setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      const { cleanReply, action } = extractAction(reply);
+      setPendingAction(action);
+      setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro desconhecido');
     } finally {
       setLoading(false);
     }
+  };
+
+  const normalizeName = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const findCatalogItem = (name: string) => {
+    const normalized = normalizeName(name);
+    return EXERCISE_CATALOG.find((item) => normalizeName(item.name) === normalized)
+      || EXERCISE_CATALOG.find((item) => normalizeName(item.name).includes(normalized) || normalized.includes(normalizeName(item.name)));
+  };
+
+  const matchesExercise = (exerciseName: string, query: string) => {
+    const a = normalizeName(exerciseName);
+    const b = normalizeName(query);
+    return a === b || a.includes(b) || b.includes(a);
+  };
+
+  const applyPendingAction = () => {
+    if (!pendingAction) return;
+    const catalogItem = findCatalogItem(pendingAction.toName);
+    if (!catalogItem) {
+      setError('Não encontrei esse exercício no catálogo com foto.');
+      setPendingAction(null);
+      return;
+    }
+
+    const targetTypes = pendingAction.scope === 'workout' && pendingAction.workoutType
+      ? [pendingAction.workoutType]
+      : activeSlots;
+
+    let changed = 0;
+    for (const type of targetTypes) {
+      if (!WORKOUT_TYPES.includes(type)) continue;
+      const exercises = getExercises(type);
+      const updated = exercises.map((exercise) => {
+        if (!matchesExercise(exercise.name, pendingAction.fromName)) return exercise;
+        changed += 1;
+        return {
+          id: `flowai_${Date.now()}_${changed}`,
+          name: catalogItem.name,
+          sets: exercise.sets,
+          repsMin: exercise.repsMin,
+          repsMax: exercise.repsMax,
+          muscleGroup: catalogItem.muscleGroup,
+          image: catalogItem.image,
+        };
+      });
+      setExercises(type, updated.map((exercise) => ({
+        id: exercise.id,
+        name: exercise.name,
+        sets: exercise.sets,
+        repsMin: exercise.repsMin,
+        repsMax: exercise.repsMax,
+        muscleGroup: exercise.muscleGroup,
+        image: exercise.image,
+      })));
+    }
+
+    const targetText = pendingAction.scope === 'workout' && pendingAction.workoutType ? `no treino ${pendingAction.workoutType}` : 'nos seus treinos';
+    const reply = changed > 0
+      ? `Pronto, substituído ${targetText}. Agora pode voltar na tela de treinos que você vai ver ${pendingAction.fromName} como ${catalogItem.name}.`
+      : `Não achei ${pendingAction.fromName} ${targetText}. Confere o nome e me pede de novo.`;
+
+    setMessages([...messages, { role: 'assistant', content: reply }]);
+    setPendingAction(null);
+  };
+
+  const rejectPendingAction = () => {
+    setPendingAction(null);
+    setMessages([...messages, { role: 'assistant', content: 'Tudo bem, não alterei nada.' }]);
   };
 
   return (
@@ -122,6 +226,37 @@ export function AIChat() {
 
         {error && (
           <p className="text-center text-red-400 text-xs">{error}</p>
+        )}
+
+        {pendingAction && !loading && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-start"
+          >
+            <div className="bg-dark-100 border border-primary-500/20 rounded-2xl rounded-bl-sm p-3 space-y-3 max-w-[85%]">
+              <p className="text-xs text-white/60">
+                {pendingAction.scope === 'workout' && pendingAction.workoutType
+                  ? `Substituir no treino ${pendingAction.workoutType}?`
+                  : 'Substituir em todos os treinos?'}
+              </p>
+              <p className="text-sm text-white/80">{pendingAction.fromName} → {pendingAction.toName}</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={rejectPendingAction}
+                  className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-lg"
+                >
+                  ×
+                </button>
+                <button
+                  onClick={applyPendingAction}
+                  className="w-12 h-12 rounded-full bg-green-500/15 border border-green-500/30 text-green-300 text-lg"
+                >
+                  ✓
+                </button>
+              </div>
+            </div>
+          </motion.div>
         )}
       </div>
 

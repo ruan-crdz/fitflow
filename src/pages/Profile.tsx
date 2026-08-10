@@ -4,9 +4,11 @@ import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } fr
 import { useAIStore } from '@/stores/useAIStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
+import { useHealthIntegrationStore, type HealthPlatform } from '@/stores/useHealthIntegrationStore';
 import { ExportData } from '@/components/ui/ExportData';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
+import { syncNativeHealth } from '@/utils/healthIntegration';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
 
 export function Profile() {
@@ -15,9 +17,28 @@ export function Profile() {
   const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
   const { themeId, setTheme } = useThemeStore();
   const { phase, setPhase } = useCycleStore();
+  const healthPlatform = useHealthIntegrationStore((s) => s.platform);
+  const healthConnected = useHealthIntegrationStore((s) => s.isConnected);
+  const healthDaily = useHealthIntegrationStore((s) => s.daily);
+  const today = new Date().toISOString().slice(0, 10);
+  const healthSummary = healthDaily[today] || {
+    date: today,
+    steps: 0,
+    activeCalories: 0,
+    source: 'none' as const,
+    syncedAt: 0,
+  };
+  const connectHealth = useHealthIntegrationStore((s) => s.connect);
+  const disconnectHealth = useHealthIntegrationStore((s) => s.disconnect);
+  const setDailySummary = useHealthIntegrationStore((s) => s.setDailySummary);
+  const setTodayManual = useHealthIntegrationStore((s) => s.setTodayManual);
   const [editing, setEditing] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [aiKeyInput, setAiKeyInput] = useState('');
+  const [healthError, setHealthError] = useState('');
+  const [healthSyncing, setHealthSyncing] = useState(false);
+  const [manualSteps, setManualSteps] = useState(String(healthSummary.steps || ''));
+  const [manualCalories, setManualCalories] = useState(String(healthSummary.activeCalories || ''));
 
   const [name, setName] = useState(profile?.name || '');
   const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'female');
@@ -53,6 +74,22 @@ export function Profile() {
       trainingDays: days,
     });
     setEditing(false);
+  };
+
+  const handleHealthConnect = async (platform: HealthPlatform) => {
+    setHealthError('');
+    setHealthSyncing(true);
+    try {
+      const summary = await syncNativeHealth(platform);
+      setDailySummary(summary);
+      setManualSteps(String(summary.steps));
+      setManualCalories(String(summary.activeCalories));
+    } catch (err) {
+      connectHealth('manual');
+      setHealthError(err instanceof Error ? err.message : 'Integração indisponível.');
+    } finally {
+      setHealthSyncing(false);
+    }
   };
 
   return (
@@ -282,6 +319,85 @@ export function Profile() {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Health Integration */}
+          <div className="card space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-white/80">Integração de saúde</h2>
+                <p className="text-xs text-white/35 mt-1">Passos e calorias ativas entram no cálculo do dia.</p>
+              </div>
+              {healthConnected && (
+                <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-300 text-[10px] font-semibold">
+                  {healthPlatform === 'manual' ? 'Manual' : 'Conectado'}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Passos hoje" value={`${healthSummary.steps}`} />
+              <Stat label="Calorias ativas" value={`${healthSummary.activeCalories} kcal`} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleHealthConnect('apple-health')}
+                disabled={healthSyncing}
+                className="py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium disabled:opacity-40"
+              >
+                iPhone Saúde
+              </button>
+              <button
+                onClick={() => handleHealthConnect('health-connect')}
+                disabled={healthSyncing}
+                className="py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium disabled:opacity-40"
+              >
+                Android Health
+              </button>
+            </div>
+
+            {healthError && (
+              <p className="text-xs text-yellow-300/80 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
+                {healthError} Por enquanto, use entrada manual. Para sincronização automática, o FitFlow precisa estar empacotado como app iOS/Android.
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                value={manualSteps}
+                onChange={(e) => setManualSteps(e.target.value)}
+                placeholder="Passos"
+                className="input-field text-sm"
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                value={manualCalories}
+                onChange={(e) => setManualCalories(e.target.value)}
+                placeholder="kcal ativas"
+                className="input-field text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTodayManual(Number(manualSteps), Number(manualCalories))}
+                className="flex-1 py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold"
+              >
+                Salvar saúde do dia
+              </button>
+              {healthConnected && (
+                <button
+                  onClick={disconnectHealth}
+                  className="px-4 py-3 rounded-xl bg-white/5 text-white/40 text-sm"
+                >
+                  Desconectar
+                </button>
+              )}
             </div>
           </div>
 

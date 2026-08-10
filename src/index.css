@@ -4,14 +4,14 @@
 
 @layer base {
   :root {
-    --color-primary-rgb: 124 58 237;
-    --color-primary-light-rgb: 167 139 250;
-    --color-primary-mid-rgb: 139 92 246;
-    --color-primary-dark-rgb: 109 40 217;
-    --color-primary-darker-rgb: 91 33 182;
-    --color-bg-rgb: 15 15 26;
-    --color-bg-card-rgb: 26 26 46;
-    --color-bg-mid-rgb: 20 20 36;
+    --color-primary-rgb: 229 161 0;
+    --color-primary-light-rgb: 251 191 36;
+    --color-primary-mid-rgb: 236 170 11;
+    --color-primary-dark-rgb: 183 129 0;
+    --color-primary-darker-rgb: 180 83 9;
+    --color-bg-rgb: 13 13 13;
+    --color-bg-card-rgb: 26 26 26;
+    --color-bg-mid-rgb: 20 20 20;
     --font-family: 'Inter', system-ui, sans-serif;
   }
 

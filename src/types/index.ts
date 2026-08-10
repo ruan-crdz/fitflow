@@ -37,6 +37,8 @@ export interface Exercise {
   info: string;
   source: string;
   image?: string;
+  setRows?: { reps: number }[];
+  cardioBlocks?: { minutes: number; intensity: string }[];
 }
 
 export interface Workout {

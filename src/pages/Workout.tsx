@@ -54,6 +54,9 @@ export function Workout() {
   }
 
   const completedSets = activeSession.setsCompleted[exercise.id] || 0;
+  const isCardio = exercise.muscleGroup === 'Cardio';
+  const cardioBlocks = exercise.cardioBlocks || [];
+  const totalCardioMinutes = cardioBlocks.reduce((acc, block) => acc + block.minutes, 0);
   const allSetsComplete = completedSets >= exercise.sets;
 
   const totalSetsInWorkout = exercises.reduce((acc, e) => acc + e.sets, 0);
@@ -65,10 +68,16 @@ export function Workout() {
   const handleCompleteSet = () => {
     completeSet(exercise.id, exercise.sets);
     const newCompleted = completedSets + 1;
-    if (newCompleted < exercise.sets) {
+    if (!isCardio && newCompleted < exercise.sets) {
       setResting(true);
     }
   };
+
+  const exerciseSummary = isCardio
+    ? `${totalCardioMinutes || exercise.sets} min • ${(cardioBlocks.map((b) => b.intensity).filter(Boolean).join(' + ') || 'Moderado')}`
+    : exercise.setRows?.length
+      ? exercise.setRows.map((row, index) => `${index + 1}ª ${row.reps}`).join(' / ') + ' reps'
+      : `${exercise.sets} series x ${exercise.repsMin}-${exercise.repsMax} reps`;
 
   const handleNext = () => {
     if (isLastExercise) {
@@ -183,9 +192,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
             <h1 className="text-2xl font-bold leading-tight">{exercise.name}</h1>
-            <p className="text-white/40 text-sm mt-1">
-              {exercise.sets} séries × {exercise.repsMin}–{exercise.repsMax} reps
-            </p>
+            <p className="text-white/40 text-sm mt-1">{exerciseSummary}</p>
           </div>
           <ExerciseInfo exercise={exercise} />
         </div>
@@ -203,7 +210,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
 
         {/* Sets Visual */}
         <div className="flex-1 flex flex-col items-center justify-center gap-6 mt-4">
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap justify-center">
             {Array.from({ length: exercise.sets }).map((_, i) => (
               <motion.div
                 key={i}
@@ -212,18 +219,28 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
                   scale: i < completedSets ? 1.1 : 1,
                   backgroundColor: i < completedSets ? 'rgb(var(--color-primary-rgb))' : 'rgb(var(--color-bg-card-rgb))',
                 }}
-                className="w-14 h-14 rounded-xl flex items-center justify-center border border-white/10"
+                className="min-w-14 h-14 px-3 rounded-xl flex items-center justify-center border border-white/10"
               >
                 <span className="text-lg font-bold">
-                  {i < completedSets ? '✓' : i + 1}
+                  {i < completedSets ? 'OK' : isCardio ? `${cardioBlocks[i]?.minutes || totalCardioMinutes || exercise.sets}m` : exercise.setRows?.[i]?.reps || i + 1}
                 </span>
               </motion.div>
             ))}
           </div>
 
           <p className="text-white/30 text-sm">
-            {completedSets}/{exercise.sets} séries concluídas
+            {isCardio ? `${completedSets}/${exercise.sets} blocos concluidos` : `${completedSets}/${exercise.sets} series concluidas`}
           </p>
+          {isCardio && cardioBlocks.length > 0 && (
+            <div className="w-full space-y-2">
+              {cardioBlocks.map((block, index) => (
+                <div key={index} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+                  <span className="text-xs text-white/45">Bloco {index + 1}</span>
+                  <span className="text-sm font-semibold text-white/75">{block.minutes} min - {block.intensity}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Notes */}
@@ -243,7 +260,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
               onClick={handleCompleteSet}
               className="btn-primary text-xl py-5"
             >
-              Série feita! 💪
+              {isCardio ? 'Bloco concluido!' : 'Serie feita!'}
             </motion.button>
           ) : (
             <motion.button
