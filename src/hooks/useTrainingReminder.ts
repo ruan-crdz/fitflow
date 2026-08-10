@@ -37,7 +37,7 @@ function sendReminder() {
   // Schedule notification for later (simulate with a 2-hour delay if app stays open)
   // For now, show immediate reminder that today is training day
   try {
-    new Notification('FitFlow 💪', {
+    new Notification('GymPilot 💪', {
       body: 'Hoje é dia de treino! Bora se dedicar? 🔥',
       icon: '/fitflow/icons/icon-192.png',
       badge: '/fitflow/icons/icon-192.png',

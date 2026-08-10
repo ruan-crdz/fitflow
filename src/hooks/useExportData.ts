@@ -25,7 +25,7 @@ export function useExportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `fitflow-dados-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `gympilot-dados-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

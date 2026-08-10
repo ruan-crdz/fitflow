@@ -17,7 +17,7 @@ export function SplashScreen() {
         transition={{ delay: 0.3 }}
         className="text-3xl font-bold mt-6 bg-gradient-to-r from-primary-400 to-primary-200 bg-clip-text text-transparent"
       >
-        FitFlow
+        GymPilot
       </motion.h1>
       <motion.p
         initial={{ opacity: 0 }}

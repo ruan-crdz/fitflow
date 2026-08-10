@@ -10,7 +10,7 @@ import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import type { Profile } from '@/types';
 
-const SYSTEM_PROMPT = `Você é a FlowAI, assistente fitness pessoal integrada ao app FitFlow.
+const SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
 Você é direta, motivadora e científica. Responde em português brasileiro.
 Seu tom é como uma personal trainer amiga: próxima, encorajadora, mas embasada.
 

@@ -306,7 +306,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
             className="fixed inset-x-0 bottom-0 z-50 bg-dark-100 border-t border-white/10 rounded-t-3xl p-5 max-h-[60vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-primary-300">🤖 FlowAI — Treinando</span>
+              <span className="text-sm font-semibold text-primary-300">🤖 GymPilot AI — Treinando</span>
               <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg">✕</button>
             </div>
             {aiAnswer && (

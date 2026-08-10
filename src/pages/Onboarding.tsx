@@ -69,7 +69,7 @@ export function Onboarding() {
                 💪
               </motion.span>
               <div>
-                <h1 className="text-3xl font-bold mb-2">FitFlow</h1>
+                <h1 className="text-3xl font-bold mb-2">GymPilot</h1>
                 <p className="text-white/50">Seu treino inteligente e personalizado</p>
               </div>
               <button className="btn-primary" onClick={() => setStep('tour1')}>

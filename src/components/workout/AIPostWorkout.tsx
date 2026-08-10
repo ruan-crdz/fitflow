@@ -84,7 +84,7 @@ Acabou de treinar: ${workout.focus}, ${durationMin}min.`
       >
         <div className="flex items-center gap-2">
           <span className="text-xs">🤖</span>
-          <span className="text-[10px] font-semibold text-primary-300">FlowAI Feedback</span>
+          <span className="text-[10px] font-semibold text-primary-300">GymPilot AI Feedback</span>
         </div>
         <p className="text-sm text-white/70 leading-relaxed">
           {loading ? <span className="animate-pulse">Analisando treino...</span> : feedback || 'Mandou bem! 💪'}

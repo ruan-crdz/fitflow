@@ -360,7 +360,7 @@ export function Profile() {
 
             {healthError && (
               <p className="text-xs text-yellow-300/80 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-                {healthError} Por enquanto, use entrada manual. Para sincronização automática, o FitFlow precisa estar empacotado como app iOS/Android.
+                {healthError} Por enquanto, use entrada manual. Para sincronização automática, o GymPilot precisa estar empacotado como app iOS/Android.
               </p>
             )}
 
@@ -405,7 +405,7 @@ export function Profile() {
           <div className="card space-y-3 border border-primary-500/20">
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
-              <h2 className="font-semibold text-white/80">FlowAI</h2>
+              <h2 className="font-semibold text-white/80">GymPilot AI</h2>
             </div>
             {isEnabled ? (
               <div className="space-y-3">
@@ -446,7 +446,7 @@ export function Profile() {
                   disabled={!aiKeyInput.startsWith('sk-')}
                   className="btn-primary py-3 text-sm"
                 >
-                  Ativar FlowAI ⚡
+                  Ativar GymPilot AI ⚡
                 </button>
               </div>
             )}

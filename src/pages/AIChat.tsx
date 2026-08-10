@@ -160,7 +160,7 @@ export function AIChat() {
               <span className="text-base">🤖</span>
             </div>
             <div>
-              <h1 className="font-bold">FlowAI</h1>
+              <h1 className="font-bold">GymPilot AI</h1>
               <p className="text-[10px] text-white/30">Assistente fitness pessoal</p>
             </div>
           </div>

@@ -26,17 +26,17 @@ export function ShareCard({ workoutType, durationMs, rating }: ShareCardProps) {
         canvas.toBlob((b) => resolve(b!), 'image/png')
       );
 
-      if (navigator.share && navigator.canShare({ files: [new File([blob], 'fitflow.png', { type: 'image/png' })] })) {
+      if (navigator.share && navigator.canShare({ files: [new File([blob], 'gympilot.png', { type: 'image/png' })] })) {
         await navigator.share({
-          files: [new File([blob], 'fitflow-treino.png', { type: 'image/png' })],
-          title: 'FitFlow',
+          files: [new File([blob], 'gympilot-treino.png', { type: 'image/png' })],
+          title: 'GymPilot',
           text: `${workout.label} concluído! 💪`,
         });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'fitflow-treino.png';
+        a.download = 'gympilot-treino.png';
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -70,7 +70,7 @@ export function ShareCard({ workoutType, durationMs, rating }: ShareCardProps) {
             )}
           </div>
           <div className="pt-2 border-t border-white/10">
-            <p className="text-[10px] text-white/30">FitFlow 💪</p>
+            <p className="text-[10px] text-white/30">GymPilot 💪</p>
           </div>
         </div>
       </div>

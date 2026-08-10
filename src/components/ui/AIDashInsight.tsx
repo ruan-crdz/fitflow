@@ -46,7 +46,7 @@ export function AIDashInsight() {
         messages: [
           {
             role: 'system',
-            content: 'Você é a FlowAI, assistente fitness. Dê UM insight personalizado e motivador (máx 2 frases curtas) baseado nos dados. Use 1 emoji. Seja direta e positiva.',
+            content: 'Você é a GymPilot AI, assistente fitness. Dê UM insight personalizado e motivador (máx 2 frases curtas) baseado nos dados. Use 1 emoji. Seja direta e positiva.',
           },
           {
             role: 'user',
@@ -79,7 +79,7 @@ export function AIDashInsight() {
     >
       <div className="flex items-center gap-2">
         <span className="text-sm">🤖</span>
-        <span className="text-xs font-semibold text-primary-300">FlowAI Insight</span>
+        <span className="text-xs font-semibold text-primary-300">GymPilot AI Insight</span>
       </div>
       <p className="text-sm text-white/70 leading-relaxed">
         {loading ? (

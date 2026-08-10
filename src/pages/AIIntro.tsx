@@ -11,7 +11,7 @@ export function AIIntro() {
   const [step, setStep] = useState(0);
 
   const lines = [
-    'Inicializando FlowAI...',
+    'Inicializando GymPilot AI...',
     'Conectando à inteligência artificial...',
     'Sistemas online.',
     `Olá, ${profile?.name || 'usuária'}. Prazer em conhecê-la.`,

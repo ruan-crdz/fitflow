@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
       manifest: {
-        name: 'FitFlow',
-        short_name: 'FitFlow',
+        name: 'GymPilot',
+        short_name: 'GymPilot',
         description: 'Seu treino inteligente e prático',
         theme_color: '#e5a100',
         background_color: '#0f0f0f',
