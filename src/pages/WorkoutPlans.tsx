@@ -1171,7 +1171,18 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center px-6"
           >
- <button onClick={() => { setShowAIBuilder(false); setAISwapList([]); setAIAddSuggestion(null); }} className="absolute top-12 right-5 text-white/40 text-xl"></button>
+              <button
+                onClick={() => {
+                  setShowAIBuilder(false);
+                  setAILoading(false);
+                  setAISwapList([]);
+                  setAIAddSuggestion(null);
+                }}
+                className="absolute top-12 right-5 w-10 h-10 rounded-full bg-white/5 border border-white/10 text-white/50 flex items-center justify-center"
+                aria-label="Fechar análise da IA"
+              >
+                <MaterialIcon name="close" className="text-xl" />
+              </button>
  <p className="text-sm text-primary-300 font-semibold mb-6"> IA analisando seu treino</p>
 
             {/* Loading */}

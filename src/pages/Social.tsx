@@ -326,6 +326,24 @@ export function Social() {
   }, [session?.user.id]);
 
   useEffect(() => {
+    if (!session || !supabase || !socialReady) return;
+    const interval = window.setInterval(() => {
+      void refreshFeed();
+      void refreshRanking();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [session?.user.id, socialReady]);
+
+  useEffect(() => {
+    if (!session || !supabase || !socialReady || !chatPeerId) return;
+    const interval = window.setInterval(() => {
+      void refreshMessages();
+      void refreshChatPreferences();
+    }, 1500);
+    return () => window.clearInterval(interval);
+  }, [session?.user.id, socialReady, chatPeerId]);
+
+  useEffect(() => {
     const term = searchUsername.trim();
     if (!session || socialMode !== 'feed') return;
     if (term.length < 2) {
