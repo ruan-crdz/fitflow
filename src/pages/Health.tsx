@@ -617,7 +617,10 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
                   {/* Ingredient rows */}
                   <div className="space-y-3">
-                    <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider flex items-center gap-1"><MaterialIcon name="restaurant_menu" /> Ingredientes</p>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider flex items-center gap-1"><MaterialIcon name="restaurant_menu" /> Ingredientes</p>
+                      <p className="text-[11px] text-white/35">Kcal é opcional: preencha se souber; se deixar vazio, a IA calcula.</p>
+                    </div>
                     {ingredients.map((ing, idx) => (
                       <div key={idx} className="flex items-center gap-2 flex-wrap">
                         <input
@@ -652,7 +655,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                             next[idx] = { ...next[idx], unit: e.target.value as IngredientUnit };
                             setIngredients(next);
                           }}
-                          className="input-field text-xs w-20 px-2 text-center"
+                          className="input-field h-12 text-xs w-20 px-2 text-center appearance-none"
                         >
                           {FOOD_UNITS.map((unit) => (
                             <option key={unit.value} value={unit.value} className="bg-dark-200">
