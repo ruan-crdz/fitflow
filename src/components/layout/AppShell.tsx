@@ -13,13 +13,18 @@ export function AppShell({ children }: AppShellProps) {
   const navigate = useNavigate();
   const aiEnabled = useAIStore((s) => s.isEnabled);
 
-  const hideNav = location.pathname.startsWith('/workout') || location.pathname === '/ai/intro' || location.pathname === '/setup-ai' || location.pathname === '/plans/reeval';
+  const hideNav = location.pathname.startsWith('/workout')
+    || location.pathname === '/ai/intro'
+    || location.pathname === '/setup-ai'
+    || location.pathname === '/plans/reeval';
+
   if (hideNav) return <><ToastContainer />{children}</>;
 
   const navItems = [
-    { path: '/dashboard', icon: '🏠', label: 'Início' },
+    { path: '/dashboard', icon: '🏠', label: 'Inicio' },
     { path: '/plans', icon: '💪', label: 'Treino' },
-    { path: '/health', icon: '🍎', label: 'Saúde' },
+    { path: '/health', icon: '🍎', label: 'Saude' },
+    { path: '/social', icon: '👥', label: 'Social' },
     ...(aiEnabled ? [{ path: '/ai', icon: '⚡', label: 'IA' }] : []),
     { path: '/profile', icon: '👤', label: 'Perfil' },
   ];
@@ -31,7 +36,6 @@ export function AppShell({ children }: AppShellProps) {
         {children}
       </main>
 
-      {/* Bottom Navigation - iOS-style with spring physics */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 safe-area-bottom">
         <div className="mx-3 mb-3 rounded-[22px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/[0.08] shadow-[0_-4px_30px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
           <div className="flex justify-around items-center h-[68px] max-w-lg mx-auto px-2 relative">
@@ -42,7 +46,7 @@ export function AppShell({ children }: AppShellProps) {
                   key={item.path}
                   onClick={() => navigate(item.path)}
                   whileTap={{ scale: 0.85 }}
-                  className="relative flex flex-col items-center justify-center w-16 h-14 rounded-2xl"
+                  className="relative flex flex-col items-center justify-center w-14 h-14 rounded-2xl"
                 >
                   {isActive && (
                     <motion.div
@@ -54,13 +58,13 @@ export function AppShell({ children }: AppShellProps) {
                   <motion.span
                     animate={{ scale: isActive ? 1.15 : 1, y: isActive ? -1 : 0 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                    className={`text-[22px] ${isActive ? '' : 'grayscale opacity-50'}`}
+                    className={`text-[21px] ${isActive ? '' : 'grayscale opacity-50'}`}
                   >
                     {item.icon}
                   </motion.span>
                   <motion.span
                     animate={{ opacity: isActive ? 1 : 0.4, y: isActive ? 0 : 1 }}
-                    className={`text-[10px] font-bold mt-0.5 ${isActive ? 'text-primary-400' : 'text-white/40'}`}
+                    className={`text-[9px] font-bold mt-0.5 ${isActive ? 'text-primary-400' : 'text-white/40'}`}
                   >
                     {item.label}
                   </motion.span>

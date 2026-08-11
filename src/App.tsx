@@ -18,6 +18,7 @@ import { AIChat } from '@/pages/AIChat';
 import { AISetup } from '@/pages/AISetup';
 import { AIReeval } from '@/pages/AIReeval';
 import { Health } from '@/pages/Health';
+import { Social } from '@/pages/Social';
 
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
@@ -67,6 +68,7 @@ export function App() {
             <Route path="/plans" element={<WorkoutPlans />} />
             <Route path="/plans/reeval" element={<AIReeval />} />
             <Route path="/health" element={<Health />} />
+            <Route path="/social" element={<Social />} />
             <Route path="/setup-ai" element={<AISetup />} />
             <Route path="/ai/intro" element={<AIIntro />} />
             <Route path="/ai" element={<AIChat />} />
