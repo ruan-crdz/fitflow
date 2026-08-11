@@ -46,6 +46,7 @@ interface Friendship {
   requester_id: string;
   addressee_id: string;
   status: 'pending' | 'accepted' | 'blocked';
+  deleted_at?: string | null;
 }
 
 interface Post {
@@ -53,6 +54,7 @@ interface Post {
   user_id: string;
   body: string | null;
   comments_enabled?: boolean;
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -73,6 +75,7 @@ interface Comment {
   post_id: string;
   user_id: string;
   body: string;
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -221,11 +224,14 @@ export function Social() {
   const [showConversations, setShowConversations] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
+  const [deletedPostUndo, setDeletedPostUndo] = useState<Post | null>(null);
 
   const [postBody, setPostBody] = useState('');
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [postMenuOpenId, setPostMenuOpenId] = useState<string | null>(null);
   const [postFiles, setPostFiles] = useState<File[]>([]);
+  const [mentionSearch, setMentionSearch] = useState('');
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
@@ -245,11 +251,11 @@ export function Social() {
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
-    .filter((f) => f.status === 'accepted')
+    .filter((f) => f.status === 'accepted' && !f.deleted_at)
     .map((f) => (f.requester_id === currentUserId ? f.addressee_id : f.requester_id)), [friendships, currentUserId]);
-  const incoming = friendships.filter((f) => f.status === 'pending' && f.addressee_id === currentUserId);
+  const incoming = friendships.filter((f) => f.status === 'pending' && f.addressee_id === currentUserId && !f.deleted_at);
   const selectedProfile = viewProfileId ? profiles[viewProfileId] : profile;
-  const feedPosts = posts.filter((post) => feedMode === 'general' || post.user_id === currentUserId || acceptedFriendIds.includes(post.user_id));
+  const feedPosts = posts.filter((post) => !post.deleted_at && (feedMode === 'general' || post.user_id === currentUserId || acceptedFriendIds.includes(post.user_id)));
   const inboxShares = shares.filter((s) => s.receiver_id === currentUserId);
   const conversations = useMemo(() => acceptedFriendIds
     .map((friendId) => {
@@ -465,7 +471,7 @@ export function Social() {
 
   async function refreshFriends() {
     if (!supabase) return;
-    const { data } = await supabase.from('friendships').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('friendships').select('*').is('deleted_at', null).order('created_at', { ascending: false });
     const list = (data || []) as Friendship[];
     setFriendships(list);
     await loadProfiles(list.flatMap((f) => [f.requester_id, f.addressee_id]));
@@ -474,10 +480,10 @@ export function Social() {
   async function refreshFeed() {
     if (!supabase) return;
     const [{ data: postData }, { data: imageData }, { data: likeData }, { data: commentData }, { data: commentLikeData }] = await Promise.all([
-      supabase.from('social_posts').select('*').order('created_at', { ascending: false }).limit(100),
+      supabase.from('social_posts').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(100),
       supabase.from('social_post_images').select('*').order('position', { ascending: true }),
       supabase.from('social_post_likes').select('*'),
-      supabase.from('social_post_comments').select('*').order('created_at', { ascending: true }),
+      supabase.from('social_post_comments').select('*').is('deleted_at', null).order('created_at', { ascending: true }),
       supabase.from('social_post_comment_likes').select('*'),
     ]);
     const postList = (postData || []) as Post[];
@@ -675,10 +681,27 @@ export function Social() {
 
   async function deletePost(postId: string) {
     if (!supabase || !session) return;
-    const { error } = await supabase.from('social_posts').delete().eq('id', postId).eq('user_id', session.user.id);
+    const post = posts.find((item) => item.id === postId) || null;
+    const { error } = await supabase.from('social_posts').update({ deleted_at: new Date().toISOString() }).eq('id', postId).eq('user_id', session.user.id);
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
+      setDeletedPostUndo(post);
       toast('Post excluído.', 'success');
+      await refreshFeed();
+    }
+  }
+
+  async function undoDeletePost() {
+    if (!supabase || !session || !deletedPostUndo) return;
+    const { error } = await supabase
+      .from('social_posts')
+      .update({ deleted_at: null })
+      .eq('id', deletedPostUndo.id)
+      .eq('user_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      setDeletedPostUndo(null);
+      toast('Post restaurado.', 'success');
       await refreshFeed();
     }
   }
@@ -759,7 +782,7 @@ export function Social() {
     const post = posts.find((item) => item.id === comment.post_id);
     const canDelete = comment.user_id === session.user.id || post?.user_id === session.user.id;
     if (!canDelete) return;
-    const { error } = await supabase.from('social_post_comments').delete().eq('id', comment.id);
+    const { error } = await supabase.from('social_post_comments').update({ deleted_at: new Date().toISOString() }).eq('id', comment.id);
     if (error) toast(ptSupabaseError(error.message), 'error');
     else await refreshFeed();
   }
@@ -814,7 +837,7 @@ export function Social() {
       setProfiles((prev) => ({ ...prev, [data.id]: data as SocialProfile }));
     }
     if (addresseeId === session.user.id) {
-      toast('Esse perfil e seu.', 'info');
+      toast('Esse perfil é seu.', 'info');
       return;
     }
     if (!addresseeId) return;
@@ -824,15 +847,27 @@ export function Social() {
       addressee_id: addresseeId,
       status: targetProfile?.is_private ? 'pending' : 'accepted',
     });
-    if (error) toast('Pedido já existe ou não foi possível enviar.', 'error');
-    else {
-      toast(targetProfile?.is_private ? 'Solicitação enviada!' : 'Amigo adicionado!', 'success');
-      setSearchUsername('');
-      setSearchResults([]);
-      setSearchTouched(false);
-      setSearchLoading(false);
-      await refreshFriends();
+    if (error) {
+      const revived = await supabase
+        .from('friendships')
+        .update({
+          deleted_at: null,
+          status: targetProfile?.is_private ? 'pending' : 'accepted',
+          updated_at: new Date().toISOString(),
+        })
+        .or(`and(requester_id.eq.${session.user.id},addressee_id.eq.${addresseeId}),and(requester_id.eq.${addresseeId},addressee_id.eq.${session.user.id})`)
+        .select('*');
+      if (revived.error || !revived.data?.length) {
+        toast('Pedido já existe ou não foi possível enviar.', 'error');
+        return;
+      }
     }
+    toast(targetProfile?.is_private ? 'Solicitação enviada!' : 'Amigo adicionado!', 'success');
+    setSearchUsername('');
+    setSearchResults([]);
+    setSearchTouched(false);
+    setSearchLoading(false);
+    await refreshFriends();
   }
 
   async function searchProfiles(query = searchUsername.trim()) {
@@ -878,12 +913,20 @@ export function Social() {
 
   async function removeFriendship(id: string) {
     if (!supabase) return;
-    const { error } = await supabase.from('friendships').delete().eq('id', id);
-    if (error) toast(ptSupabaseError(error.message), 'error');
-    else {
-      toast('Amizade removida.', 'success');
-      await refreshFriends();
+    const { data, error } = await supabase.from('friendships').update({ deleted_at: new Date().toISOString() }).eq('id', id).select('id');
+    if (error) {
+      const fallback = await supabase.from('friendships').update({ status: 'blocked', updated_at: new Date().toISOString() }).eq('id', id).select('id');
+      if (fallback.error || !fallback.data?.length) {
+        toast(ptSupabaseError(error.message), 'error');
+        return;
+      }
+    } else if (!data?.length) {
+      toast('Não consegui remover essa amizade. Rode o SQL de upgrade no Supabase.', 'error');
+      return;
     }
+    setFriendships((prev) => prev.filter((friendship) => friendship.id !== id));
+    toast('Amizade removida.', 'success');
+    await refreshFriends();
   }
 
   function openChat(peerId: string) {
@@ -1036,6 +1079,27 @@ export function Social() {
     const shouldSignOut = window.confirm('Sair da conta? Você vai precisar entrar novamente para usar o Social.');
     if (!shouldSignOut) return;
     await supabase.auth.signOut();
+  }
+
+  const mentionMatch = postBody.match(/@([a-z0-9_]*)$/i);
+  const mentionTerm = (mentionSearch || mentionMatch?.[1] || '').toLowerCase();
+  const mentionCandidates = acceptedFriendIds
+    .map((id) => profiles[id])
+    .filter(Boolean)
+    .filter((item) => (
+      !mentionTerm
+      || item.username.toLowerCase().includes(mentionTerm)
+      || item.display_name.toLowerCase().includes(mentionTerm)
+    ))
+    .slice(0, 8);
+
+  function insertMention(username: string) {
+    if (mentionMatch) {
+      setPostBody((body) => body.replace(/@([a-z0-9_]*)$/i, `@${username} `));
+    } else {
+      setPostBody((body) => `${body}${body.endsWith(' ') || !body ? '' : ' '}@${username} `);
+    }
+    setMentionSearch('');
   }
 
   if (!isSupabaseConfigured || !supabase) {
@@ -1281,6 +1345,11 @@ export function Social() {
 
   if (selectedProfile && viewProfileId) {
     const isMine = selectedProfile.id === currentUserId;
+    const profileFollowers = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.addressee_id === selectedProfile.id && !friendship.deleted_at);
+    const profileFollowing = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.requester_id === selectedProfile.id && !friendship.deleted_at);
+    const profileList = (profileListMode === 'followers' ? profileFollowers : profileFollowing)
+      .map((friendship) => profiles[profileListMode === 'followers' ? friendship.requester_id : friendship.addressee_id])
+      .filter(Boolean);
     return (
       <div className="px-5 pt-14 pb-6 space-y-5">
         <div className="flex items-center justify-between">
@@ -1322,6 +1391,35 @@ export function Social() {
             </div>
           )}
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setProfileListMode(profileListMode === 'followers' ? null : 'followers')} className="rounded-2xl bg-white/5 border border-white/5 p-4 text-center">
+            <p className="text-2xl font-black text-primary-300">{profileFollowers.length}</p>
+            <p className="text-xs text-white/40">Seguidores</p>
+          </button>
+          <button onClick={() => setProfileListMode(profileListMode === 'following' ? null : 'following')} className="rounded-2xl bg-white/5 border border-white/5 p-4 text-center">
+            <p className="text-2xl font-black text-primary-300">{profileFollowing.length}</p>
+            <p className="text-xs text-white/40">Seguindo</p>
+          </button>
+        </div>
+
+        {profileListMode && (
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-3 space-y-2">
+            <p className="text-xs font-black uppercase tracking-wide text-white/40">
+              {profileListMode === 'followers' ? 'Seguidores' : 'Seguindo'}
+            </p>
+            {profileList.map((item) => (
+              <button key={item.id} onClick={() => setViewProfileId(item.id)} className="w-full flex items-center gap-3 text-left rounded-2xl bg-white/5 p-2">
+                <Avatar profile={item} size="sm" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">{item.display_name}</p>
+                  <p className="text-xs text-white/35 truncate">@{item.username}</p>
+                </div>
+              </button>
+            ))}
+            {profileList.length === 0 && <p className="text-sm text-white/35">Nada por aqui ainda.</p>}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           {visibleStats(selectedProfile).map((stat) => (
@@ -1520,6 +1618,14 @@ export function Social() {
       )}
 
       <div className="space-y-3">
+        {deletedPostUndo && (
+          <div className="rounded-2xl bg-primary-500/10 border border-primary-500/25 p-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-primary-100">Publicação apagada.</p>
+            <button onClick={undoDeletePost} className="px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-bold">
+              Desfazer
+            </button>
+          </div>
+        )}
         {feedPosts.map((post) => {
           const author = profiles[post.user_id];
           const postImages = images.filter((img) => img.post_id === post.id);
@@ -1601,7 +1707,12 @@ export function Social() {
                       const likedComment = likesForComment.some((like) => like.user_id === currentUserId);
 
                       return (
-                        <div key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60 space-y-2">
+                        <div key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60">
+                          <div className="flex items-start gap-2">
+                            <button onClick={() => setViewProfileId(comment.user_id)} className="shrink-0">
+                              <Avatar profile={profiles[comment.user_id]} size="sm" />
+                            </button>
+                            <div className="min-w-0 flex-1 space-y-2">
                           {editingCommentId === comment.id ? (
                             <div className="space-y-2">
                               <textarea
@@ -1643,6 +1754,8 @@ export function Social() {
                               </div>
                             </>
                           )}
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -1689,6 +1802,31 @@ export function Social() {
               <button onClick={() => { setShowPostModal(false); setEditingPostId(null); setPostBody(''); setPostFiles([]); }} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
             </div>
             <textarea value={postBody} onChange={(e) => setPostBody(e.target.value)} className="input-field text-sm min-h-28 resize-none" placeholder="Escreva alguma coisa..." />
+            {(mentionMatch || mentionSearch) && (
+              <div className="rounded-2xl bg-white/5 border border-white/10 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="alternate_email" className="text-primary-300" />
+                  <input
+                    value={mentionSearch || mentionMatch?.[1] || ''}
+                    onChange={(e) => setMentionSearch(normalizeUsername(e.target.value))}
+                    className="input-field text-xs h-10"
+                    placeholder="Buscar amigo para marcar"
+                  />
+                </div>
+                <div className="max-h-36 overflow-y-auto space-y-1">
+                  {mentionCandidates.map((candidate) => (
+                    <button key={candidate.id} onClick={() => insertMention(candidate.username)} className="w-full flex items-center gap-2 rounded-xl px-2 py-2 text-left bg-white/5">
+                      <Avatar profile={candidate} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                        <p className="text-[10px] text-white/35 truncate">@{candidate.username}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {mentionCandidates.length === 0 && <p className="text-xs text-white/35 px-2 py-1">Nenhum amigo encontrado.</p>}
+                </div>
+              </div>
+            )}
             {postPreviews.length > 0 && (
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
                 {postPreviews.map((preview, index) => (

@@ -13,6 +13,29 @@ alter table public.social_profiles
   add column if not exists show_weight_progress boolean not null default false,
   add column if not exists show_today_workout boolean not null default true;
 
+alter table public.friendships
+  add column if not exists deleted_at timestamptz;
+
+drop policy if exists "friendships visible to both users" on public.friendships;
+drop policy if exists "users request friendships" on public.friendships;
+drop policy if exists "users update received or sent friendships" on public.friendships;
+
+create policy "friendships visible to both users"
+  on public.friendships for select
+  to authenticated
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+create policy "users request friendships"
+  on public.friendships for insert
+  to authenticated
+  with check (auth.uid() = requester_id);
+
+create policy "users update received or sent friendships"
+  on public.friendships for update
+  to authenticated
+  using (auth.uid() = requester_id or auth.uid() = addressee_id)
+  with check (auth.uid() = requester_id or auth.uid() = addressee_id);
+
 create or replace function public.handle_new_social_user()
 returns trigger
 language plpgsql
@@ -170,6 +193,7 @@ create policy "friends send direct messages"
       select 1
       from public.friendships f
       where f.status = 'accepted'
+        and f.deleted_at is null
         and (
           (f.requester_id = sender_id and f.addressee_id = receiver_id)
           or (f.requester_id = receiver_id and f.addressee_id = sender_id)
@@ -208,6 +232,10 @@ create index if not exists social_messages_receiver_sender_idx
 create index if not exists social_chat_preferences_user_idx
   on public.social_chat_preferences (user_id, is_pinned desc, is_archived, updated_at desc);
 
+create index if not exists friendships_active_users_idx
+  on public.friendships (requester_id, addressee_id, status)
+  where deleted_at is null;
+
 create table if not exists public.social_posts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.social_profiles(id) on delete cascade,
@@ -217,7 +245,8 @@ create table if not exists public.social_posts (
 );
 
 alter table public.social_posts
-  add column if not exists comments_enabled boolean not null default true;
+  add column if not exists comments_enabled boolean not null default true,
+  add column if not exists deleted_at timestamptz;
 
 create table if not exists public.social_post_images (
   id uuid primary key default gen_random_uuid(),
@@ -240,6 +269,9 @@ create table if not exists public.social_post_comments (
   body text not null check (char_length(body) <= 1000),
   created_at timestamptz not null default now()
 );
+
+alter table public.social_post_comments
+  add column if not exists deleted_at timestamptz;
 
 create table if not exists public.social_post_comment_likes (
   comment_id uuid not null references public.social_post_comments(id) on delete cascade,
@@ -266,6 +298,7 @@ drop policy if exists "users remove own likes" on public.social_post_likes;
 drop policy if exists "comments public readable" on public.social_post_comments;
 drop policy if exists "users comment as themselves" on public.social_post_comments;
 drop policy if exists "users update own comments" on public.social_post_comments;
+drop policy if exists "users update own or received comments" on public.social_post_comments;
 drop policy if exists "users delete own comments" on public.social_post_comments;
 drop policy if exists "users delete own or received comments" on public.social_post_comments;
 drop policy if exists "comment likes public readable" on public.social_post_comment_likes;
@@ -336,11 +369,27 @@ create policy "users comment as themselves"
     )
   );
 
-create policy "users update own comments"
+create policy "users update own or received comments"
   on public.social_post_comments for update
   to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or exists (
+      select 1
+      from public.social_posts p
+      where p.id = post_id
+        and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    auth.uid() = user_id
+    or exists (
+      select 1
+      from public.social_posts p
+      where p.id = post_id
+        and p.user_id = auth.uid()
+    )
+  );
 
 create policy "users delete own or received comments"
   on public.social_post_comments for delete
@@ -375,6 +424,14 @@ create index if not exists social_post_comments_post_idx
 
 create index if not exists social_post_comment_likes_comment_idx
   on public.social_post_comment_likes (comment_id, created_at desc);
+
+create index if not exists social_posts_active_created_idx
+  on public.social_posts (created_at desc)
+  where deleted_at is null;
+
+create index if not exists social_post_comments_active_post_idx
+  on public.social_post_comments (post_id, created_at asc)
+  where deleted_at is null;
 
 insert into storage.buckets (id, name, public)
 values ('social-posts', 'social-posts', true)
