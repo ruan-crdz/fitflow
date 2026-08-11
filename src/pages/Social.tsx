@@ -68,6 +68,7 @@ interface PostImage {
 interface Like {
   post_id: string;
   user_id: string;
+  created_at?: string;
 }
 
 interface Comment {
@@ -225,9 +226,11 @@ export function Social() {
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [chatPeerId, setChatPeerId] = useState<string | null>(null);
   const [showConversations, setShowConversations] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
+  const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
   const [deletedPostUndo, setDeletedPostUndo] = useState<Post | null>(null);
 
   const [postBody, setPostBody] = useState('');
@@ -303,6 +306,72 @@ export function Social() {
     .map((stats) => ({ stats, profile: profiles[stats.user_id] }))
     .filter((row) => row.profile)
     .sort((a, b) => b.stats.consistency_count - a.stats.consistency_count);
+  const notifications = useMemo(() => {
+    if (!currentUserId || !profile) return [];
+    const myUsername = profile.username.toLowerCase();
+    const mentionPattern = new RegExp(`(^|\\s)@${myUsername}(?=\\s|$|[.,!?])`, 'i');
+    const items: {
+      id: string;
+      type: 'like' | 'comment' | 'mention';
+      userId: string;
+      postId: string;
+      text: string;
+      createdAt: string;
+    }[] = [];
+
+    likes.forEach((like) => {
+      const post = posts.find((item) => item.id === like.post_id);
+      if (post?.user_id === currentUserId && like.user_id !== currentUserId) {
+        items.push({
+          id: `like-${like.post_id}-${like.user_id}`,
+          type: 'like',
+          userId: like.user_id,
+          postId: like.post_id,
+          text: 'curtiu sua publicação',
+          createdAt: like.created_at || post.created_at,
+        });
+      }
+    });
+
+    comments.forEach((comment) => {
+      const post = posts.find((item) => item.id === comment.post_id);
+      if (post?.user_id === currentUserId && comment.user_id !== currentUserId) {
+        items.push({
+          id: `comment-${comment.id}`,
+          type: 'comment',
+          userId: comment.user_id,
+          postId: comment.post_id,
+          text: 'comentou na sua publicação',
+          createdAt: comment.created_at,
+        });
+      }
+      if (comment.user_id !== currentUserId && mentionPattern.test(comment.body)) {
+        items.push({
+          id: `mention-comment-${comment.id}`,
+          type: 'mention',
+          userId: comment.user_id,
+          postId: comment.post_id,
+          text: 'mencionou você em um comentário',
+          createdAt: comment.created_at,
+        });
+      }
+    });
+
+    posts.forEach((post) => {
+      if (post.user_id !== currentUserId && post.body && mentionPattern.test(post.body)) {
+        items.push({
+          id: `mention-post-${post.id}`,
+          type: 'mention',
+          userId: post.user_id,
+          postId: post.id,
+          text: 'mencionou você em uma publicação',
+          createdAt: post.created_at,
+        });
+      }
+    });
+
+    return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
+  }, [comments, currentUserId, likes, posts, profile]);
   const postPreviews = useMemo(() => postFiles.map((file) => ({
     name: file.name,
     type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -548,7 +617,11 @@ export function Social() {
     setLikes((likeData || []) as Like[]);
     setComments(commentList);
     setCommentLikes((commentLikeData || []) as CommentLike[]);
-    await loadProfiles([...postList.map((p) => p.user_id), ...commentList.map((c) => c.user_id)]);
+    await loadProfiles([
+      ...postList.map((p) => p.user_id),
+      ...(likeData || []).map((like: Like) => like.user_id),
+      ...commentList.map((c) => c.user_id),
+    ]);
   }
 
   async function refreshShares() {
@@ -1378,6 +1451,45 @@ export function Social() {
     );
   }
 
+  if (showNotifications) {
+    return (
+      <div className="px-5 pt-14 pb-28 space-y-5">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setShowNotifications(false)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
+          <h1 className="text-xl font-black">Notificações</h1>
+          <div className="w-11" />
+        </div>
+
+        <div className="space-y-2">
+          {notifications.map((notification) => {
+            const actor = profiles[notification.userId];
+            const icon = notification.type === 'like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : 'alternate_email';
+            return (
+              <div key={notification.id} className="rounded-3xl bg-white/5 border border-white/10 p-3 flex items-center gap-3">
+                <button onClick={() => setViewProfileId(notification.userId)} className="shrink-0">
+                  <Avatar profile={actor} size="sm" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-white/75">
+                    <button onClick={() => setViewProfileId(notification.userId)} className="font-black text-white">@{actor?.username || 'usuario'}</button> {notification.text}
+                  </p>
+                  <p className="text-[10px] text-white/30">{formatSocialDate(notification.createdAt)}</p>
+                </div>
+                <MaterialIcon name={icon} variant={notification.type === 'like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
+              </div>
+            );
+          })}
+          {notifications.length === 0 && (
+            <div className="card text-center space-y-2">
+              <h2 className="font-bold">Sem notificações</h2>
+              <p className="text-sm text-white/40">Curtidas, comentários e menções vão aparecer aqui.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (showConversations) {
     return (
       <div className="px-5 pt-14 pb-28 space-y-5">
@@ -1447,6 +1559,10 @@ export function Social() {
     const profileList = (profileListMode === 'followers' ? profileFollowers : profileFollowing)
       .map((friendship) => profiles[profileListMode === 'followers' ? friendship.requester_id : friendship.addressee_id])
       .filter(Boolean);
+    const selectedMentionPattern = new RegExp(`(^|\\s)@${selectedProfile.username}(?=\\s|$|[.,!?])`, 'i');
+    const ownProfilePosts = posts.filter((post) => post.user_id === selectedProfile.id);
+    const taggedProfilePosts = posts.filter((post) => post.user_id !== selectedProfile.id && Boolean(post.body && selectedMentionPattern.test(post.body)));
+    const profileGridPosts = profilePostMode === 'mine' ? ownProfilePosts : taggedProfilePosts;
     return (
       <div className="px-5 pt-14 pb-6 space-y-5">
         <div className="flex items-center justify-between">
@@ -1554,18 +1670,42 @@ export function Social() {
         )}
 
         <div className="space-y-3">
-          <h2 className="text-sm font-black uppercase tracking-wide text-white/45">Posts</h2>
-          {posts.filter((post) => post.user_id === selectedProfile.id).map((post) => {
+          <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+            <button
+              onClick={() => setProfilePostMode('mine')}
+              className={`py-2 rounded-full text-sm font-black flex items-center justify-center gap-2 ${profilePostMode === 'mine' ? 'bg-primary-500 text-white' : 'text-white/45'}`}
+            >
+              <MaterialIcon name="grid_on" className="text-base" />
+              Posts
+            </button>
+            <button
+              onClick={() => setProfilePostMode('tagged')}
+              className={`py-2 rounded-full text-sm font-black flex items-center justify-center gap-2 ${profilePostMode === 'tagged' ? 'bg-primary-500 text-white' : 'text-white/45'}`}
+            >
+              <MaterialIcon name="alternate_email" className="text-base" />
+              Marcado
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+          {profileGridPosts.map((post) => {
             const postImages = images.filter((img) => img.post_id === post.id);
             return (
-              <div key={post.id} className="rounded-3xl bg-white/5 border border-white/10 overflow-hidden text-left">
-                {postImages[0] && <img src={postImages[0].image_url} alt="" className="w-full h-64 object-cover bg-dark-200" />}
-                {post.body && <p className="p-4 text-sm text-white/75 whitespace-pre-wrap break-words">{post.body}</p>}
-              </div>
+              <button key={post.id} className="aspect-square rounded-lg bg-white/5 border border-white/5 overflow-hidden text-left active:opacity-80">
+                {postImages[0] ? (
+                  <img src={postImages[0].image_url} alt="" className="w-full h-full object-cover bg-dark-200" />
+                ) : (
+                  <div className="w-full h-full p-2 flex items-center justify-center">
+                    <p className="text-[10px] leading-tight text-white/55 line-clamp-5 break-words">{post.body || 'Post'}</p>
+                  </div>
+                )}
+              </button>
             );
           })}
-          {posts.filter((post) => post.user_id === selectedProfile.id).length === 0 && (
-            <p className="rounded-2xl bg-white/5 border border-white/10 p-4 text-sm text-white/35">Nenhum post ainda.</p>
+          </div>
+          {profileGridPosts.length === 0 && (
+            <p className="rounded-2xl bg-white/5 border border-white/10 p-4 text-sm text-white/35">
+              {profilePostMode === 'mine' ? 'Nenhum post ainda.' : 'Nenhuma marcação ainda.'}
+            </p>
           )}
         </div>
       </div>
@@ -1577,7 +1717,17 @@ export function Social() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-[26px] font-black leading-none">Social</h1>
-          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowNotifications(true)} className="relative w-10 h-10 rounded-full bg-white/5 text-white/60 flex items-center justify-center" aria-label="Notificações">
+              <MaterialIcon name="notifications" />
+              {notifications.length > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
+                  {notifications.length > 9 ? '9+' : notifications.length}
+                </span>
+              )}
+            </button>
+            <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          </div>
         </div>
         <button onClick={() => setViewProfileId(currentUserId)} className="flex w-full items-center gap-3 text-left rounded-3xl bg-white/5 border border-white/10 p-3 active:bg-white/10">
           <Avatar profile={profile} size="sm" />
