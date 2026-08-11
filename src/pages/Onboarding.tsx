@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus } from '@/types';
 
 type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'focus' | 'customSplit' | 'setup';
@@ -77,9 +78,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', delay: 0.2 }}
                 className="text-7xl block"
-              >
-                💪
-              </motion.span>
+              ><MaterialIcon name="fitness_center" className="text-7xl text-primary-300" /></motion.span>
               <div>
                 <h1 className="text-3xl font-bold mb-2">GymPilot</h1>
                 <p className="text-white/50">Seu treino inteligente e personalizado</p>
@@ -93,7 +92,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {/* Tour 1 */}
           {step === 'tour1' && (
             <div className="space-y-8 text-center">
-              <span className="text-6xl block">🏋️</span>
+              <MaterialIcon name="fitness_center" className="text-6xl text-primary-300 mx-auto" />
               <div>
                 <h2 className="text-2xl font-bold mb-2">Treinos Personalizados</h2>
                 <p className="text-white/50 leading-relaxed">
@@ -110,7 +109,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {/* Tour 2 */}
           {step === 'tour2' && (
             <div className="space-y-8 text-center">
-              <span className="text-6xl block">🤖</span>
+              <MaterialIcon name="smart_toy" className="text-6xl text-primary-300 mx-auto" />
               <div>
                 <h2 className="text-2xl font-bold mb-2">IA que te entende</h2>
                 <p className="text-white/50 leading-relaxed">
@@ -127,7 +126,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {/* Tour 3 */}
           {step === 'tour3' && (
             <div className="space-y-8 text-center">
-              <span className="text-6xl block">📊</span>
+              <MaterialIcon name="monitoring" className="text-6xl text-primary-300 mx-auto" />
               <div>
                 <h2 className="text-2xl font-bold mb-2">Acompanhe tudo</h2>
                 <p className="text-white/50 leading-relaxed">
@@ -145,7 +144,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'sex' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Sobre você 🧬</h1>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="star" className="text-primary-300" /> Sobre você </h1>
                 <p className="text-white/50">Para adaptar o treino à sua fisiologia</p>
               </div>
               <div className="space-y-3">
@@ -155,7 +154,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     sex === 'female' ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
                   }`}
                 >
-                  <span className="text-3xl">♀️</span>
+                  <MaterialIcon name="female" className="text-3xl text-primary-300" />
                   <div>
                     <span className="font-semibold text-lg">Feminino</span>
                     <p className="text-white/40 text-xs">Corpo biologicamente feminino</p>
@@ -167,7 +166,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     sex === 'male' ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
                   }`}
                 >
-                  <span className="text-3xl">♂️</span>
+                  <MaterialIcon name="male" className="text-3xl text-primary-300" />
                   <div>
                     <span className="font-semibold text-lg">Masculino</span>
                     <p className="text-white/40 text-xs">Corpo biologicamente masculino</p>
@@ -187,7 +186,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'name' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Olá! 👋</h1>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="star" className="text-primary-300" /> Olá! </h1>
                 <p className="text-white/50">Como posso te chamar?</p>
               </div>
               <input
@@ -212,7 +211,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'body' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Seus dados 📐</h1>
+                <h1 className="text-3xl font-bold mb-2 flex items-center gap-2 justify-center"><MaterialIcon name="straighten" className="text-primary-300" /> Seus dados</h1>
                 <p className="text-white/50">Para calcular suas necessidades</p>
               </div>
               <div className="space-y-4">
@@ -239,7 +238,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'goal' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Seu objetivo 🎯</h1>
+                <h1 className="text-3xl font-bold mb-2 flex items-center gap-2 justify-center"><MaterialIcon name="track_changes" className="text-primary-300" /> Seu objetivo</h1>
                 <p className="text-white/50">O que você quer alcançar?</p>
               </div>
               <div className="space-y-3">
@@ -251,7 +250,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                       goal === opt.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
                     }`}
                   >
-                    <span className="text-2xl">{opt.emoji}</span>
+                    <MaterialIcon name={opt.icon} className="text-2xl text-primary-300" />
                     <span className="font-medium text-lg">{opt.label}</span>
                   </button>
                 ))}
@@ -266,7 +265,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'experience' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Sua experiência 🏋️</h1>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="star" className="text-primary-300" /> Sua experiência </h1>
                 <p className="text-white/50">Qual seu nível de intimidade com a academia?</p>
               </div>
               <div className="space-y-3">
@@ -278,7 +277,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                       experience === opt.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
                     }`}
                   >
-                    <span className="text-2xl">{opt.emoji}</span>
+                    <MaterialIcon name={opt.icon} className="text-2xl text-primary-300" />
                     <div>
                       <span className="font-medium text-lg">{opt.label}</span>
                       <p className="text-white/40 text-xs">{opt.description}</p>
@@ -296,7 +295,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'days' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Dias de treino 📅</h1>
+                <h1 className="text-3xl font-bold mb-2 flex items-center gap-2 justify-center"><MaterialIcon name="calendar_month" className="text-primary-300" /> Dias de treino</h1>
                 <p className="text-white/50">Quantos dias por semana você consegue treinar?</p>
               </div>
               <div className="grid grid-cols-4 gap-3">
@@ -329,7 +328,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'focus' && (
             <div className="space-y-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Preferência de treino 🎯</h1>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="fitness_center" className="text-primary-300" /> Preferência de treino </h1>
                 <p className="text-white/50">Onde você quer dar mais ênfase?</p>
               </div>
               <div className="space-y-3">
@@ -341,7 +340,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                       focus === opt.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
                     }`}
                   >
-                    <span className="text-2xl">{opt.emoji}</span>
+                    <MaterialIcon name={opt.icon} className="text-2xl text-primary-300" />
                     <div>
                       <span className="font-medium text-lg">{opt.label}</span>
                       <p className="text-white/40 text-xs">{opt.description}</p>
@@ -359,7 +358,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'customSplit' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Monte sua divisão ✏️</h1>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="star" className="text-primary-300" /> Monte sua divisão </h1>
                 <p className="text-white/50">O que você quer treinar em cada dia?</p>
               </div>
               <div className="space-y-3">
@@ -389,7 +388,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {step === 'setup' && (
             <div className="space-y-8 text-center">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Montar seu treino 🏗️</h1>
+                <h1 className="text-3xl font-bold mb-2 flex items-center gap-2 justify-center"><MaterialIcon name="construction" className="text-primary-300" /> Montar seu treino</h1>
                 <p className="text-white/50">Como quer começar?</p>
               </div>
               <div className="space-y-4">
@@ -398,7 +397,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                   className="w-full p-5 rounded-2xl bg-primary-500/10 border border-primary-500/30 text-left transition-all active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">🤖</span>
+                    <MaterialIcon name="smart_toy" className="text-3xl text-primary-300" />
                     <div>
                       <p className="font-bold text-lg">Montar com IA</p>
                       <p className="text-white/50 text-sm">A inteligência artificial monta o treino ideal pra você com justificativa científica</p>
@@ -410,7 +409,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                   className="w-full p-5 rounded-2xl bg-dark-200 border border-white/10 text-left transition-all active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">✏️</span>
+                    <MaterialIcon name="edit" className="text-3xl text-primary-300" />
                     <div>
                       <p className="font-bold text-lg">Usar treino padrão</p>
                       <p className="text-white/50 text-sm">Começar com o treino base e personalizar depois manualmente</p>

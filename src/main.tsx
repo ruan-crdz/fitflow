@@ -1,5 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import 'material-icons/iconfont/filled.css';
+import 'material-icons/iconfont/outlined.css';
 import { App } from './App';
 import './index.css';
 

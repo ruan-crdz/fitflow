@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getToday } from '@/utils/date';
 
 interface WaterState {
   logs: Record<string, number>; // date -> glasses drunk
@@ -9,7 +10,7 @@ interface WaterState {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return getToday();
 }
 
 export const useWaterStore = create<WaterState>()(

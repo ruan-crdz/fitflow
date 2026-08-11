@@ -15,14 +15,18 @@ import { StreakHeatmap } from '@/components/ui/StreakHeatmap';
 import { LoadProgression } from '@/components/ui/LoadProgression';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
-import { getTodayWorkoutType, isTrainingDay, getToday } from '@/utils/date';
+import { getTodayWorkoutType, isTrainingDay, getToday, formatDateBR } from '@/utils/date';
 import { useTrainingReminder } from '@/hooks/useTrainingReminder';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useFoodStore } from '@/stores/useFoodStore';
 import { DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_WIDGETS, useDashboardStore } from '@/stores/useDashboardStore';
 import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
+import { useNotesStore } from '@/stores/useNotesStore';
 import type { WorkoutType } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+
+type DashboardHistory = 'consistency' | 'load' | 'calories' | 'water' | 'bmi' | 'weight' | null;
 
 export function Dashboard() {
   useTrainingReminder();
@@ -36,8 +40,10 @@ export function Dashboard() {
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
+  const waterLogs = useWaterStore((s) => s.logs);
   const foodLogs = useFoodStore((s) => s.logs);
   const healthDaily = useHealthIntegrationStore((s) => s.daily);
+  const notes = useNotesStore((s) => s.notes);
   const activeSlots = useCustomWorkoutStore((s) => s.activeSlots);
   const widgets = useDashboardStore((s) => s.widgets);
   const toggleWidget = useDashboardStore((s) => s.toggleWidget);
@@ -45,6 +51,7 @@ export function Dashboard() {
   const [showWeightPrompt, setShowWeightPrompt] = useState(!hasTodayWeight);
   const [showConfetti, setShowConfetti] = useState(false);
   const [editingDashboard, setEditingDashboard] = useState(false);
+  const [historyView, setHistoryView] = useState<DashboardHistory>(null);
 
   const today = getToday();
   const todayFoodEntries = foodLogs[today] || [];
@@ -109,14 +116,14 @@ export function Dashboard() {
           <p className="text-white/30 text-xs font-medium tracking-wide uppercase">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}
           </p>
-          <h1 className="text-[26px] font-bold mt-0.5 leading-tight">{profile.name} {profile.sex === 'male' ? '💪' : '♥'}</h1>
+          <h1 className="text-[26px] font-bold mt-0.5 leading-tight">{profile.name} <MaterialIcon name={profile.sex === 'male' ? 'fitness_center' : 'favorite'} className="inline-flex text-primary-300 text-[24px]" /></h1>
         </div>
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => navigate('/profile')}
           className="w-11 h-11 rounded-full bg-primary-500/15 border border-primary-500/20 flex items-center justify-center"
         >
-          <span className="text-lg">{profile.sex === 'male' ? '🏋️' : '🧘'}</span>
+          <MaterialIcon name="star" className="text-primary-300" />
         </motion.button>
       </div>
 
@@ -148,7 +155,7 @@ export function Dashboard() {
               animate={{ x: [0, 5, 0] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
               className="text-2xl"
-            >→</motion.span>
+            ><MaterialIcon name="arrow_forward" /></motion.span>
           </div>
         </motion.button>
       )}
@@ -159,9 +166,7 @@ export function Dashboard() {
           {isTodayTraining && !todayAlreadyDone ? (
             <>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-primary-500/20 flex items-center justify-center text-2xl">
-                  🏋️
-                </div>
+                <div className="w-14 h-14 rounded-2xl bg-primary-500/20 flex items-center justify-center text-2xl"><MaterialIcon name="fitness_center" className="text-primary-300" /></div>
                 <div className="flex-1">
                   <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold">Treino de hoje</p>
                   <p className="text-lg font-bold mt-0.5">
@@ -184,13 +189,13 @@ export function Dashboard() {
               animate={{ scale: 1 }}
               className="text-center py-6"
             >
-              <span className="text-5xl">✅</span>
+              <MaterialIcon name="check_circle" className="text-5xl text-green-400" />
               <p className="text-lg font-semibold mt-3">Treino concluído!</p>
-              <p className="text-white/40 text-sm mt-1">Descanse e se recupere 💤</p>
+              <p className="text-white/40 text-sm mt-1">Descanse e se recupere</p>
             </motion.div>
           ) : (
             <div className="text-center py-6">
-              <span className="text-5xl">😴</span>
+              <MaterialIcon name="bedtime" className="text-5xl text-primary-300" />
               <p className="text-lg font-semibold mt-3">Dia de descanso</p>
               <p className="text-white/40 text-sm mt-1">Aproveite para se recuperar</p>
             </div>
@@ -201,7 +206,10 @@ export function Dashboard() {
       {/* Quick Start */}
       {!activeSession && !todayAlreadyDone && isWidgetVisible('quickStart') && (
         <div className="space-y-2">
-          <p className="text-xs text-white/25 font-semibold uppercase tracking-wider">Ou escolha um treino</p>
+          <p className="text-xs text-white/25 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+            <MaterialIcon name="fitness_center" className="text-primary-300" />
+            Ou escolha um treino
+          </p>
           <div className="grid grid-cols-3 gap-3">
             {activeSlots.map((type) => (
               <motion.button
@@ -210,6 +218,7 @@ export function Dashboard() {
                 onClick={() => handleStartWorkout(type)}
                 className="card text-center py-4 hover:border-primary-400/40 transition-colors active:bg-primary-500/5"
               >
+                <MaterialIcon name="fitness_center" className="text-lg text-primary-300 mx-auto mb-1" />
                 <span className="text-2xl font-bold text-primary-400">{type}</span>
                 <p className="text-[10px] text-white/40 mt-1">{WORKOUT_MAP[type]?.focus || `Treino ${type}`}</p>
               </motion.button>
@@ -221,27 +230,35 @@ export function Dashboard() {
       {/* Stats */}
       {isWidgetVisible('stats') && <div className="grid grid-cols-2 gap-3">
         <div className="card text-center">
+          <MaterialIcon name="fitness_center" className="text-2xl text-primary-300 mx-auto mb-1" />
           <p className="text-3xl font-bold text-primary-400">{totalWorkouts}</p>
           <p className="text-xs text-white/40 mt-1">Treinos feitos</p>
         </div>
         <div className="card text-center">
+          <MaterialIcon name="local_fire_department" className="text-2xl text-primary-300 mx-auto mb-1" />
           <p className="text-3xl font-bold text-success">{streak}</p>
           <p className="text-xs text-white/40 mt-1">Semanas seguidas</p>
         </div>
       </div>}
 
       {/* Streak Heatmap */}
-      {isWidgetVisible('streak') && <StreakHeatmap />}
+      {isWidgetVisible('streak') && <StreakHeatmap onHistory={() => setHistoryView('consistency')} />}
 
       {/* Load Progression */}
-      {isWidgetVisible('load') && <LoadProgression />}
+      {isWidgetVisible('load') && <LoadProgression onHistory={() => setHistoryView('load')} />}
 
       {/* Calories */}
       {isWidgetVisible('calories') && (
         <div className="card space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-white/80">Calorias do dia</h2>
-            <span className="text-xs text-white/40">Meta: {calories} kcal</span>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold text-white/80 flex items-center gap-2">
+              <MaterialIcon name="local_fire_department" className="text-primary-300" />
+              Calorias do dia
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/40">Meta: {calories} kcal</span>
+              <HistoryButton onClick={() => setHistoryView('calories')} label="Histórico de calorias" />
+            </div>
           </div>
           <div className="relative h-4 bg-dark-300 rounded-full overflow-hidden">
             <motion.div
@@ -317,29 +334,42 @@ export function Dashboard() {
         onRemove={removeGlass}
         showConfetti={showConfetti}
         onConfettiDone={() => setShowConfetti(false)}
+        onHistory={() => setHistoryView('water')}
       />}
 
       {/* BMI */}
       {isWidgetVisible('bmi') && <div className="card flex items-center justify-between">
         <div>
-          <p className="text-sm text-white/40">IMC</p>
+          <p className="text-sm text-white/40 flex items-center gap-2">
+            <MaterialIcon name="monitor_weight" className="text-primary-300" />
+            IMC
+          </p>
           <p className="text-xl font-bold">{bmi}</p>
         </div>
-        <span className="text-sm px-3 py-1 rounded-full bg-primary-500/10 text-primary-300">
-          {bmiCategory(bmi)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm px-3 py-1 rounded-full bg-primary-500/10 text-primary-300">
+            {bmiCategory(bmi)}
+          </span>
+          <HistoryButton onClick={() => setHistoryView('bmi')} label="Histórico de IMC" />
+        </div>
       </div>}
 
       {/* Weight Chart */}
       {isWidgetVisible('weight') && <div className="card space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-white/80">Evolução do peso</h2>
-          <button
-            onClick={() => setShowWeightPrompt(true)}
-            className="text-xs text-primary-400 font-medium"
-          >
-            + Registrar
-          </button>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="monitoring" className="text-primary-300" />
+            Evolução do peso
+          </h2>
+          <div className="flex items-center gap-2">
+            <HistoryButton onClick={() => setHistoryView('weight')} label="Histórico de peso" />
+            <button
+              onClick={() => setShowWeightPrompt(true)}
+              className="text-xs text-primary-400 font-medium"
+            >
+              + Registrar
+            </button>
+          </div>
         </div>
         <WeightChart entries={weightEntries} />
       </div>}
@@ -347,7 +377,10 @@ export function Dashboard() {
       {editingDashboard && (
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-white/80">Editar dashboard</h2>
+            <h2 className="font-semibold text-white/80 flex items-center gap-2">
+              <MaterialIcon name="widgets" className="text-primary-300" />
+              Editar dashboard
+            </h2>
             <button onClick={resetWidgets} className="text-xs text-primary-400 font-medium">Restaurar</button>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -361,7 +394,7 @@ export function Dashboard() {
                     : 'bg-white/5 border-white/10 text-white/35'
                 }`}
               >
-                {widgets.includes(widget) ? '✓ ' : '+ '}{DASHBOARD_WIDGET_LABELS[widget]}
+ {widgets.includes(widget) ? ' ' : '+ '}{DASHBOARD_WIDGET_LABELS[widget]}
               </button>
             ))}
           </div>
@@ -382,9 +415,155 @@ export function Dashboard() {
       </div>
 
       {/* Weight Prompt */}
+      {historyView && (
+        <DashboardHistoryModal
+          view={historyView}
+          onClose={() => setHistoryView(null)}
+          sessions={sessions}
+          foodLogs={foodLogs}
+          waterLogs={waterLogs}
+          weightEntries={weightEntries}
+          profileHeight={profile.height}
+          notes={notes}
+        />
+      )}
       {showWeightPrompt && <WeightPrompt onClose={() => setShowWeightPrompt(false)} />}
     </div>
   );
+}
+
+function HistoryButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button onClick={onClick} className="w-8 h-8 rounded-full bg-white/5 text-white/45 flex items-center justify-center shrink-0" aria-label={label}>
+      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 8v4l3 2" />
+      </svg>
+    </button>
+  );
+}
+
+function DashboardHistoryModal({
+  view,
+  onClose,
+  sessions,
+  foodLogs,
+  waterLogs,
+  weightEntries,
+  profileHeight,
+  notes,
+}: {
+  view: Exclude<DashboardHistory, null>;
+  onClose: () => void;
+  sessions: ReturnType<typeof useHistoryStore.getState>['sessions'];
+  foodLogs: ReturnType<typeof useFoodStore.getState>['logs'];
+  waterLogs: ReturnType<typeof useWaterStore.getState>['logs'];
+  weightEntries: ReturnType<typeof useWeightStore.getState>['entries'];
+  profileHeight: number;
+  notes: ReturnType<typeof useNotesStore.getState>['notes'];
+}) {
+  const completed = sessions.filter((s) => s.completedAt);
+  const titleMap: Record<Exclude<DashboardHistory, null>, string> = {
+    consistency: 'Histórico de consistência',
+    load: 'Histórico de carga',
+    calories: 'Histórico de calorias',
+    water: 'Histórico de água',
+    bmi: 'Histórico de IMC',
+    weight: 'Histórico de peso',
+  };
+
+  const calorieRows = Object.entries(foodLogs)
+    .map(([date, entries]) => ({ date, value: entries.reduce((sum, item) => sum + item.calories, 0) }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const waterRows = Object.entries(waterLogs)
+    .map(([date, glasses]) => ({ date, value: glasses * 250, detail: `${glasses} copos` }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const bmiRows = weightEntries
+    .map((entry) => ({ date: entry.date, value: calculateBMI(entry.weight, profileHeight), detail: `${entry.weight}kg` }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const loadRows = Object.entries(notes)
+    .map(([id, note]) => {
+      const exercise = Object.values(WORKOUT_MAP).flatMap((workout) => workout.exercises).find((item) => item.id === id);
+      return { date: 'Atual', label: exercise?.name || 'Exercício', value: note };
+    })
+    .filter((row) => row.value)
+    .slice(0, 20);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 px-4" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[78vh] overflow-y-auto rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-4" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-black">{titleMap[view]}</h2>
+          <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
+        </div>
+
+        {view === 'consistency' && (
+          <div className="space-y-2">
+            {completed.slice(0, 30).map((session) => (
+              <HistoryRow key={session.id} title={session.workoutType ? `Treino ${session.workoutType}` : session.activityName || 'Atividade avulsa'} value={formatDateBR(session.date)} detail={formatMinutes(session.durationMs)} />
+            ))}
+            {completed.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+
+        {view === 'load' && (
+          <div className="space-y-2">
+            {loadRows.map((row) => <HistoryRow key={row.label} title={row.label} value={row.value} detail={row.date} />)}
+            {loadRows.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+
+        {view === 'calories' && (
+          <div className="space-y-2">
+            {calorieRows.slice(0, 30).map((row) => <HistoryRow key={row.date} title={formatDateBR(row.date)} value={`${row.value} kcal`} />)}
+            {calorieRows.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+
+        {view === 'water' && (
+          <div className="space-y-2">
+            {waterRows.slice(0, 30).map((row) => <HistoryRow key={row.date} title={formatDateBR(row.date)} value={`${row.value} ml`} detail={row.detail} />)}
+            {waterRows.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+
+        {view === 'bmi' && (
+          <div className="space-y-2">
+            {bmiRows.slice(0, 30).map((row) => <HistoryRow key={row.date} title={formatDateBR(row.date)} value={String(row.value)} detail={row.detail} />)}
+            {bmiRows.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+
+        {view === 'weight' && (
+          <div className="space-y-2">
+            {weightEntries.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30).map((row) => <HistoryRow key={row.date} title={formatDateBR(row.date)} value={`${row.weight}kg`} />)}
+            {weightEntries.length === 0 && <EmptyHistory />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HistoryRow({ title, value, detail }: { title: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-2xl bg-white/5 border border-white/5 p-3 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-bold truncate">{title}</p>
+        {detail && <p className="text-xs text-white/35 truncate">{detail}</p>}
+      </div>
+      <p className="text-sm font-black text-primary-300">{value}</p>
+    </div>
+  );
+}
+
+function EmptyHistory() {
+  return <p className="rounded-2xl bg-white/5 p-4 text-sm text-white/40 text-center">Nenhum registro ainda.</p>;
+}
+
+function formatMinutes(durationMs?: number) {
+  if (!durationMs) return 'Sem duração';
+  return `${Math.round(durationMs / 60000)} min`;
 }
 
 function MacroBar({ label, current, goal, color }: { label: string; current: number; goal: number; color: string }) {
@@ -404,9 +583,9 @@ function MacroBar({ label, current, goal, color }: { label: string; current: num
   );
 }
 
-function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfettiDone }: {
+function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfettiDone, onHistory }: {
   glasses: number; goal: number; onAdd: () => void; onRemove: () => void;
-  showConfetti: boolean; onConfettiDone: () => void;
+  showConfetti: boolean; onConfettiDone: () => void; onHistory?: () => void;
 }) {
   const progress = Math.min(glasses / goal, 1);
   const ml = glasses * 250;
@@ -427,12 +606,18 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
           exit={{ opacity: 0 }}
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
         >
-          <p className="text-4xl animate-bounce">🎉💧🎉</p>
+          <MaterialIcon name="celebration" className="text-5xl animate-bounce text-primary-300" />
         </motion.div>
       )}
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-white/80">💧 Água</h2>
-        <p className="text-xs text-white/40 font-mono">{ml}ml / {goal * 250}ml</p>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-white/80 flex items-center gap-2">
+          <MaterialIcon name="water_drop" className="text-primary-300" />
+          Água
+        </h2>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-white/40 font-mono">{ml}ml / {goal * 250}ml</p>
+          {onHistory && <HistoryButton onClick={onHistory} label="Histórico de água" />}
+        </div>
       </div>
       <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
         <motion.div
@@ -470,7 +655,7 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
         </motion.button>
       </div>
       {glasses >= goal && (
-        <p className="text-center text-xs text-green-400 font-medium">✅ Meta atingida! Parabéns!</p>
+ <p className="text-center text-xs text-green-400 font-medium"> Meta atingida! Parabéns!</p>
       )}
     </div>
   );

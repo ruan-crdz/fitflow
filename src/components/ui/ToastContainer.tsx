@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToastStore } from '@/stores/useToastStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
-const ICONS = { success: '✓', error: '✕', info: 'ℹ' };
+const ICONS = { success: 'check_circle', error: 'cancel', info: 'info' };
 const COLORS = {
   success: 'bg-emerald-500/90 border-emerald-400/30',
   error: 'bg-red-500/90 border-red-400/30',
@@ -26,7 +27,7 @@ export function ToastContainer() {
             className={`pointer-events-auto px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-xl flex items-center gap-2.5 max-w-sm w-full ${COLORS[toast.type]}`}
           >
             <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold">
-              {ICONS[toast.type]}
+              <MaterialIcon name={ICONS[toast.type]} className="text-sm" />
             </span>
             <p className="text-sm font-medium text-white flex-1">{toast.message}</p>
           </motion.div>

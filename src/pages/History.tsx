@@ -5,6 +5,7 @@ import { formatDuration, formatDate, getToday } from '@/utils/date';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ActivityIntensity, ActivityLocation, WorkoutSession } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 const ACTIVITY_PRESETS = ['Caminhada', 'Esteira', 'Bike', 'Treino em casa', 'Livre'];
 
@@ -117,7 +118,7 @@ function SessionDetail({ session, onClose }: { session: WorkoutSession; onClose:
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center">
-            <span className="font-bold text-primary-400">{free ? '✓' : session.workoutType}</span>
+            <MaterialIcon name="star" className="text-primary-300" />
           </div>
           <div>
             <p className="font-semibold text-sm">{getSessionTitle(session)}</p>
@@ -136,7 +137,7 @@ function SessionDetail({ session, onClose }: { session: WorkoutSession; onClose:
           <p className="text-[10px] text-white/30">{free ? 'Intensidade' : 'Exercícios'}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm font-bold">{session.rating ? '★'.repeat(session.rating) : free ? LOCATION_LABELS[session.activityLocation || 'outro'] : '-'}</p>
+ <p className="text-sm font-bold">{session.rating ? ''.repeat(session.rating) : free ? LOCATION_LABELS[session.activityLocation || 'outro'] : '-'}</p>
           <p className="text-[10px] text-white/30">{free ? 'Local' : 'Avaliação'}</p>
         </div>
       </div>
@@ -367,7 +368,7 @@ export function History() {
         <h2 className="text-sm font-medium text-white/50">Recentes</h2>
         {completedSessions.length === 0 ? (
           <div className="text-center py-12">
-            <span className="text-5xl">📋</span>
+            <MaterialIcon name="star" className="text-primary-300" />
             <p className="text-white/40 mt-4">Nenhum treino registrado ainda</p>
           </div>
         ) : (
@@ -382,7 +383,7 @@ export function History() {
                 className="card flex items-center gap-4 py-3 w-full text-left"
               >
                 <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary-400">{isFreeSession(session) ? '✓' : session.workoutType}</span>
+                  <MaterialIcon name="star" className="text-primary-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">{getSessionTitle(session)}</p>
@@ -391,7 +392,7 @@ export function History() {
                   </p>
                 </div>
                 {session.rating && (
-                  <span className="text-xs">{'★'.repeat(session.rating)}</span>
+                  <MaterialIcon name="star" className="text-primary-300" />
                 )}
               </motion.button>
             ))}

@@ -17,6 +17,8 @@ import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { askAI } from '@/utils/ai';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { RichText } from '@/components/ui/RichText';
 
 export function Workout() {
   const navigate = useNavigate();
@@ -128,7 +130,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
       const swapMatch = answer.match(/\[SWAP:(\{[^}]+\})\]/);
       if (swapMatch) {
         const cleanAnswer = answer.replace(/\[SWAP:[^\]]+\]/, '').trim();
-        setAIAnswer(cleanAnswer + '\n\n✅ Deseja substituir? Toque "Trocar" abaixo.');
+        setAIAnswer(cleanAnswer + '\n\nDeseja substituir? Toque "Trocar" abaixo.');
         try {
           const swapData = JSON.parse(swapMatch[1]);
           setSwapSuggestion(swapData);
@@ -156,7 +158,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
       image: swapSuggestion.image,
     });
     setSwapSuggestion(null);
-    setAIAnswer('✅ Exercício trocado! Avance para continuar.');
+    setAIAnswer('Exercício trocado! Avance para continuar.');
     setShowAIChat(false);
   };
 
@@ -176,9 +178,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
             <button
               onClick={() => setShowAIChat(!showAIChat)}
               className="text-primary-400 text-sm font-medium px-2 py-1"
-            >
-              🤖
-            </button>
+            ><MaterialIcon name="smart_toy" className="text-lg" /></button>
           )}
           <button
             onClick={handleAbandon}
@@ -284,7 +284,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
               onClick={handleNext}
               className="btn-success text-xl py-5"
             >
-              {isLastExercise ? 'Finalizar Treino 🎉' : 'Próximo Exercício →'}
+              {isLastExercise ? 'Finalizar treino' : 'Próximo Exercício →'}
             </motion.button>
           )}
 
@@ -332,7 +332,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
                   <h2 className="text-lg font-bold">Escolher proximo exercicio</h2>
                   <p className="text-xs text-white/35">Pule fila, aparelho ocupado ou ajuste a ordem na hora.</p>
                 </div>
-                <button onClick={() => setShowExercisePicker(false)} className="text-white/35 text-xl">×</button>
+                <button onClick={() => setShowExercisePicker(false)} className="text-white/35 text-xl"><MaterialIcon name="close" /></button>
               </div>
 
               <div className="space-y-2">
@@ -382,21 +382,19 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
             className="fixed inset-x-0 bottom-0 z-50 bg-dark-100 border-t border-white/10 rounded-t-3xl p-5 max-h-[60vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-primary-300">🤖 {assistantName} — Treinando</span>
-              <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg">✕</button>
+              <span className="text-sm font-semibold text-primary-300 inline-flex items-center gap-1"><MaterialIcon name="smart_toy" className="text-base" /> {assistantName} ? Treinando</span>
+              <button onClick={() => setShowAIChat(false)} className="text-white/30 text-lg"><MaterialIcon name="close" /></button>
             </div>
             {aiAnswer && (
               <div className="mb-3">
                 <p className="text-sm text-white/80 leading-relaxed whitespace-pre-line bg-white/5 rounded-xl p-3">
-                  {aiAnswer}
+                  <RichText text={aiAnswer} />
                 </p>
                 {swapSuggestion && (
                   <button
                     onClick={handleSwapAccept}
                     className="mt-2 w-full py-2.5 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-medium"
-                  >
-                    ✓ Trocar por {swapSuggestion.name}
-                  </button>
+                  ><span className="inline-flex items-center gap-1"><MaterialIcon name="check" /> Trocar por {swapSuggestion.name}</span></button>
                 )}
               </div>
             )}

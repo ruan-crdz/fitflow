@@ -5,6 +5,9 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
+import { getToday, toLocalDateKey } from '@/utils/date';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { RichText } from '@/components/ui/RichText';
 
 export function AIWeeklyReport() {
   const apiKey = useAIStore((s) => s.apiKey);
@@ -18,7 +21,7 @@ export function AIWeeklyReport() {
 
   // Only show on Sundays
   const isSunday = new Date().getDay() === 0;
-  const storageKey = `fitflow-weekly-report-${new Date().toISOString().slice(0, 10)}`;
+  const storageKey = `fitflow-weekly-report-${getToday()}`;
 
   useEffect(() => {
     if (!isSunday || !apiKey || !isEnabled || !profile || dismissed) return;
@@ -31,7 +34,7 @@ export function AIWeeklyReport() {
 
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const weekStr = weekAgo.toISOString().slice(0, 10);
+    const weekStr = toLocalDateKey(weekAgo);
 
     const weekSessions = sessions.filter((s) => s.completedAt && s.date >= weekStr);
     const weekSessionNames = weekSessions
@@ -56,7 +59,7 @@ export function AIWeeklyReport() {
         messages: [
           {
             role: 'system',
-            content: `Voce e ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Faca um mini relatorio semanal motivador (max 4 linhas). Celebre conquistas reais, destaque progresso se existir e de 1 meta especifica para a proxima semana. Nunca invente dados. ${SCIENCE_GUARDRAILS}`,
+            content: `Você é ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Faça um mini relatório semanal motivador (max 4 linhas). Celebre conquistas reais, destaque progresso se existir e dê 1 meta específica para a próxima semana. Nunca invente dados. ${SCIENCE_GUARDRAILS}`,
           },
           {
             role: 'user',
@@ -91,13 +94,13 @@ Peso: ${weekWeight.length >= 2 ? `de ${weekWeight[0].weight}kg para ${weekWeight
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm">📋</span>
+          <MaterialIcon name="smart_toy" className="text-primary-300" />
           <span className="text-xs font-semibold text-amber-300">Relatório Semanal</span>
         </div>
-        <button onClick={() => setDismissed(true)} className="text-white/30 text-xs">✕</button>
+ <button onClick={() => setDismissed(true)} className="text-white/30 text-xs"></button>
       </div>
       <p className="text-sm text-white/70 leading-relaxed whitespace-pre-line">
-        {loading ? <span className="animate-pulse">Gerando relatório...</span> : report || 'Continue treinando para receber seu relatório!'}
+        {loading ? <span className="animate-pulse">Gerando relatório...</span> : report ? <RichText text={report} /> : 'Continue treinando para receber seu relatório!'}
       </p>
     </motion.div>
   );

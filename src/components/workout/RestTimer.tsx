@@ -78,14 +78,14 @@ export function RestTimer({ active, duration = 75, onSkip }: RestTimerProps) {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-5xl font-bold tabular-nums">
-                {seconds === 0 ? '✓' : seconds}
+ {seconds === 0 ? '' : seconds}
               </span>
               {seconds > 0 && <span className="text-white/30 text-xs mt-1">segundos</span>}
             </div>
           </div>
 
           <p className="mt-6 text-white/50 text-sm">
-            {seconds === 0 ? 'Bora pra próxima série! 🔥' : 'Respire e se prepare...'}
+ {seconds === 0 ? 'Bora pra próxima série! ' : 'Respire e se prepare...'}
           </p>
 
           <button

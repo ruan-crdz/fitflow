@@ -8,9 +8,11 @@ import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibility
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { useHealthIntegrationStore, type HealthPlatform } from '@/stores/useHealthIntegrationStore';
 import { ExportData } from '@/components/ui/ExportData';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { syncNativeHealth } from '@/utils/healthIntegration';
+import { getToday } from '@/utils/date';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
 
 export function Profile() {
@@ -34,7 +36,7 @@ export function Profile() {
   const healthPlatform = useHealthIntegrationStore((s) => s.platform);
   const healthConnected = useHealthIntegrationStore((s) => s.isConnected);
   const healthDaily = useHealthIntegrationStore((s) => s.daily);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getToday();
   const healthSummary = healthDaily[today] || {
     date: today,
     steps: 0,
@@ -136,10 +138,10 @@ export function Profile() {
             <label className="text-sm text-white/40 mb-2 block">Sexo biológico</label>
             <div className="flex gap-2">
               <button onClick={() => setSex('female')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'female' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
-                ♀️ Feminino
+                <MaterialIcon name="female" className="text-primary-300" /> Feminino
               </button>
               <button onClick={() => setSex('male')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'male' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
-                ♂️ Masculino
+                <MaterialIcon name="male" className="text-primary-300" /> Masculino
               </button>
             </div>
           </div>
@@ -187,7 +189,7 @@ export function Profile() {
                       : 'border-white/10 bg-dark-200'
                   }`}
                 >
-                  <span>{opt.emoji}</span>
+                  <MaterialIcon name={opt.icon} className="text-lg text-primary-300" />
                   <span>{opt.label}</span>
                 </button>
               ))}
@@ -207,7 +209,7 @@ export function Profile() {
                       : 'border-white/10 bg-dark-200'
                   }`}
                 >
-                  <span>{opt.emoji}</span>
+                  <MaterialIcon name={opt.icon} className="text-lg text-primary-300" />
                   <span>{opt.label}</span>
                 </button>
               ))}
@@ -247,8 +249,7 @@ export function Profile() {
           <div className="card space-y-3">
             <h2 className="font-semibold text-white/80">Objetivo</h2>
             <p className="text-lg">
-              {GOAL_OPTIONS.find((o) => o.value === profile.goal)?.emoji}{' '}
-              {GOAL_OPTIONS.find((o) => o.value === profile.goal)?.label}
+              <span className="inline-flex items-center gap-2"><MaterialIcon name={GOAL_OPTIONS.find((o) => o.value === profile.goal)?.icon || 'track_changes'} className="text-primary-300" /> {GOAL_OPTIONS.find((o) => o.value === profile.goal)?.label}</span>
             </p>
           </div>
 
@@ -279,7 +280,7 @@ export function Profile() {
 
           {/* Cycle Phase */}
           <div className="card space-y-3">
-            <h2 className="font-semibold text-white/80">🌸 Fase do ciclo</h2>
+            <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="cycle" className="text-primary-300" /> Fase do ciclo</h2>
             <div className="grid grid-cols-2 gap-2">
               {CYCLE_PHASES.map((cp) => (
                 <button
@@ -289,21 +290,22 @@ export function Profile() {
                     phase === cp.value ? 'border-primary-500 bg-primary-500/10' : 'border-white/5'
                   }`}
                 >
-                  <span>{cp.emoji}</span>
+                  <MaterialIcon name={cp.icon} className="text-lg text-primary-300" />
                   <span className="font-medium text-white/70">{cp.label}</span>
                 </button>
               ))}
             </div>
             {phase !== 'none' && (
-              <p className="text-xs text-white/40 italic">
-                💡 {CYCLE_PHASES.find((c) => c.value === phase)?.tip}
+              <p className="text-xs text-white/40 italic flex items-start gap-1">
+                <MaterialIcon name="lightbulb" className="text-primary-300 mt-0.5" />
+                <span>{CYCLE_PHASES.find((c) => c.value === phase)?.tip}</span>
               </p>
             )}
           </div>
 
           {/* Theme Section */}
           <div className="card space-y-3">
-            <h2 className="font-semibold text-white/80">🎨 Tema</h2>
+            <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="palette" className="text-primary-300" /> Tema</h2>
             <div className="grid grid-cols-5 gap-2">
               {THEMES.filter((t) => !t.special).map((t) => (
                 <button
@@ -314,12 +316,12 @@ export function Profile() {
                   }`}
                 >
                   <div className="w-6 h-6 rounded-full" style={{ backgroundColor: t.colors.primary }} />
-                  <span className="text-[9px] text-white/40">{t.emoji}</span>
+                  <MaterialIcon name={t.icon} className="text-[16px] text-white/40" />
                 </button>
               ))}
             </div>
             <div className="space-y-2 pt-2 border-t border-white/5">
-              <p className="text-xs text-white/30">Temas especiais ✨</p>
+              <p className="text-xs text-white/30">Temas especiais</p>
               <div className="grid grid-cols-2 gap-2">
                 {THEMES.filter((t) => t.special).map((t) => (
                   <button
@@ -329,7 +331,7 @@ export function Profile() {
                       themeId === t.id ? 'border-white/40 bg-white/5' : 'border-white/5'
                     }`}
                   >
-                    <span>{t.emoji}</span>
+                    <MaterialIcon name={t.icon} className="text-lg text-primary-300" />
                     <span className="text-xs font-medium text-white/70">{t.name}</span>
                   </button>
                 ))}
@@ -376,14 +378,14 @@ export function Profile() {
                 onToggle={toggleHighContrast}
               />
               <AccessibilityToggle
-                title="Reduzir animacoes"
-                description="Diminui transicoes e movimentos para evitar desconforto."
+                title="Reduzir animações"
+                description="Diminui transições e movimentos para evitar desconforto."
                 enabled={reduceMotion}
                 onToggle={toggleReduceMotion}
               />
               <AccessibilityToggle
                 title="Modo leitor de tela"
-                description="Aumenta areas de toque, foco visual e espacamento para navegacao assistiva."
+                description="Aumenta áreas de toque, foco visual e espaçamento para navegação assistiva."
                 enabled={screenReaderMode}
                 onToggle={toggleScreenReaderMode}
               />
@@ -393,7 +395,7 @@ export function Profile() {
               onClick={resetAccessibility}
               className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-semibold"
             >
-              Restaurar acessibilidade padrao
+              Restaurar acessibilidade padrão
             </button>
           </div>
 
@@ -479,7 +481,7 @@ export function Profile() {
           {/* AI Section */}
           <div className="card space-y-3 border border-primary-500/20">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🤖</span>
+              <MaterialIcon name="smart_toy" className="text-xl text-primary-300" />
               <h2 className="font-semibold text-white/80">{assistantName}</h2>
             </div>
             <div className="space-y-3 rounded-xl bg-white/5 border border-white/10 p-3">
@@ -511,7 +513,7 @@ export function Profile() {
                 </div>
               </div>
               <p className="text-[10px] text-white/35 leading-relaxed">
-                Os prompts exigem base cientifica para treino e dieta. O preset Coach BR tecnico nao imita pessoa real; usa comunicacao forte, tecnica e motivadora.
+                Os prompts exigem base científica para treino e dieta. O preset Coach BR técnico não imita pessoa real; usa comunicação forte, técnica e motivadora.
               </p>
               <button
                 onClick={() => {
@@ -520,17 +522,17 @@ export function Profile() {
                 }}
                 className="w-full py-2 rounded-xl bg-white/5 text-white/40 text-xs font-semibold"
               >
-                Restaurar IA padrao
+                Restaurar IA padrão
               </button>
             </div>
             {isEnabled ? (
               <div className="space-y-3">
-                <p className="text-sm text-success">Ativa ✓</p>
+ <p className="text-sm text-success">Ativa </p>
                 <button
                   onClick={() => navigate(hasSeenIntro ? '/ai' : '/ai/intro')}
                   className="btn-primary py-3 text-sm"
                 >
-                  Abrir assistente 🤖
+                  <MaterialIcon name="smart_toy" /> Abrir assistente
                 </button>
                 <button
                   onClick={removeApiKey}
@@ -562,7 +564,7 @@ export function Profile() {
                   disabled={!aiKeyInput.startsWith('sk-')}
                   className="btn-primary py-3 text-sm"
                 >
-                  Ativar GymPilot AI ⚡
+                  <MaterialIcon name="bolt" /> Ativar GymPilot AI
                 </button>
               </div>
             )}

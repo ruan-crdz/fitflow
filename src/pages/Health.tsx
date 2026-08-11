@@ -11,6 +11,8 @@ import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import { askAI } from '@/utils/ai';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
+import { getToday } from '@/utils/date';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 type IngredientUnit = 'g' | 'un' | 'colher_sopa' | 'colher_cha' | 'ml' | 'copo' | 'xicara';
 
@@ -65,7 +67,7 @@ export function Health() {
   const waterGoal = Math.round(water * 4);
 
   const entries = getTodayEntries();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getToday();
   const healthSummary = healthDaily[today] || {
     date: today,
     steps: 0,
@@ -97,7 +99,7 @@ export function Health() {
     const manualCalories = manualItems.reduce((sum, item) => sum + Number(item.calories || 0), 0);
     const mealName = validIngredients.length === 1
       ? validIngredients[0].name.trim()
-      : `Refeicao: ${validIngredients.slice(0, 3).map((i) => i.name.trim()).join(', ')}${validIngredients.length > 3 ? '...' : ''}`;
+      : `Refeição: ${validIngredients.slice(0, 3).map((i) => i.name.trim()).join(', ')}${validIngredients.length > 3 ? '...' : ''}`;
 
     if (!needsAIForMeal) {
       const result = {
@@ -121,7 +123,7 @@ export function Health() {
       addRecent({ id: `recent_${Date.now()}`, ...result });
       setMealResult(result);
       setShowSavePrompt(true);
-      useToastStore.getState().show(`✅ ${result.name} — ${result.calories} kcal`, 'success');
+      useToastStore.getState().show(`${result.name} — ${result.calories} kcal`, 'success');
       setMealLoading(false);
       return;
     }
@@ -129,19 +131,19 @@ export function Health() {
       const aiPrompt = `Calcule macros e calorias APENAS dos itens sem kcal manual.
 
 ITENS PARA CALCULAR:
-${ingredientsWithoutCalories.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porcao padrao'} de ${i.name.trim()}`).join('\n')}
+${ingredientsWithoutCalories.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porção padrão'} de ${i.name.trim()}`).join('\n')}
 
 ITENS JA PREENCHIDOS PELO USUARIO, NAO RECALCULE:
 ${manualItems.length ? manualItems.map((i) => `- ${i.name.trim()}: ${Number(i.calories)} kcal`).join('\n') : '- nenhum'}
 
 REGRAS:
 - Some no JSON final as kcal manuais (${manualCalories} kcal) + sua estimativa dos itens sem kcal.
-- Nao altere as kcal manuais informadas pelo usuario.
-- Use tabelas nutricionais brasileiras (TACO) como referencia.
-- Considere os pesos informados. Se nao informou peso, estime porcao padrao.
+- Não altere as kcal manuais informadas pelo usuário.
+- Use tabelas nutricionais brasileiras (TACO) como referência.
+- Considere os pesos informados. Se não informou peso, estime porção padrão.
 - Arredonde para inteiros.
 
-Responda JSON: {"name":"nome curto do prato","calories":numero,"protein":gramas,"carbs":gramas,"fat":gramas}`;
+Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`;
 
       const response = await askAI(apiKey!, profile, aiPrompt, true);
       const parsed = JSON.parse(response);
@@ -169,7 +171,7 @@ Responda JSON: {"name":"nome curto do prato","calories":numero,"protein":gramas,
     };
     addEntry(entry);
     addRecent({ id: `recent_${Date.now()}`, name: mealResult.name, description: mealResult.description, calories: mealResult.calories, protein: mealResult.protein, carbs: mealResult.carbs, fat: mealResult.fat });
-    useToastStore.getState().show(`✅ ${mealResult.name} — ${mealResult.calories} kcal`, 'success');
+    useToastStore.getState().show(`${mealResult.name} — ${mealResult.calories} kcal`, 'success');
     setShowSavePrompt(true);
   };
 
@@ -191,7 +193,7 @@ Responda JSON: {"name":"nome curto do prato","calories":numero,"protein":gramas,
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     };
     addEntry(entry);
-    useToastStore.getState().show(`✅ ${meal.name} — ${meal.calories} kcal`, 'success');
+    useToastStore.getState().show(`${meal.name} — ${meal.calories} kcal`, 'success');
     setShowAddModal(false);
   };
 
@@ -295,7 +297,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
               fat: parsed.fat || 0,
               time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             });
-            toast(`✅ ${parsed.name} — ${parsed.calories} kcal`, 'success');
+            toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
           } else {
             toast('Não identificado. Tente foto mais nítida.', 'error');
           }
@@ -317,13 +319,13 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
           fat: parsed.fat || 0,
           time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         });
-        toast(`✅ ${parsed.name} — ${parsed.calories} kcal`, 'success');
+        toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
       } else {
         toast('Não consegui identificar. Tente outra foto.', 'error');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      toast(`❌ Falha: ${msg.slice(0, 60)}`, 'error');
+      toast(`Falha: ${msg.slice(0, 60)}`, 'error');
     } finally {
       setCameraLoading(false);
     }
@@ -333,13 +335,16 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
     <div className="px-5 pt-14 pb-6 space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-[26px] font-bold">Saúde</h1>
-        <span className="text-2xl">🩺</span>
+        <MaterialIcon name="health_and_safety" className="text-2xl text-primary-300" />
       </div>
 
       {/* Calorie Progress */}
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-white/80">Calorias do dia</h2>
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="local_fire_department" className="text-primary-300" />
+            Calorias do dia
+          </h2>
           <span className="text-xs text-white/40">Meta: {calories} kcal</span>
         </div>
 
@@ -382,7 +387,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
       {false && (
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-white/80">💧 Água</h2>
+          <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="water_drop" className="text-primary-300" /> Água</h2>
           <p className="text-xs text-white/40">{waterGlasses * 250}ml / {waterGoal * 250}ml</p>
         </div>
         <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
@@ -397,14 +402,17 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
           <p className="text-sm text-white/60">{waterGlasses} / {waterGoal} copos</p>
           <button onClick={addGlass} className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">+</button>
         </div>
-        {waterGlasses >= waterGoal && <p className="text-center text-xs text-green-400">✅ Meta atingida!</p>}
+        {waterGlasses >= waterGoal && <p className="text-center text-xs text-green-400">Meta atingida!</p>}
       </div>
       )}
 
       {/* Food Log */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-white/80">Refeições</h2>
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="restaurant_menu" className="text-primary-300" />
+            Refeições
+          </h2>
           <div className="flex gap-2">
             {apiKey && (
               <motion.button
@@ -413,7 +421,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                 disabled={cameraLoading}
                 className="px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/20 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
               >
-                <span>📷</span> {cameraLoading ? 'Analisando...' : 'Foto IA'}
+                <MaterialIcon name="photo_camera" /> {cameraLoading ? 'Analisando...' : 'Foto IA'}
               </motion.button>
             )}
             <motion.button
@@ -448,7 +456,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
               className="text-3xl inline-block mb-3"
-            >🔍</motion.div>
+            ><MaterialIcon name="search" /></motion.div>
             <p className="text-sm text-primary-300 font-semibold">Analisando com IA...</p>
             <p className="text-[10px] text-white/30 mt-1">Identificando alimento e estimando macros</p>
           </motion.div>
@@ -456,7 +464,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
         {entries.length === 0 && !cameraLoading && (
           <div className="card text-center py-10">
-            <p className="text-4xl mb-3">🍽️</p>
+            <MaterialIcon name="restaurant" className="text-5xl text-primary-300 mx-auto mb-3" />
             <p className="text-sm text-white/50 font-medium">Nenhuma refeição registrada</p>
             <p className="text-xs text-white/25 mt-1">Tire uma foto ou adicione manualmente</p>
           </div>
@@ -534,7 +542,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                       Refazer
                     </motion.button>
                     <motion.button whileTap={{ scale: 0.97 }} onClick={handleConfirmMeal} className="flex-1 btn-primary text-sm">
-                      ✅ Adicionar
+                      Adicionar
                     </motion.button>
                   </div>
                 </div>
@@ -562,7 +570,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                   {/* Recents */}
                   {recents.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">🕐 Recentes</p>
+                      <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider flex items-center gap-1"><MaterialIcon name="history" /> Recentes</p>
                       <div className="flex flex-wrap gap-2">
                         {recents.slice(0, 6).map((meal) => (
                           <motion.button
@@ -580,7 +588,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
                   {/* Ingredient rows */}
                   <div className="space-y-3">
-                    <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">🍽️ Ingredientes</p>
+                    <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider flex items-center gap-1"><MaterialIcon name="restaurant_menu" /> Ingredientes</p>
                     {ingredients.map((ing, idx) => (
                       <div key={idx} className="flex items-center gap-2 flex-wrap">
                         <input
@@ -664,11 +672,11 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                   onClick={handleAIMealCalc}
                 >
                   {mealLoading ? (
-                    <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} className="inline-block">⚡</motion.span> Calculando...</>
+                    <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} className="inline-block"><MaterialIcon name="bolt" /></motion.span> Calculando...</>
                   ) : !needsAIForMeal ? (
-                    <><span>✓</span> Salvar refeição</>
+                    <><MaterialIcon name="save" /> Salvar refeição</>
                   ) : (
-                    <><span>🧠</span> Calcular com IA</>
+                    <><MaterialIcon name="psychology" /> Calcular com IA</>
                   )}
                 </motion.button>
                 {needsAIForMeal && !apiKey && <p className="text-[10px] text-red-400/60 text-center mt-2">Preencha kcal em todos os itens ou configure sua chave IA no Perfil</p>}

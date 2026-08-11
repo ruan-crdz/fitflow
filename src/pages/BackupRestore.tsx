@@ -22,7 +22,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
       restoreBackup(raw);
       window.location.reload();
     } catch {
-      setError('Nao consegui restaurar esse arquivo. Confirme se ele e um backup completo do GymPilot.');
+      setError('Não consegui restaurar esse arquivo. Confirme se ele e um backup completo do GymPilot.');
       setLoading(false);
     }
   };
@@ -35,7 +35,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
             <p className="text-primary-400 text-sm font-semibold">Restaurar conta</p>
             <h1 className="text-3xl font-bold">Envie seu backup</h1>
             <p className="text-white/50 text-sm leading-relaxed">
-              Escolha o arquivo .json baixado no Perfil. Ele restaura perfil, treinos, historico, alimentos, agua e progresso.
+              Escolha o arquivo .json baixado no Perfil. Ele restaura perfil, treinos, histórico, alimentos, água e progresso.
             </p>
           </div>
 
@@ -63,7 +63,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
 
           <div className="rounded-2xl bg-yellow-500/10 border border-yellow-500/20 p-4">
             <p className="text-xs text-yellow-200/90 leading-relaxed">
-              Sem backup, infelizmente nao tem como recuperar os dados locais depois de apagar o app da tela inicial.
+              Sem backup, infelizmente não tem como recuperar os dados locais depois de apagar o app da tela inicial.
               Nesse caso vai precisar fazer o cadastro do zero.
             </p>
           </div>
@@ -101,7 +101,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
           <div>
             <h1 className="text-3xl font-bold">Bem-vindo ao GymPilot</h1>
             <p className="text-white/50 text-sm mt-2 leading-relaxed">
-              Antes de começar, me fala se voce ja usava o app ou se esta entrando pela primeira vez.
+              Antes de começar, me fala se você já usava o app ou se esta entrando pela primeira vez.
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
             onClick={() => setMode('restore')}
             className="w-full p-5 rounded-2xl bg-primary-500/10 border border-primary-500/30 text-left active:scale-[0.98] transition-transform"
           >
-            <p className="font-bold text-lg">Ja sou usuario</p>
+            <p className="font-bold text-lg">Já sou usuário</p>
             <p className="text-white/45 text-xs mt-1">Tenho um backup e quero restaurar meus dados</p>
           </button>
 
@@ -119,8 +119,8 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
             onClick={onNewUser}
             className="w-full p-5 rounded-2xl bg-dark-200 border border-white/10 text-left active:scale-[0.98] transition-transform"
           >
-            <p className="font-bold text-lg">Sou novo usuario</p>
-            <p className="text-white/45 text-xs mt-1">Comecar cadastro e criar meus treinos do zero</p>
+            <p className="font-bold text-lg">Sou novo usuário</p>
+            <p className="text-white/45 text-xs mt-1">Começar cadastro e criar meus treinos do zero</p>
           </button>
         </div>
       </motion.div>

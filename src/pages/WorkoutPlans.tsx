@@ -10,6 +10,7 @@ import { WORKOUTS } from '@/constants/workouts';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
 import type { Exercise, WorkoutType } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface CatalogItem {
   name: string;
@@ -415,7 +416,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
             setAISwapList(validSwaps);
             setAISwapIndex(0);
           } else {
-            setAIMessage('Seu treino já está ótimo! Nenhuma substituição necessária. 💪');
+ setAIMessage('Seu treino já está ótimo! Nenhuma substituição necessária. ');
           }
         }
       }
@@ -449,7 +450,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
     if (aiSwapIndex < aiSwapList.length - 1) {
       setAISwapIndex(aiSwapIndex + 1);
     } else {
-      setAIMessage('Pronto! Todas as sugestões foram avaliadas. 🎉');
+ setAIMessage('Pronto! Todas as sugestões foram avaliadas. ');
       setAISwapList([]);
     }
   };
@@ -548,7 +549,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
           }`}
         >
-          {editing ? '✓ Salvar' : '✏️ Editar'}
+ {editing ? ' Salvar' : '️ Editar'}
         </motion.button>
       </div>
 
@@ -559,14 +560,14 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           onClick={() => setShowShareMenu(true)}
           className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium flex items-center gap-1 shrink-0"
         >
-          📤 Compartilhar
+ <MaterialIcon name="ios_share" /> Exportar
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setShowImport(true)}
           className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-[11px] font-medium flex items-center gap-1 shrink-0"
         >
-          📥 Importar
+ <MaterialIcon name="file_download" /> Importar
         </motion.button>
         {aiEnabled && (
           <motion.button
@@ -574,46 +575,66 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             onClick={() => navigate('/plans/reeval')}
             className="px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20 text-primary-300 text-[11px] font-medium flex items-center gap-1 shrink-0"
           >
-            🧠 Reavaliação IA
+            <MaterialIcon name="psychology" /> Reavaliação IA
           </motion.button>
         )}
       </div>
 
       {/* Tabs + Add Day */}
+      {editing && (
+        <p className="mb-2 text-[11px] text-white/35">
+          Ao mover, o treino assume a nova letra da posição: 1º vira A, 2º vira B, 3º vira C.
+        </p>
+      )}
       <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
-        {activeTypes.map((type, index) => (
-          <div key={type} className={`${editing ? 'min-w-[104px]' : 'flex-1 min-w-[52px]'}`}>
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              onClick={() => setSelected(type)}
-              className={`w-full py-3 rounded-xl font-semibold transition-all ${
-                selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
-              }`}
-            >
-              {type}
-            </motion.button>
-            {editing && (
-              <div className="grid grid-cols-2 gap-1 mt-1">
-                <button
-                  onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, -1); }}
-                  disabled={index === 0}
-                  className="h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
-                  aria-label={`Mover treino ${type} para a esquerda`}
-                >
-                  ←
-                </button>
-                <button
-                  onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, 1); }}
-                  disabled={index === activeTypes.length - 1}
-                  className="h-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold text-white/60 disabled:opacity-20"
-                  aria-label={`Mover treino ${type} para a direita`}
-                >
-                  →
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+        {activeTypes.map((type, index) => {
+          const positionType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index];
+          const previousType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index - 1];
+          const nextType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index + 1];
+
+          return (
+            <div key={type} className={`${editing ? 'min-w-[126px]' : 'flex-1 min-w-[52px]'}`}>
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                onClick={() => setSelected(type)}
+                className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                  selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
+                }`}
+              >
+                {editing ? (
+                  <span className="flex flex-col items-center leading-tight">
+                    <span className="text-[10px] font-semibold opacity-60">{index + 1}? na ordem</span>
+                    <span className="text-base">Treino {positionType}</span>
+                  </span>
+                ) : (
+                  type
+                )}
+              </motion.button>
+              {editing && (
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                  <button
+                    onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, -1); }}
+                    disabled={index === 0}
+                    className="h-10 rounded-xl bg-white/5 border border-white/10 text-white/60 disabled:opacity-20 flex items-center justify-center gap-1 text-[10px] font-semibold"
+                    aria-label={`Mover treino ${type} para virar treino ${previousType || type}`}
+                  >
+                    <MaterialIcon name="arrow_back" className="text-base" />
+                    {previousType || type}
+                  </button>
+                  <button
+                    onClick={(event) => { event.stopPropagation(); handleMoveSlot(index, 1); }}
+                    disabled={index === activeTypes.length - 1}
+                    className="h-10 rounded-xl bg-white/5 border border-white/10 text-white/60 disabled:opacity-20 flex items-center justify-center gap-1 text-[10px] font-semibold"
+                    aria-label={`Mover treino ${type} para virar treino ${nextType || type}`}
+                  >
+                    {nextType || type}
+                    <MaterialIcon name="arrow_forward" className="text-base" />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
         {activeTypes.length < 5 && (
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -662,7 +683,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                   onClick={handleAIBuild}
                   className="flex-1 py-2.5 rounded-xl bg-primary-500/10 border border-primary-500/20 text-primary-300 text-xs font-medium"
                 >
-                  🤖 IA Inteligente
+                  <MaterialIcon name="smart_toy" /> IA Inteligente
                 </button>
               )}
             </div>
@@ -716,7 +737,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                   <p className="text-white/30 text-xs">{formatExerciseConfig(exercise)} - {exercise.muscleGroup}</p>
                 </div>
                 {editing && (
-                  <button onClick={(event) => { event.stopPropagation(); handleDelete(exercise.id); }} className="text-red-400/60 text-lg px-1">🗑️</button>
+ <button onClick={(event) => { event.stopPropagation(); handleDelete(exercise.id); }} className="text-red-400/60 text-lg px-1">️</button>
                 )}
               </div>
 
@@ -726,16 +747,16 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                   {aiEnabled && (
                     <button
                       onClick={(event) => { event.stopPropagation(); handleExerciseAISwap(exercise.id); }}
-                      className="px-2.5 py-1 rounded-lg bg-primary-500/10 text-primary-300 text-[10px] font-medium"
+                      className="px-2.5 py-1 rounded-lg bg-primary-500/10 text-primary-300 text-[10px] font-medium inline-flex items-center gap-1.5"
                     >
-                      🤖 Substituir com IA
+                      <MaterialIcon name="smart_toy" /> Substituir com IA
                     </button>
                   )}
                   <button
                     onClick={(event) => { event.stopPropagation(); handleManualSwap(exercise.id, exercise.muscleGroup); }}
                     className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-white/70 text-[10px] font-medium"
                   >
-                    🔄 Trocar manual
+                    <MaterialIcon name="autorenew" /> Trocar manual
                   </button>
                 </div>
               )}
@@ -758,7 +779,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           {!editing && (
             <div className="card mt-4 border-primary-500/20">
               <p className="text-xs text-white/40 leading-relaxed">
-                💡 <strong>RIR 2-3</strong> — Termine cada série sentindo que poderia fazer mais 2-3 reps.
+ <strong>RIR 2-3</strong> — Termine cada série sentindo que poderia fazer mais 2-3 reps.
                 Progressão dupla: quando atingir o topo da faixa de reps, aumente a carga ~5%.
               </p>
             </div>
@@ -777,7 +798,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           >
             <div className="flex items-center justify-between px-5 pt-12 pb-4">
               <h2 className="text-lg font-bold">{manualSwapTargetId ? 'Escolha o substituto' : 'Catálogo de Exercícios'}</h2>
-              <button onClick={() => { setShowCatalog(false); setCatalogFilter(''); setCatalogSearch(''); setManualSwapTargetId(null); }} className="text-white/40 text-xl">✕</button>
+ <button onClick={() => { setShowCatalog(false); setCatalogFilter(''); setCatalogSearch(''); setManualSwapTargetId(null); }} className="text-white/40 text-xl"></button>
             </div>
 
             <div className="px-5 pb-3">
@@ -1049,8 +1070,8 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center px-6"
           >
-            <button onClick={() => { setShowAIBuilder(false); setAISwapList([]); setAIAddSuggestion(null); }} className="absolute top-12 right-5 text-white/40 text-xl">✕</button>
-            <p className="text-sm text-primary-300 font-semibold mb-6">🤖 IA analisando seu treino</p>
+ <button onClick={() => { setShowAIBuilder(false); setAISwapList([]); setAIAddSuggestion(null); }} className="absolute top-12 right-5 text-white/40 text-xl"></button>
+ <p className="text-sm text-primary-300 font-semibold mb-6"> IA analisando seu treino</p>
 
             {/* Loading */}
             {aiLoading && (
@@ -1079,9 +1100,9 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                 </motion.div>
                 <div className="flex gap-8 mt-8">
                   <motion.button whileTap={{ scale: 0.85 }} onClick={() => setShowAIBuilder(false)}
-                    className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400">✗</motion.button>
+ className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400"></motion.button>
                   <motion.button whileTap={{ scale: 0.85 }} onClick={handleAcceptAdd}
-                    className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400">✓</motion.button>
+ className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400"></motion.button>
                 </div>
               </>
             )}
@@ -1123,11 +1144,11 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
                 <div className="flex gap-8 mt-6">
                   <motion.button whileTap={{ scale: 0.85 }} onClick={handleRejectSwap}
-                    className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400">✗</motion.button>
+ className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400"></motion.button>
                   <motion.button whileTap={{ scale: 0.85 }} onClick={handleAcceptSwap}
-                    className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400">✓</motion.button>
+ className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400"></motion.button>
                 </div>
-                <p className="text-[10px] text-white/20 mt-3">Manter = ✗ • Trocar = ✓</p>
+ <p className="text-[10px] text-white/20 mt-3">Manter = • Trocar = </p>
               </>
             )}
 
@@ -1153,7 +1174,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center px-6"
           >
-            <button onClick={() => { setSwapTargetId(null); setSwapTargetSuggestion(null); }} className="absolute top-12 right-5 text-white/40 text-xl">✕</button>
+ <button onClick={() => { setSwapTargetId(null); setSwapTargetSuggestion(null); }} className="absolute top-12 right-5 text-white/40 text-xl"></button>
 
             {swapTargetLoading && (
               <div className="w-64 h-32 rounded-2xl bg-dark-100 border border-white/10 flex items-center justify-center">
@@ -1177,9 +1198,9 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                 </motion.div>
                 <div className="flex gap-8 mt-6">
                   <motion.button whileTap={{ scale: 0.85 }} onClick={() => { setSwapTargetId(null); setSwapTargetSuggestion(null); }}
-                    className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400">✗</motion.button>
+ className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center text-xl text-red-400"></motion.button>
                   <motion.button whileTap={{ scale: 0.85 }} onClick={confirmExerciseSwap}
-                    className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400">✓</motion.button>
+ className="w-14 h-14 rounded-full bg-green-500/20 border-2 border-green-500/50 flex items-center justify-center text-xl text-green-400"></motion.button>
                 </div>
               </>
             )}
@@ -1243,7 +1264,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             >
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
               <h3 className="text-lg font-bold">Exportar treinos</h3>
-              <p className="text-xs text-white/40">Escolha se quer exportar s? o treino aberto ou todos os treinos ativos.</p>
+              <p className="text-xs text-white/40">Escolha se quer exportar só o treino aberto ou todos os treinos ativos.</p>
 
               <motion.button
                 whileTap={{ scale: 0.97 }}

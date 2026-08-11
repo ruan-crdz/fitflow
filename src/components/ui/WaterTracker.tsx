@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface WaterTrackerProps {
   glasses: number;
@@ -39,11 +40,14 @@ export function WaterTracker({
           exit={{ opacity: 0 }}
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
         >
-          <p className="text-4xl animate-bounce">🎉💧🎉</p>
+ <p className="text-4xl animate-bounce"></p>
         </motion.div>
       )}
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-white/80">💧 Água</h2>
+        <h2 className="font-semibold text-white/80 flex items-center gap-2">
+          <MaterialIcon name="water_drop" className="text-primary-300" />
+          Água
+        </h2>
         <p className="text-xs text-white/40 font-mono">{ml}ml / {safeGoal * 250}ml</p>
       </div>
       <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
@@ -82,7 +86,7 @@ export function WaterTracker({
         </motion.button>
       </div>
       {glasses >= safeGoal && (
-        <p className="text-center text-xs text-green-400 font-medium">✅ Meta atingida! Parabéns!</p>
+ <p className="text-center text-xs text-green-400 font-medium"> Meta atingida! Parabéns!</p>
       )}
     </div>
   );

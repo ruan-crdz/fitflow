@@ -5,6 +5,8 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import type { WorkoutType } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { RichText } from '@/components/ui/RichText';
 
 interface AIPostWorkoutProps {
   workoutType: WorkoutType;
@@ -54,13 +56,13 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
 
     Promise.all([
       fetchAI(
-        `Você é personal trainer. Dê um feedback curto (2 frases max, use 1 emoji) sobre este treino concluído. Seja motivadora e específica sobre os exercícios.
+        `Você é personal trainer. Dê um feedback curto (2 frases max, sem emoji) sobre este treino concluído. Seja motivadora e específica sobre os exercícios.
 Perfil: ${profile.name}, objetivo ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
 Treino: ${workout.label} (${workout.focus}), duração ${durationMin}min.
 Exercícios: ${exercisesSummary}`
       ),
       fetchAI(
-        `Você é nutricionista esportiva. Sugira UMA refeição pós-treino rápida e prática (1-2 frases, com quantidades aproximadas). Use 1 emoji de comida.
+        `Você é nutricionista esportiva. Sugira UMA refeição pós-treino rápida e prática (1-2 frases, com quantidades aproximadas). Não use emoji de comida.
 Perfil: ${profile.name}, ${profile.weight}kg, objetivo ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
 Acabou de treinar: ${workout.focus}, ${durationMin}min.`
       ),
@@ -85,11 +87,11 @@ Acabou de treinar: ${workout.focus}, ${durationMin}min.`
         className="card bg-primary-500/10 border-primary-500/20 space-y-1"
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs">🤖</span>
+          <MaterialIcon name="smart_toy" className="text-sm text-primary-300" />
           <span className="text-[10px] font-semibold text-primary-300">{assistantName} Feedback</span>
         </div>
         <p className="text-sm text-white/70 leading-relaxed">
-          {loading ? <span className="animate-pulse">Analisando treino...</span> : feedback || 'Mandou bem! 💪'}
+          {loading ? <span className="animate-pulse">Analisando treino...</span> : feedback ? <RichText text={feedback} /> : 'Mandou bem!'}
         </p>
       </motion.div>
 
@@ -101,11 +103,11 @@ Acabou de treinar: ${workout.focus}, ${durationMin}min.`
         className="card bg-green-500/10 border-green-500/20 space-y-1"
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs">🍽️</span>
+          <MaterialIcon name="restaurant" className="text-sm text-green-300" />
           <span className="text-[10px] font-semibold text-green-300">Sugestão pós-treino</span>
         </div>
         <p className="text-sm text-white/70 leading-relaxed">
-          {loading ? <span className="animate-pulse">Pensando na refeição...</span> : meal || 'Capriche na proteína! 🥩'}
+          {loading ? <span className="animate-pulse">Pensando na refeição...</span> : meal ? <RichText text={meal} /> : 'Capriche na proteína!'}
         </p>
       </motion.div>
     </div>

@@ -54,7 +54,8 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(dateStr);
   return date.toLocaleDateString('pt-BR', {
     weekday: 'short',
     day: '2-digit',
@@ -62,6 +63,19 @@ export function formatDate(dateStr: string): string {
   });
 }
 
+export function formatDateBR(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  if (!year || !month || !day) return dateStr;
+  return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+}
+
+export function toLocalDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function getToday(): string {
-  return new Date().toISOString().split('T')[0];
+  return toLocalDateKey();
 }

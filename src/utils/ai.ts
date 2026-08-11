@@ -29,7 +29,7 @@ Se perguntarem sobre desempenho, correlacione com nutrição e hidratação.
 Dê alertas proativos (ex: "você só tomou 500ml de água, beba mais antes do treino").
 
 Regras:
-- Respostas curtas e práticas (máximo 3 parágrafos)
+- Respostas curtas e práticas: no chat, responda em no máximo 2 parágrafos curtos ou 4 bullets.
 - Quando falar de nutrição/treino, seja baseada em evidências
 - Use emojis com moderação
 - Nunca invente dados ou números sem base — use os dados reais fornecidos
@@ -41,7 +41,7 @@ Regras:
 function getSystemPrompt(): string {
   const { assistantName, personalityPrompt, personality } = getAIConfigPrompt();
   const toneLine = personality === 'tough'
-    ? 'Seu tom é de bronca forte, cobrança prática e energia de acordar o aluno para agir agora.'
+    ? 'Seu tom é de bronca forte, cobrança prática e energia de acordar o aluno para agir agora. Mesmo dando bronca, seja curto: 1 chamada de atenção + 2 passos práticos.'
     : 'Seu tom é como uma personal trainer amiga: próxima, encorajadora, mas embasada.';
   return BASE_SYSTEM_PROMPT
     .replace('GymPilot AI', assistantName)
@@ -135,7 +135,7 @@ ${foodList}
   Restante: ${tdee - todayTotals.calories}kcal
 
 HIDRATAÇÃO HOJE:
-  ${waterMl}ml / ${waterGoalMl}ml (${waterGlasses}/${waterGoalGlasses} copos)${waterGlasses >= waterGoalGlasses ? ' ✅ Meta atingida' : ` — faltam ${waterGoalMl - waterMl}ml`}
+  ${waterMl}ml / ${waterGoalMl}ml (${waterGlasses}/${waterGoalGlasses} copos)${waterGlasses >= waterGoalGlasses ? '  Meta atingida' : ` — faltam ${waterGoalMl - waterMl}ml`}
 
 PROGRAMA DE TREINO ATUAL:
 ${programText}
@@ -159,7 +159,7 @@ export async function sendMessage(
 
   const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -169,12 +169,14 @@ export async function sendMessage(
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemMessage },
-        ...messages,
+        ...chatMessages,
       ],
-      max_tokens: 500,
+      max_tokens: maxTokens,
       temperature: 0.7,
     }),
   });
+
+  const response = await requestChat(messages, 700);
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -182,6 +184,23 @@ export async function sendMessage(
   }
 
   const data = await response.json();
+  if (data.choices[0].finish_reason === 'length') {
+    const retryResponse = await requestChat([
+      ...messages,
+      {
+        role: 'user',
+        content: 'Sua resposta anterior ficou grande e foi cortada. Refaça em ate 500 caracteres, sem markdown quebrado, com no maximo 2 paragrafos curtos.',
+      },
+    ], 300);
+
+    if (!retryResponse.ok) {
+      const err = await retryResponse.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Erro na API');
+    }
+
+    const retryData = await retryResponse.json();
+    return retryData.choices[0].message.content;
+  }
   return data.choices[0].message.content;
 }
 

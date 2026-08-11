@@ -1,7 +1,7 @@
 import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
-import { formatDuration } from '@/utils/date';
+import { formatDuration, getToday } from '@/utils/date';
 
 export function useExportData() {
   const sessions = useHistoryStore((s) => s.sessions);
@@ -10,7 +10,7 @@ export function useExportData() {
   const exportCSV = () => {
     const completedSessions = sessions.filter((s) => s.completedAt);
 
-    let csv = 'Data,Treino,Foco,Duracao,Avaliacao\n';
+    let csv = 'Data,Treino,Foco,Duração,Avaliação\n';
     completedSessions.forEach((s) => {
       const workout = s.workoutType ? WORKOUT_MAP[s.workoutType] : null;
       const title = workout?.label || s.activityName || 'Atividade avulsa';
@@ -18,7 +18,7 @@ export function useExportData() {
       csv += `${s.date},${title},${focus},${formatDuration(s.durationMs || 0)},${s.rating || '-'}\n`;
     });
 
-    csv += '\n\nHistorico de Peso\nData,Peso (kg)\n';
+    csv += '\n\nHistórico de Peso\nData,Peso (kg)\n';
     weightEntries.forEach((e) => {
       csv += `${e.date},${e.weight}\n`;
     });
@@ -27,7 +27,7 @@ export function useExportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gympilot-dados-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `gympilot-dados-${getToday()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

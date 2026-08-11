@@ -8,7 +8,7 @@ export function WeightChart({ entries }: WeightChartProps) {
   if (entries.length < 2) {
     return (
       <div className="text-center py-6 text-white/30 text-sm">
-        Registre seu peso por pelo menos 2 dias para ver o gráfico 📈
+ Registre seu peso por pelo menos 2 dias para ver o gráfico
       </div>
     );
   }

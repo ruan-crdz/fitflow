@@ -30,7 +30,7 @@ export function ShareCard({ workoutType, durationMs, rating }: ShareCardProps) {
         await navigator.share({
           files: [new File([blob], 'gympilot-treino.png', { type: 'image/png' })],
           title: 'GymPilot',
-          text: `${workout.label} concluído! 💪`,
+ text: `${workout.label} concluído! `,
         });
       } else {
         const url = URL.createObjectURL(blob);
@@ -70,7 +70,7 @@ export function ShareCard({ workoutType, durationMs, rating }: ShareCardProps) {
             )}
           </div>
           <div className="pt-2 border-t border-white/10">
-            <p className="text-[10px] text-white/30">GymPilot 💪</p>
+ <p className="text-[10px] text-white/30">GymPilot </p>
           </div>
         </div>
       </div>
@@ -78,7 +78,7 @@ export function ShareCard({ workoutType, durationMs, rating }: ShareCardProps) {
         onClick={handleShare}
         className="w-full py-3 rounded-xl border border-white/10 text-white/60 text-sm font-medium"
       >
-        📤 Compartilhar nos Stories
+ Compartilhar nos Stories
       </button>
     </div>
   );

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { ToastContainer } from '@/components/ui/ToastContainer';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface AppShellProps {
   children: ReactNode;
@@ -21,12 +22,12 @@ export function AppShell({ children }: AppShellProps) {
   if (hideNav) return <><ToastContainer />{children}</>;
 
   const navItems = [
-    { path: '/dashboard', icon: '🏠', label: 'Inicio' },
-    { path: '/plans', icon: '💪', label: 'Treino' },
-    { path: '/health', icon: '🍎', label: 'Saude' },
-    { path: '/social', icon: '👥', label: 'Social' },
-    ...(aiEnabled ? [{ path: '/ai', icon: '⚡', label: 'IA' }] : []),
-    { path: '/profile', icon: '👤', label: 'Perfil' },
+    { path: '/dashboard', icon: 'home', label: 'Início' },
+    { path: '/plans', icon: 'fitness_center', label: 'Treino' },
+    { path: '/health', icon: 'restaurant', label: 'Saúde' },
+    { path: '/social', icon: 'groups', label: 'Social' },
+    ...(aiEnabled ? [{ path: '/ai', icon: 'bolt', label: 'IA' }] : []),
+    { path: '/profile', icon: 'person', label: 'Perfil' },
   ];
 
   return (
@@ -58,9 +59,9 @@ export function AppShell({ children }: AppShellProps) {
                   <motion.span
                     animate={{ scale: isActive ? 1.15 : 1, y: isActive ? -1 : 0 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                    className={`text-[21px] ${isActive ? '' : 'grayscale opacity-50'}`}
+                    className={`text-[23px] ${isActive ? 'text-primary-400' : 'text-white/40'}`}
                   >
-                    {item.icon}
+                    <MaterialIcon name={item.icon} />
                   </motion.span>
                   <motion.span
                     animate={{ opacity: isActive ? 1 : 0.4, y: isActive ? 0 : 1 }}

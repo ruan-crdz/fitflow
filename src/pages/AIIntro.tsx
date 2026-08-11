@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 export function AIIntro() {
   const navigate = useNavigate();
@@ -17,10 +18,10 @@ export function AIIntro() {
     `Inicializando ${assistantName}...`,
     'Conectando a inteligencia artificial...',
     'Sistemas online.',
-    `Ola, ${profile?.name || (isMale ? 'usuario' : 'usuaria')}. Prazer em conhecer voce.`,
+    `Olá, ${profile?.name || (isMale ? 'usuário' : 'usuária')}. Prazer em conhecer você.`,
     'Sou sua assistente fitness pessoal.',
-    'Estou aqui para tirar duvidas, dar dicas de treino, nutricao e motivacao.',
-    'Tudo baseado em ciencia. Tudo adaptado a voce.',
+    'Estou aqui para tirar duvidas, dar dicas de treino, nutrição e motivação.',
+    'Tudo baseado em ciência. Tudo adaptado a você.',
     isMale ? 'Vamos juntos?' : 'Vamos juntas?',
   ];
 
@@ -61,7 +62,7 @@ export function AIIntro() {
               {line}
               {i === lines.length - 1 && (
                 <span className={isMale ? 'ml-2' : 'ml-2 text-primary-400 text-base'}>
-                  {isMale ? '💪' : '♥'}
+                  <MaterialIcon name={isMale ? 'fitness_center' : 'favorite'} className="text-primary-300" />
                 </span>
               )}
             </motion.p>
@@ -76,7 +77,7 @@ export function AIIntro() {
             onClick={handleContinue}
             className="btn-primary mt-8"
           >
-            Comecar a conversar
+            Começar a conversar
           </motion.button>
         )}
       </div>

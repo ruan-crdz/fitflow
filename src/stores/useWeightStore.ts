@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getToday } from '@/utils/date';
 
 export interface WeightEntry {
   date: string; // YYYY-MM-DD
@@ -11,8 +12,6 @@ interface WeightState {
   addEntry: (weight: number) => void;
   hasTodayEntry: () => boolean;
 }
-
-const getToday = () => new Date().toISOString().slice(0, 10);
 
 export const useWeightStore = create<WeightState>()(
   persist(

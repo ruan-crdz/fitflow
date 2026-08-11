@@ -9,6 +9,7 @@ import { ShareCard } from '@/components/workout/ShareCard';
 import { formatDuration, getToday } from '@/utils/date';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import confetti from '@/utils/confetti';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 export function WorkoutComplete() {
   const navigate = useNavigate();
@@ -56,9 +57,7 @@ export function WorkoutComplete() {
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring' }}
             className="text-7xl block mb-4"
-          >
-            🏆
-          </motion.span>
+          ><MaterialIcon name="emoji_events" className="text-7xl text-primary-300" /></motion.span>
           <h1 className="text-3xl font-bold">Treino Concluído!</h1>
           <p className="text-white/40 mt-2">{workout.label} — {workout.focus}</p>
         </div>
@@ -91,7 +90,7 @@ export function WorkoutComplete() {
           onClick={handleFinish}
           className="btn-primary text-xl py-5"
         >
-          Concluir 🎉
+          Concluir
         </motion.button>
       </motion.div>
     </div>

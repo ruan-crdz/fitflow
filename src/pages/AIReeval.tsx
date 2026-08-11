@@ -8,6 +8,8 @@ import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import type { WorkoutType } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { RichText } from '@/components/ui/RichText';
 
 interface Message {
   role: 'ai' | 'user' | 'system';
@@ -243,16 +245,14 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-              <span className="text-lg">🧠</span>
+              <MaterialIcon name="psychology" className="text-lg text-primary-300" />
             </div>
             <div>
               <h1 className="font-bold text-sm">Reavaliação IA</h1>
               <p className="text-[10px] text-white/30">Psicólogo esportivo virtual</p>
             </div>
           </div>
-          <button onClick={() => navigate('/plans')} className="text-white/40 text-sm px-3 py-1">
-            ✕
-          </button>
+          <button onClick={() => navigate('/plans')} className="text-white/40 text-sm px-3 py-1"><MaterialIcon name="close" /></button>
         </div>
       </div>
 
@@ -273,7 +273,7 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
                     : 'bg-[rgb(var(--color-bg-card-rgb))] border border-white/5 text-white/80 rounded-bl-sm'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'ai' ? <RichText text={msg.content} /> : msg.content}
               </div>
             </motion.div>
           ))}
@@ -316,7 +316,7 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
             animate={{ opacity: 1, scale: 1 }}
             className="text-center py-6"
           >
-            <p className="text-3xl mb-3">✅</p>
+            <MaterialIcon name="check_circle" className="text-4xl text-green-400 mx-auto mb-3" />
             <p className="text-sm text-white/60">Reavaliação concluída!</p>
             <button
               onClick={() => navigate('/plans')}

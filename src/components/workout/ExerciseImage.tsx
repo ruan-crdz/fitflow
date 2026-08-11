@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface ExerciseImageProps {
   src?: string;
@@ -13,7 +14,7 @@ export function ExerciseImage({ src, alt, muscleGroup }: ExerciseImageProps) {
     return (
       <div className="w-full h-44 rounded-xl bg-gradient-to-br from-primary-500/10 to-dark-200 flex items-center justify-center">
         <div className="text-center">
-          <span className="text-4xl">🏋️</span>
+          <MaterialIcon name="star" className="text-primary-300" />
           <p className="text-xs text-white/30 mt-2">{muscleGroup}</p>
         </div>
       </div>

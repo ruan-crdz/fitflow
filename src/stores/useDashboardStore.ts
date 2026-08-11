@@ -18,14 +18,14 @@ export type DashboardWidget =
 export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidget, string> = {
   quote: 'Mensagem do dia',
   aiInsight: 'Insights da IA',
-  weeklyReport: 'Relatorio semanal',
+  weeklyReport: 'Relatório semanal',
   todayWorkout: 'Treino de hoje',
   quickStart: 'Escolher treino',
   stats: 'Resumo',
-  streak: 'Sequencia',
-  load: 'Progressao de carga',
+  streak: 'Sequência',
+  load: 'Progressão de carga',
   calories: 'Calorias do dia',
-  water: 'Agua',
+  water: 'Água',
   bmi: 'IMC',
   weight: 'Peso',
 };

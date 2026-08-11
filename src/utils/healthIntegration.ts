@@ -1,4 +1,5 @@
 import type { DailyHealthSummary, HealthPlatform } from '@/stores/useHealthIntegrationStore';
+import { getToday } from '@/utils/date';
 
 declare global {
   interface Window {
@@ -26,6 +27,6 @@ export async function syncNativeHealth(platform: HealthPlatform) {
   const granted = await window.FitFlowHealth.requestPermissions(platform);
   if (!granted) throw new Error('Permissão negada.');
 
-  const date = new Date().toISOString().slice(0, 10);
+  const date = getToday();
   return window.FitFlowHealth.getDailySummary(date, platform);
 }

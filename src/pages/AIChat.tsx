@@ -6,6 +6,8 @@ import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { sendMessage, type ChatMessage } from '@/utils/ai';
 import type { WorkoutType } from '@/types';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { RichText } from '@/components/ui/RichText';
 
 const SUGGESTIONS = [
   'O que comer antes do treino?',
@@ -185,7 +187,7 @@ export function AIChat() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-              <span className="text-base">🤖</span>
+              <MaterialIcon name="smart_toy" className="text-base text-primary-300" />
             </div>
             <div>
               <h1 className="font-bold">{assistantName}</h1>
@@ -235,7 +237,7 @@ export function AIChat() {
                     : 'bg-dark-100 text-white/80 rounded-bl-sm'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'assistant' ? <RichText text={msg.content} /> : msg.content}
               </div>
             </motion.div>
             {msg.role === 'assistant' && msg.content.trim() && (
@@ -244,16 +246,12 @@ export function AIChat() {
                   onClick={() => handleMessageFeedback(i, 'up')}
                   className={`w-8 h-8 rounded-full border text-xs ${feedbackByIndex[i] === 'up' ? 'bg-green-500/20 border-green-500/40' : 'bg-white/5 border-white/10 text-white/40'}`}
                   aria-label="Resposta boa"
-                >
-                  👍
-                </button>
+                ><MaterialIcon name="thumb_up" className="text-base" /></button>
                 <button
                   onClick={() => handleMessageFeedback(i, 'down')}
                   className={`w-8 h-8 rounded-full border text-xs ${feedbackByIndex[i] === 'down' ? 'bg-red-500/20 border-red-500/40' : 'bg-white/5 border-white/10 text-white/40'}`}
                   aria-label="Refazer resposta"
-                >
-                  👎
-                </button>
+                ><MaterialIcon name="thumb_down" className="text-base" /></button>
               </div>
             )}
           </div>
@@ -292,15 +290,11 @@ export function AIChat() {
                 <button
                   onClick={rejectPendingAction}
                   className="w-12 h-12 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-lg"
-                >
-                  ×
-                </button>
+                ><MaterialIcon name="close" /></button>
                 <button
                   onClick={applyPendingAction}
                   className="w-12 h-12 rounded-full bg-green-500/15 border border-green-500/30 text-green-300 text-lg"
-                >
-                  ✓
-                </button>
+                ><MaterialIcon name="check" /></button>
               </div>
             </div>
           </motion.div>
@@ -324,8 +318,7 @@ export function AIChat() {
             disabled={!input.trim() || loading}
             className="w-12 h-12 rounded-xl bg-primary-500 flex items-center justify-center disabled:opacity-30 active:scale-90 transition-transform"
           >
-            <span className="text-lg">↑</span>
-          </button>
+            <span className="text-lg">↑</span><MaterialIcon name="close" /><MaterialIcon name="check" /></button>
         </div>
       </div>
     </div>

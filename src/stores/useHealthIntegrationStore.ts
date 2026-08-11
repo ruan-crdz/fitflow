@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getToday } from '@/utils/date';
 
 export type HealthPlatform = 'none' | 'apple-health' | 'health-connect' | 'manual';
 
@@ -24,7 +25,7 @@ interface HealthIntegrationState {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return getToday();
 }
 
 function emptyToday(): DailyHealthSummary {

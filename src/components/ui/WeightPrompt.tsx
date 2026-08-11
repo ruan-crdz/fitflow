@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { useProfileStore } from '@/stores/useProfileStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface WeightPromptProps {
   onClose: () => void;
@@ -38,7 +39,7 @@ export function WeightPrompt({ onClose }: WeightPromptProps) {
           className="card w-full max-w-sm space-y-5 p-6"
         >
           <div className="text-center">
-            <span className="text-4xl">⚖️</span>
+            <MaterialIcon name="star" className="text-primary-300" />
             <h2 className="text-lg font-bold mt-2">Como está o peso hoje?</h2>
             <p className="text-sm text-white/40">Registre uma vez por dia para acompanhar</p>
           </div>

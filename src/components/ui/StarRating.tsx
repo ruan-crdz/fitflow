@@ -20,7 +20,7 @@ export function StarRating({ value = 0, onChange }: StarRatingProps) {
           onClick={() => onChange(star)}
           aria-label={`${star} estrela${star > 1 ? 's' : ''}`}
         >
-          {star <= (hover || value) ? '⭐' : '☆'}
+ {star <= (hover || value) ? '⭐' : ''}
         </button>
       ))}
     </div>

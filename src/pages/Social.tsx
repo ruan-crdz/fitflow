@@ -9,7 +9,8 @@ import { useWeightStore } from '@/stores/useWeightStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { calculateBMI, calculateTDEE } from '@/utils/calories';
-import { getTodayWorkoutType } from '@/utils/date';
+import { getToday, getTodayWorkoutType } from '@/utils/date';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface SocialProfile {
   id: string;
@@ -102,12 +103,12 @@ interface ChatPreference {
 }
 
 const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
-  { key: 'show_consistency', label: 'Consistencia' },
-  { key: 'show_load_progression', label: 'Progressao de carga' },
+  { key: 'show_consistency', label: 'Consistência' },
+  { key: 'show_load_progression', label: 'Progressão de carga' },
   { key: 'show_daily_calories', label: 'Calorias do dia' },
-  { key: 'show_water', label: 'Agua' },
+  { key: 'show_water', label: 'Água' },
   { key: 'show_bmi', label: 'IMC' },
-  { key: 'show_weight_progress', label: 'Evolucao de peso' },
+  { key: 'show_weight_progress', label: 'Evolução de peso' },
   { key: 'show_today_workout', label: 'Treino de hoje' },
 ];
 
@@ -116,7 +117,7 @@ function normalizeUsername(value: string) {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return getToday();
 }
 
 function SocialLoading() {
@@ -468,14 +469,14 @@ export function Social() {
         options: { data: { username: cleanUsername, display_name: displayName.trim() || cleanUsername } },
       });
       if (error) toast(error.message, 'error');
-      else if (!data.session) toast('Conta criada! Confirme seu email para entrar.', 'success');
+      else if (!data.session) toast('Conta criada! Confirme seu e-mail para entrar.', 'success');
       else toast('Conta criada!', 'success');
     } else {
       let loginEmail = loginIdentifier.trim();
       if (!loginEmail.includes('@')) {
         const { data, error } = await supabase.rpc('get_login_email', { p_username: normalizeUsername(loginEmail) });
         if (error || !data) {
-          toast('Username nao encontrado. Tente entrar com email.', 'error');
+          toast('Username não encontrado. Tente entrar com e-mail.', 'error');
           setLoading(false);
           return;
         }
@@ -595,7 +596,7 @@ export function Social() {
           ? [...prev, optimisticLike]
           : prev.filter((like) => !(like.post_id === postId && like.user_id === session.user.id))
       ));
-      toast('Nao consegui atualizar a curtida agora.', 'error');
+      toast('Não consegui atualizar a curtida agora.', 'error');
     }
 
     setPendingLikes((prev) => ({ ...prev, [postId]: false }));
@@ -621,7 +622,7 @@ export function Social() {
     if (!addresseeId) {
       const { data } = await supabase.from('social_profiles').select('*').eq('username', normalizeUsername(searchUsername)).maybeSingle();
       if (!data) {
-        toast('Usuario nao encontrado.', 'error');
+        toast('Usuário não encontrado.', 'error');
         return;
       }
       addresseeId = data.id;
@@ -638,9 +639,9 @@ export function Social() {
       addressee_id: addresseeId,
       status: targetProfile?.is_private ? 'pending' : 'accepted',
     });
-    if (error) toast('Pedido ja existe ou nao foi possivel enviar.', 'error');
+    if (error) toast('Pedido já existe ou não foi possível enviar.', 'error');
     else {
-      toast(targetProfile?.is_private ? 'Solicitacao enviada!' : 'Amigo adicionado!', 'success');
+      toast(targetProfile?.is_private ? 'Solicitação enviada!' : 'Amigo adicionado!', 'success');
       setSearchUsername('');
       setSearchResults([]);
       setSearchTouched(false);
@@ -671,7 +672,7 @@ export function Social() {
     setSearchLoading(false);
     if (error) {
       setSearchResults([]);
-      toast('Nao consegui buscar agora. Tente de novo.', 'error');
+      toast('Não consegui buscar agora. Tente de novo.', 'error');
       return;
     }
     const results = (data || []) as SocialProfile[];
@@ -692,7 +693,7 @@ export function Social() {
 
   function openChat(peerId: string) {
     if (!acceptedFriendIds.includes(peerId)) {
-      toast('Voce so pode mandar mensagem para amigos.', 'info');
+      toast('Você só pode mandar mensagem para amigos.', 'info');
       return;
     }
     setChatPeerId(peerId);
@@ -721,7 +722,7 @@ export function Social() {
   async function sendMessage() {
     if (!supabase || !session || !chatPeerId || (!messageText.trim() && !messageFile)) return;
     if (!acceptedFriendIds.includes(chatPeerId)) {
-      toast('Voce so pode mandar mensagem para amigos.', 'error');
+      toast('Você só pode mandar mensagem para amigos.', 'error');
       return;
     }
     const media = await uploadMessageMedia();
@@ -768,10 +769,10 @@ export function Social() {
   async function importShare(share: WorkoutShare) {
     if (!supabase) return;
     const preview = previewImport(share.payload.code);
-    if (!preview) return toast('Treino invalido.', 'error');
+    if (!preview) return toast('Treino inválido.', 'error');
     if (preview.kind === 'multiple') {
-      if (!window.confirm('Importar todos vai substituir sua divisao atual. Continuar?')) return;
-      if (!importAllWorkouts(preview.workouts)) return toast('Nao consegui importar.', 'error');
+      if (!window.confirm('Importar todos vai substituir sua divisão atual. Continuar?')) return;
+      if (!importAllWorkouts(preview.workouts)) return toast('Não consegui importar.', 'error');
     } else if (!importSingleWorkout(preview.workouts[0], 'new')) {
       return toast('Limite de 5 treinos atingido.', 'error');
     }
@@ -784,10 +785,10 @@ export function Social() {
     const stats = profileStats[target.id];
     if (!stats) return [];
     return [
-      target.show_consistency && { label: 'Consistencia', value: `${stats.consistency_count} treinos` },
-      target.show_load_progression && { label: 'Progressao', value: stats.load_progression || 'Sem dados' },
+      target.show_consistency && { label: 'Consistência', value: `${stats.consistency_count} treinos` },
+      target.show_load_progression && { label: 'Progressão', value: stats.load_progression || 'Sem dados' },
       target.show_daily_calories && { label: 'Calorias', value: `${stats.daily_calories}/${stats.daily_calorie_goal} kcal` },
-      target.show_water && { label: 'Agua', value: `${stats.water_glasses} copos` },
+      target.show_water && { label: 'Água', value: `${stats.water_glasses} copos` },
       target.show_bmi && stats.bmi && { label: 'IMC', value: String(stats.bmi) },
       target.show_weight_progress && stats.weight_latest && { label: 'Peso', value: stats.weight_start ? `${stats.weight_start} -> ${stats.weight_latest}kg` : `${stats.weight_latest}kg` },
       target.show_today_workout && { label: 'Hoje', value: stats.today_workout || 'Sem dados' },
@@ -821,12 +822,12 @@ export function Social() {
           </div>
 
           {authMode === 'login' ? (
-            <input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="Email ou username" className="input-field text-sm" />
+            <input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="E-mail ou username" className="input-field text-sm" />
           ) : (
             <>
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Nome exibido" className="input-field text-sm" />
               <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} placeholder="username" className="input-field text-sm" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="input-field text-sm" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail" className="input-field text-sm" />
             </>
           )}
 
@@ -838,7 +839,7 @@ export function Social() {
           </div>
 
           {authMode === 'signup' && (
-            <p className="text-xs text-white/35">Depois de criar, confirme seu email. Da para personalizar esse email no Supabase em Authentication &gt; Email Templates.</p>
+            <p className="text-xs text-white/35">Depois de criar, confirme seu e-mail. Dá para personalizar esse e-mail no Supabase em Authentication &gt; Email Templates.</p>
           )}
 
           <button
@@ -873,7 +874,7 @@ export function Social() {
           >
             Salvar perfil
           </button>
-          <p className="text-xs text-white/35">Se essa tela aparecer mesmo apos criar a conta, rode o SQL de upgrade no Supabase para ativar o perfil automatico.</p>
+          <p className="text-xs text-white/35">Se essa tela aparecer mesmo após criar a conta, rode o SQL de upgrade no Supabase para ativar o perfil automático.</p>
         </div>
       </div>
     );
@@ -935,18 +936,20 @@ export function Social() {
               </div>
             )}
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
-              {['🔥', '💪', '😂', '👏', '❤️', '😮'].map((emoji) => (
-                <button key={emoji} onClick={() => setMessageText((prev) => `${prev}${emoji}`)} className="w-9 h-9 rounded-full bg-white/5 text-lg">{emoji}</button>
+              {[
+                { icon: 'local_fire_department', text: 'fogo' },
+                { icon: 'fitness_center', text: 'força' },
+                { icon: 'sentiment_satisfied', text: 'risos' },
+                { icon: 'front_hand', text: 'palmas' },
+                { icon: 'favorite', text: 'coração' },
+                { icon: 'mood', text: 'surpresa' },
+              ].map((item) => (
+                <button key={item.icon} onClick={() => setMessageText((prev) => prev + item.text)} className="w-9 h-9 rounded-full bg-white/5 text-lg text-primary-300"><MaterialIcon name={item.icon} /></button>
               ))}
             </div>
             <div className="flex gap-2">
               <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 16l4-4a3 3 0 0 1 4 0l4 4" />
-                  <path d="M14 14l1-1a3 3 0 0 1 4 0l1 1" />
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <circle cx="8" cy="9" r="1.5" />
-                </svg>
+                <MaterialIcon name="perm_media" className="text-xl text-primary-300" />
                 <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
               </label>
               <input
@@ -985,7 +988,7 @@ export function Social() {
                     {conversation.preference?.is_pinned ? 'Fixado - ' : ''}{conversation.profile?.display_name}
                   </p>
                   <p className="text-xs text-white/35 truncate">
-                    {conversation.lastMessage ? (conversation.lastMessage.body || (conversation.lastMessage.media_type === 'video' ? 'Video' : 'Foto')) : 'Toque para comecar uma conversa'}
+                    {conversation.lastMessage ? (conversation.lastMessage.body || (conversation.lastMessage.media_type === 'video' ? 'Vídeo' : 'Foto')) : 'Toque para começar uma conversa'}
                   </p>
                 </div>
               </button>
@@ -1112,7 +1115,7 @@ export function Social() {
         <div className="space-y-3">
           <div className="rounded-3xl bg-primary-500/10 border border-primary-500/20 p-4">
             <p className="text-xs font-bold text-primary-200 uppercase">Liga GymPilot</p>
-            <h2 className="text-2xl font-black">Ranking de consistencia</h2>
+            <h2 className="text-2xl font-black">Ranking de consistência</h2>
             <p className="text-sm text-white/45">Treinou, pontuou. Sumiu, caiu.</p>
           </div>
           <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
@@ -1193,14 +1196,14 @@ export function Social() {
 
       {incoming.length > 0 && (
         <div className="rounded-3xl bg-white/5 border border-white/10 p-3 space-y-2">
-          <p className="text-xs font-bold text-white/45 uppercase">Solicitacoes</p>
+          <p className="text-xs font-bold text-white/45 uppercase">Solicitações</p>
           {incoming.map((item) => {
             const requester = profiles[item.requester_id];
             return (
               <div key={item.id} className="flex items-center justify-between gap-3">
                 <button onClick={() => setViewProfileId(item.requester_id)} className="flex items-center gap-2 text-left">
                   <Avatar profile={requester} size="sm" />
-                  <span className="text-sm font-semibold">{requester?.display_name || 'Usuario'}</span>
+                  <span className="text-sm font-semibold">{requester?.display_name || 'Usuário'}</span>
                 </button>
                 <div className="flex gap-2">
                   <button onClick={() => updateFriendship(item.id, 'blocked')} className="w-9 h-9 rounded-full bg-red-500/15 text-red-300 text-xs font-bold">X</button>
@@ -1244,7 +1247,7 @@ export function Social() {
               <button onClick={() => setViewProfileId(post.user_id)} className="flex items-center gap-2 text-left">
                 <Avatar profile={author} size="sm" />
                 <div>
-                  <p className="text-sm font-bold">{author?.display_name || 'Usuario'}</p>
+                  <p className="text-sm font-bold">{author?.display_name || 'Usuário'}</p>
                   <p className="text-[10px] text-white/35">@{author?.username}</p>
                 </div>
               </button>
@@ -1260,7 +1263,7 @@ export function Social() {
                   className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${liked ? 'bg-primary-500/15 text-primary-300 border border-primary-500/25' : 'bg-white/5 text-white/50 border border-white/5'}`}
                   aria-label={liked ? 'Remover curtida' : 'Curtir'}
                 >
-                  <span className={`text-lg leading-none transition-all ${liked ? 'grayscale-0 scale-110' : 'grayscale opacity-45'}`}>💪</span>
+                  <MaterialIcon name="fitness_center" variant={liked ? 'filled' : 'outlined'} className={liked ? 'text-lg leading-none transition-all scale-110 text-primary-300' : 'text-lg leading-none transition-all text-white/35'} />
                   <span>{postLikes.length}</span>
                 </button>
                 <span className="text-xs text-white/35">{postComments.length} comentario(s)</span>

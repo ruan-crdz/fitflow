@@ -1,3 +1,5 @@
+import { getToday } from '@/utils/date';
+
 const BACKUP_KEYS = [
   'fitflow-profile',
   'fitflow-custom-workouts',
@@ -46,7 +48,7 @@ export function downloadBackup() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `gympilot-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `gympilot-backup-${getToday()}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -54,7 +56,7 @@ export function downloadBackup() {
 export function restoreBackup(raw: string) {
   const parsed = JSON.parse(raw) as Partial<BackupPayload>;
   if (parsed.kind !== 'gympilot-local-backup' || !parsed.storage || typeof parsed.storage !== 'object') {
-    throw new Error('Arquivo de backup invalido.');
+    throw new Error('Arquivo de backup inválido.');
   }
 
   BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
@@ -69,7 +71,7 @@ export function readBackupFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Nao foi possivel ler o arquivo.'));
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
     reader.readAsText(file);
   });
 }

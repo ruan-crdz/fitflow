@@ -43,7 +43,7 @@ export function ExerciseInfo({ exercise }: ExerciseInfoProps) {
                   onClick={() => setOpen(false)}
                   className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
                 >
-                  ✕
+
                 </button>
               </div>
 
@@ -57,7 +57,7 @@ export function ExerciseInfo({ exercise }: ExerciseInfoProps) {
 
               <div className="border-t border-white/10 pt-3">
                 <p className="text-[11px] text-white/30 leading-relaxed">
-                  📚 {exercise.source}
+ {exercise.source}
                 </p>
               </div>
             </motion.div>

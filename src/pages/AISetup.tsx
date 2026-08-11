@@ -7,6 +7,7 @@ import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { askAI } from '@/utils/ai';
 import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 type Phase = 'token' | 'generating' | 'summary';
 
@@ -70,13 +71,13 @@ export function AISetup() {
   const generateWorkout = async (key: string) => {
     setHasError(false);
     if (messages.length === 0) {
-      addMessage(`Olá, ${profile.name}! 👋`);
+      addMessage(`Olá, ${profile.name}! `);
       await delay(800);
       addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu avaliar a melhor estratégia de divisão pra você...`);
       await delay(1200);
       addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
       await delay(1000);
-      addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... 🧬`);
+      addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... `);
     }
 
     const grouped: Record<string, string[]> = {};
@@ -112,7 +113,7 @@ DIRETRIZES BASEADAS EM EVIDÊNCIA POR FAIXA ETÁRIA E SEXO:
 ${profile.age >= 40 ? `- Acima de 40 anos: priorizar aquecimento articular, evitar cargas excessivas em compressão vertebral, incluir exercícios de mobilidade e estabilização. Preferir séries moderadas (10-15 reps) em vez de carga máxima. Recuperação entre sessões é mais lenta — evitar treinar o mesmo grupo em dias consecutivos.` : ''}
 ${profile.age >= 50 ? `- Acima de 50 anos: atenção especial a exercícios de equilíbrio e saúde óssea. Evitar impacto excessivo. Incluir trabalho de core/estabilização em todo treino.` : ''}
 ${profile.age < 25 ? `- Jovem (<25 anos): pode tolerar maior volume e frequência. Aproveitar janela hormonal para compostos pesados.` : ''}
-${profile.sex === 'female' ? `- Mulher: considerar proporção de fibras tipo I vs II (mais resistência em membros inferiores). Maior volume de glúteo/posterior é fisiologicamente justificado. Se >40 anos, treino de força é essencial para prevenção de osteoporose — priorizar exercícios com carga axial (agachamento, terra).` : ''}
+${profile.sex === 'female' ? `- Mulher: considerar proporção de fibras tipo I vs II (mais resistência em membros inferiores). Maior volume de glúteo/posterior é fisiológicamente justificado. Se >40 anos, treino de força é essencial para prevenção de osteoporose — priorizar exercícios com carga axial (agachamento, terra).` : ''}
 ${profile.sex === 'male' ? `- Homem: distribuição natural de massa favorece tronco superior. Equilibrar com volume adequado de membros inferiores. Se >40 anos, incluir mobilidade de ombro e cuidado com articulações.` : ''}
 
 SUA TAREFA — AVALIAÇÃO DE SPLIT:
@@ -189,15 +190,15 @@ ${SCIENCE_GUARDRAILS}
               .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
               .map((e: { option: string; score: number }) => `${e.option}: ${e.score}/10`)
               .join(' • ');
-            addMessage(`📊 Avaliação: ${scoreBoard}`);
+      addMessage(`Avaliação: ${scoreBoard}`);
             await delay(600);
-            addMessage(`🏆 Vencedor: ${parsed.chosenSplit || winner.option}`);
+            addMessage(`Vencedor: ${parsed.chosenSplit || winner.option}`);
             await delay(400);
           }
 
-          if (parsed.explanation) addMessage(`📋 ${parsed.explanation}`);
+          if (parsed.explanation) addMessage(`${parsed.explanation}`);
           await delay(400);
-          if (parsed.rotation) addMessage(`🔄 Rotação: ${parsed.rotation}`);
+          if (parsed.rotation) addMessage(`Rotação: ${parsed.rotation}`);
 
           // Save workouts to store and update activeSlots atomically
           const typeLetters: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
@@ -234,21 +235,21 @@ ${SCIENCE_GUARDRAILS}
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       if (msg.includes('401') || msg.includes('Incorrect API')) {
-        addMessage('❌ Token inválido ou expirado. Verifique no site da OpenAI.');
+        addMessage(' Token inválido ou expirado. Verifique no site da OpenAI.');
       } else if (msg.includes('429') || msg.includes('Rate limit')) {
-        addMessage('⏳ Muitas requisições. Aguarde 1 minuto e tente novamente.');
+        addMessage('Muitas requisições. Águarde 1 minuto e tente novamente.');
       } else if (msg.includes('insufficient_quota')) {
-        addMessage('💳 Sem créditos na conta OpenAI. Adicione saldo em platform.openai.com.');
+        addMessage('Sem créditos na conta OpenAI. Adicione saldo em platform.openai.com.');
       } else if (msg.includes('cortada')) {
         if (retryCount < 1) {
-          addMessage('✂️ Resposta cortada pela API. Tentando novamente...');
+          addMessage('Resposta cortada pela API. Tentando novamente...');
           setRetryCount((c) => c + 1);
           await delay(1000);
           return generateWorkout(key);
         }
-        addMessage('✂️ Resposta cortada duas vezes. Tente novamente mais tarde.');
+        addMessage('Resposta cortada duas vezes. Tente novamente mais tarde.');
       } else {
-        addMessage(`❌ ${msg}`);
+        addMessage(` ${msg}`);
       }
       setHasError(true);
     }
@@ -269,7 +270,7 @@ ${SCIENCE_GUARDRAILS}
             className="flex-1 flex flex-col justify-center space-y-6"
           >
             <div className="text-center">
-              <span className="text-5xl block mb-4">🤖</span>
+              <MaterialIcon name="smart_toy" className="text-5xl block mb-4 text-primary-300 mx-auto" />
               <h1 className="text-2xl font-bold mb-2">Inteligência Artificial</h1>
               <p className="text-white/50 text-sm leading-relaxed">
                 Para montar seu treino personalizado, precisamos de um token da OpenAI (ChatGPT).
@@ -297,7 +298,7 @@ ${SCIENCE_GUARDRAILS}
               disabled={!tokenInput.trim()}
               onClick={handleTokenSubmit}
             >
-              Gerar meu treino 🚀
+              Gerar meu treino
             </button>
 
             <button
@@ -342,7 +343,7 @@ ${SCIENCE_GUARDRAILS}
                     onClick={() => { setRetryCount(0); generateWorkout(apiKey!); }}
                     className="btn-primary flex-1 py-3 text-sm"
                   >
-                    🔄 Tentar novamente
+                    Rotação: Tentar novamente
                   </button>
                   <button
                     onClick={() => navigate('/plans')}
@@ -364,7 +365,7 @@ ${SCIENCE_GUARDRAILS}
             animate={{ opacity: 1, y: 0 }}
             className="flex-1 flex flex-col"
           >
-            <h2 className="text-xl font-bold mb-1">Seu treino está pronto! 🎉</h2>
+            <h2 className="text-xl font-bold mb-1">Seu treino está pronto! </h2>
             <p className="text-white/40 text-sm mb-6">Montado com base na ciência pra você</p>
 
             <div className="space-y-4 flex-1 overflow-y-auto">
@@ -383,19 +384,19 @@ ${SCIENCE_GUARDRAILS}
                   </div>
                   {w.cardio && (
                     <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
-                      <span className="text-xs">🏃</span>
+                      <span className="text-xs"></span>
                       <p className="text-xs text-white/50">
                         {w.cardio.type} — {w.cardio.durationMin}min ({w.cardio.intensity})
                       </p>
                     </div>
                   )}
                   {w.estimatedCalories && (
-                    <p className="text-xs text-orange-400/70 mt-1">🔥 ~{w.estimatedCalories} kcal estimadas</p>
+                    <p className="text-xs text-orange-400/70 mt-1">~{w.estimatedCalories} kcal estimadas</p>
                   )}
                 </div>
               ))}
 
-              {messages.filter((m) => m.startsWith('📋') || m.startsWith('🔄')).map((m, i) => (
+              {messages.filter((m) => m.length > 0).map((m, i) => (
                 <p key={i} className="text-xs text-white/40 leading-relaxed">{m}</p>
               ))}
             </div>

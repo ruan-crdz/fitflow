@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getToday } from '@/utils/date';
 
 export interface FoodEntry {
   id: string;
@@ -21,7 +22,7 @@ interface FoodState {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return getToday();
 }
 
 export const useFoodStore = create<FoodState>()(

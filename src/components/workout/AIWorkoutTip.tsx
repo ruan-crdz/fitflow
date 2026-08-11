@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface AIWorkoutTipProps {
   exerciseName: string;
@@ -35,7 +36,7 @@ export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
         messages: [
           {
             role: 'system',
-            content: `Voce e ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} De UMA dica curta (max 15 palavras) de execucao segura ou motivacao para o exercicio. So a dica, sem explicacao. ${SCIENCE_GUARDRAILS}`,
+            content: `Você é ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Dê UMA dica curta (max 15 palavras) de execução segura ou motivação para o exercício. Só a dica, sem explicação. ${SCIENCE_GUARDRAILS}`,
           },
           {
             role: 'user',
@@ -70,7 +71,7 @@ export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
           exit={{ opacity: 0, y: -8 }}
           className="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary-500/10 border border-primary-500/20"
         >
-          <span className="text-sm">🤖</span>
+          <MaterialIcon name="smart_toy" className="text-primary-300" />
           <p className="text-xs text-primary-200 leading-relaxed">
             {loading ? (
               <span className="animate-pulse">Pensando...</span>

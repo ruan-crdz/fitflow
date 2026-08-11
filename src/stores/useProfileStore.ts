@@ -36,21 +36,21 @@ export const WEEKDAY_OPTIONS: { value: WeekDay; label: string }[] = [
   { value: 'dom', label: 'Dom' },
 ];
 
-export const GOAL_OPTIONS: { value: Goal; label: string; emoji: string }[] = [
-  { value: 'lose', label: 'Perder gordura', emoji: '🔥' },
-  { value: 'maintain', label: 'Manter', emoji: '⚖️' },
-  { value: 'gain', label: 'Ganhar massa', emoji: '💪' },
+export const GOAL_OPTIONS: { value: Goal; label: string; icon: string }[] = [
+  { value: 'lose', label: 'Perder gordura', icon: 'local_fire_department' },
+  { value: 'maintain', label: 'Manter', icon: 'balance' },
+  { value: 'gain', label: 'Ganhar massa', icon: 'fitness_center' },
 ];
 
-export const EXPERIENCE_OPTIONS: { value: ExperienceLevel; label: string; emoji: string; description: string }[] = [
-  { value: 'beginner', label: 'Iniciante', emoji: '🌱', description: 'Começando agora ou voltando após muito tempo parado' },
-  { value: 'intermediate', label: 'Intermediário', emoji: '💪', description: 'Treino consistente há 6+ meses' },
-  { value: 'advanced', label: 'Avançado', emoji: '🏆', description: 'Treino sério há 2+ anos' },
+export const EXPERIENCE_OPTIONS: { value: ExperienceLevel; label: string; icon: string; description: string }[] = [
+  { value: 'beginner', label: 'Iniciante', icon: 'eco', description: 'Começando agora ou voltando após muito tempo parado' },
+  { value: 'intermediate', label: 'Intermediário', icon: 'fitness_center', description: 'Treino consistente há 6+ meses' },
+  { value: 'advanced', label: 'Avançado', icon: 'emoji_events', description: 'Treino sério há 2+ anos' },
 ];
 
-export const FOCUS_OPTIONS: { value: TrainingFocus; label: string; emoji: string; description: string }[] = [
-  { value: 'balanced', label: 'Equilibrado', emoji: '⚖️', description: 'Volume igual pra todos os grupos musculares' },
-  { value: 'upper', label: 'Foco em superiores', emoji: '🦾', description: 'Mais volume pra peito, costas, ombros e braços' },
-  { value: 'lower', label: 'Foco em inferiores', emoji: '🦵', description: 'Mais volume pra glúteos, quadríceps e posterior' },
-  { value: 'custom', label: 'Personalizado', emoji: '✏️', description: 'Eu escolho o que quero em cada dia' },
+export const FOCUS_OPTIONS: { value: TrainingFocus; label: string; icon: string; description: string }[] = [
+  { value: 'balanced', label: 'Equilibrado', icon: 'balance', description: 'Volume igual pra todos os grupos musculares' },
+  { value: 'upper', label: 'Foco em superiores', icon: 'accessibility_new', description: 'Mais volume pra peito, costas, ombros e braços' },
+  { value: 'lower', label: 'Foco em inferiores', icon: 'directions_walk', description: 'Mais volume pra glúteos, quadríceps e posterior' },
+  { value: 'custom', label: 'Personalizado', icon: 'edit', description: 'Eu escolho o que quero em cada dia' },
 ];
