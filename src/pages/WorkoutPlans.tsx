@@ -1405,11 +1405,11 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
               {!importPreview ? (
                 <>
-                  <p className="text-xs text-white/40">Cole o codigo exportado. Eu vou identificar se ele tem um treino ou varios antes de alterar qualquer coisa.</p>
+                  <p className="text-xs text-white/40">Cole o código exportado. Eu vou identificar se ele tem um treino ou vários antes de alterar qualquer coisa.</p>
                   <textarea
                     value={importInput}
                     onChange={(e) => setImportInput(e.target.value)}
-                    placeholder="Cole o codigo aqui..."
+                    placeholder="Cole o código aqui..."
                     className="input-field text-sm min-h-[110px] resize-none"
                     autoFocus
                   />
@@ -1419,35 +1419,39 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                     onClick={handlePreviewImport}
                     className="btn-primary"
                   >
-                    Analisar importacao
+                    Analisar importação
                   </motion.button>
                 </>
               ) : importPreview.kind === 'multiple' ? (
                 <>
-                  <p className="text-xs text-white/40">Esse codigo tem {importPreview.workouts.length} treinos. Importar todos vai substituir sua divisao atual.</p>
+                  <p className="text-xs text-white/40">Esse código tem {importPreview.workouts.length} treinos. Importar todos vai substituir sua divisão atual.</p>
                   <div className="space-y-2">
                     <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3">
                       <p className="text-[10px] text-red-300 font-semibold uppercase tracking-wider">Seu treino atual</p>
-                      <p className="text-sm text-white/80 mt-1">{activeTypes.join(', ')} - {activeTypes.map((type) => summarizeWorkout(type)).join(' / ')}</p>
+                      {activeTypes.map((type) => (
+                        <p key={type} className="text-xs text-white/70 mt-1">
+                          Treino {type}: {summarizeWorkout(type)}
+                        </p>
+                      ))}
                     </div>
                     <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3">
                       <p className="text-[10px] text-green-300 font-semibold uppercase tracking-wider">Treinos importados</p>
                       {importPreview.workouts.map((workout, index) => (
                         <p key={index} className="text-xs text-white/70 mt-1">
-                          {String.fromCharCode(65 + index)}: {summarizeWorkout(workout)}
+                          Treino {String.fromCharCode(65 + index)}: {summarizeWorkout(workout)}
                         </p>
                       ))}
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <button onClick={() => setImportPreview(null)} className="flex-1 py-3 rounded-xl bg-white/5 text-white/50 text-sm font-medium">Voltar</button>
-                    <button onClick={handleImportAll} className="flex-1 py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold">Substituir todos</button>
+                    <button onClick={handleImportAll} className="flex-1 py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold">Confirmar substituição</button>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3">
-                    <p className="text-[10px] text-green-300 font-semibold uppercase tracking-wider">Treino que sera importado</p>
+                    <p className="text-[10px] text-green-300 font-semibold uppercase tracking-wider">Treino que será importado</p>
                     <p className="text-sm text-white/80 mt-1">{summarizeWorkout(importPreview.workouts[selectedImportIndex])}</p>
                     <p className="text-xs text-white/35 mt-1">{listWorkoutNames(importPreview.workouts[selectedImportIndex])}</p>
                   </div>
