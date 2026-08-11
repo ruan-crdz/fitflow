@@ -603,7 +603,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               >
                 {editing ? (
                   <span className="flex flex-col items-center leading-tight">
-                    <span className="text-[10px] font-semibold opacity-60">{index + 1}? na ordem</span>
+                    <span className="text-[10px] font-semibold opacity-60">{index + 1}º na ordem</span>
                     <span className="text-base">Treino {positionType}</span>
                   </span>
                 ) : (
