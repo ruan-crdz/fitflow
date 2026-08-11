@@ -9,8 +9,10 @@ import { EXERCISE_CATALOG, MUSCLE_GROUPS } from '@/constants/exerciseCatalog';
 import { WORKOUTS } from '@/constants/workouts';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
+import { buildTrainingCalendarIcs, downloadTextFile } from '@/utils/webIntegrations';
 import type { Exercise, WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { WORKOUT_BUILDER_SCHEMA, WORKOUT_SWAP_SCHEMA } from '@/constants/aiSchemas';
 
 interface CatalogItem {
@@ -42,6 +44,11 @@ interface SwapSuggestion {
 
 const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
 const EMPTY_CUSTOM_WORKOUTS: Record<WorkoutType, CustomExercise[] | null> = { A: null, B: null, C: null, D: null, E: null };
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
+  const value = String(hour).padStart(2, '0');
+  return { value, label: `${value}h` };
+});
+const MINUTE_OPTIONS = ['00', '15', '30', '45'].map((minute) => ({ value: minute, label: `${minute} min` }));
 
 interface EditBaseline {
   slots: WorkoutType[];
@@ -51,13 +58,14 @@ interface EditBaseline {
 export function WorkoutPlans() {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorkoutType>('A');
-  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
   const [editing, setEditing] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogFilter, setCatalogFilter] = useState<string>('');
   const [catalogSearch, setCatalogSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [calendarHour, setCalendarHour] = useState('19');
+  const [calendarMinute, setCalendarMinute] = useState('00');
   const [importInput, setImportInput] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [importPreview, setImportPreview] = useState<WorkoutImportPreview | null>(null);
@@ -109,33 +117,13 @@ export function WorkoutPlans() {
 
   const hasDraftSlotChanges = draftSlots.join('|') !== activeSlots.join('|');
 
-  const loadWorkoutDay = (type: WorkoutType) => {
-    const store = useCustomWorkoutStore.getState();
-    const list = store.getExercises(type);
-    if (list.length > 0) {
-      setSelectedExercises(list.map((exercise) => ({ ...exercise })));
-      return;
-    }
-    const fallback = WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
-    setSelectedExercises(fallback.map((exercise) => ({ ...exercise })));
-  };
-
   const selectWorkoutDay = (type: WorkoutType) => {
     setSelected(type);
-    loadWorkoutDay(type);
   };
 
   useEffect(() => {
     if (!editing) setDraftSlots(activeSlots);
   }, [activeSlots, editing]);
-
-  useEffect(() => {
-    loadWorkoutDay(selected);
-  }, []);
-
-  useEffect(() => {
-    loadWorkoutDay(selected);
-  }, [selected, activeSlots, customWorkouts]);
 
   const enterEditMode = () => {
     setDraftSlots(activeSlots);
@@ -151,8 +139,6 @@ export function WorkoutPlans() {
     if (hasDraftSlotChanges) {
       applySlotOrder(draftSlots);
       selectWorkoutDay(WORKOUT_TYPES[nextSelectedIndex] || 'A');
-    } else {
-      loadWorkoutDay(selected);
     }
     setEditing(false);
     setEditBaseline(null);
@@ -170,13 +156,19 @@ export function WorkoutPlans() {
   };
 
   const getVisibleExercises = (type: WorkoutType): Exercise[] => {
-    if (type === selected) return selectedExercises;
-    const list = useCustomWorkoutStore.getState().getExercises(type);
-    if (list.length > 0) return list;
-    return WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
+    const custom = customWorkouts?.[type];
+    if (custom && custom.length > 0) {
+      return custom.map((exercise) => ({
+        ...exercise,
+        info: '',
+        source: '',
+      }));
+    }
+    const fallback = WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
+    return fallback.map((exercise) => ({ ...exercise }));
   };
 
-  const exercises = selectedExercises;
+  const exercises = getVisibleExercises(selected);
 
   const summarizeWorkout = (workout: WorkoutImportItem | WorkoutType) => {
     const list = typeof workout === 'string' ? getVisibleExercises(workout) : workout.exercises;
@@ -645,6 +637,30 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
     return matchesGroup && matchesSearch;
   });
 
+  const downloadTrainingCalendar = () => {
+    if (!profile) {
+      toast('Complete seu perfil antes de exportar o calendário.', 'error');
+      return;
+    }
+
+    const startHour = Math.max(0, Math.min(23, Number(calendarHour) || 19));
+    const startMinute = Math.max(0, Math.min(59, Number(calendarMinute) || 0));
+
+    const ics = buildTrainingCalendarIcs(profile, {
+      weeks: 8,
+      startHour,
+      startMinute,
+    });
+
+    if (!ics) {
+      toast('Defina seus dias de treino no perfil para gerar o calendário.', 'error');
+      return;
+    }
+
+    downloadTextFile('fitflow-treinos.ics', ics);
+    toast(`Calendário baixado para ${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}.`, 'success');
+  };
+
   return (
     <div className="gym-page">
       <div className="flex items-center justify-between mb-2">
@@ -776,14 +792,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
       </div>
 
       {/* Workout Detail */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={selected}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="space-y-3"
-        >
+      <div className="space-y-3">
           <div className="mb-4">
             <h2 className="text-lg font-bold">Treino {selected}</h2>
             <p className="text-primary-400 text-sm">{workoutFocus}</p>
@@ -913,8 +922,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               </p>
             </div>
           )}
-        </motion.div>
-      </AnimatePresence>
+      </div>
 
       {/* Exercise Catalog Modal */}
       <AnimatePresence>
@@ -1422,6 +1430,60 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-2" />
               <h3 className="text-lg font-bold">Exportar treinos</h3>
               <p className="text-xs text-white/40">Escolha se quer exportar só o treino aberto ou todos os treinos ativos.</p>
+
+              <div className="rounded-xl border border-primary-500/20 bg-primary-500/5 p-3 space-y-2">
+                <p className="text-sm font-semibold text-primary-300 flex items-center gap-1.5">
+                  <MaterialIcon name="calendar_month" className="text-base" />
+                  Calendário de treino
+                </p>
+                <p className="text-[11px] text-white/45">Escolha o horário e baixe os próximos treinos no calendário.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <label>
+                    <span className="text-[11px] text-white/45 block mb-1">Hora</span>
+                    <CustomSelect value={calendarHour} onChange={setCalendarHour} options={HOUR_OPTIONS} />
+                  </label>
+                  <label>
+                    <span className="text-[11px] text-white/45 block mb-1">Minuto</span>
+                    <CustomSelect value={calendarMinute} onChange={setCalendarMinute} options={MINUTE_OPTIONS} />
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'Manhã 07:00', hour: '07', minute: '00' },
+                    { label: 'Almoço 12:00', hour: '12', minute: '00' },
+                    { label: 'Noite 19:00', hour: '19', minute: '00' },
+                  ].map((preset) => {
+                    const active = calendarHour === preset.hour && calendarMinute === preset.minute;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          setCalendarHour(preset.hour);
+                          setCalendarMinute(preset.minute);
+                        }}
+                        className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors ${
+                          active
+                            ? 'bg-primary-500/20 border-primary-500/40 text-primary-200'
+                            : 'bg-white/5 border-white/10 text-white/55'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-end gap-2">
+                  <p className="flex-1 text-[11px] text-white/45">Horário escolhido: {calendarHour}:{calendarMinute}</p>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={downloadTrainingCalendar}
+                    className="px-4 py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold"
+                  >
+                    Baixar .ics
+                  </motion.button>
+                </div>
+              </div>
 
               <motion.button
                 whileTap={{ scale: 0.97 }}

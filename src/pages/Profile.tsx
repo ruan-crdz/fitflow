@@ -1,25 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
-import { useHistoryStore } from '@/stores/useHistoryStore';
-import { useWaterStore } from '@/stores/useWaterStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useAIConfigStore, AI_PERSONALITIES, type AIPersonality } from '@/stores/useAIConfigStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
-import { useHealthIntegrationStore, type HealthPlatform } from '@/stores/useHealthIntegrationStore';
 import { ExportData } from '@/components/ui/ExportData';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
-import { syncNativeHealth } from '@/utils/healthIntegration';
-import { getToday } from '@/utils/date';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
 import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
-import { buildShortcutUrl, buildTrainingCalendarIcs, downloadTextFile } from '@/utils/webIntegrations';
-import { useToastStore } from '@/stores/useToastStore';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingLocation } from '@/types';
 
 const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
@@ -31,9 +24,6 @@ const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
 export function Profile() {
   const navigate = useNavigate();
   const { profile, updateProfile } = useProfileStore();
-  const sessions = useHistoryStore((s) => s.sessions);
-  const waterLogs = useWaterStore((s) => s.logs);
-  const showToast = useToastStore((s) => s.show);
   const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
   const { assistantName, personality, setAssistantName, setPersonality, resetAIConfig } = useAIConfigStore();
   const { themeId, setTheme } = useThemeStore();
@@ -49,32 +39,10 @@ export function Profile() {
     resetAccessibility,
   } = useAccessibilityStore();
   const { phase, setPhase } = useCycleStore();
-  const healthPlatform = useHealthIntegrationStore((s) => s.platform);
-  const healthConnected = useHealthIntegrationStore((s) => s.isConnected);
-  const healthDaily = useHealthIntegrationStore((s) => s.daily);
-  const today = getToday();
-  const healthSummary = healthDaily[today] || {
-    date: today,
-    steps: 0,
-    activeCalories: 0,
-    source: 'none' as const,
-    syncedAt: 0,
-  };
-  const connectHealth = useHealthIntegrationStore((s) => s.connect);
-  const disconnectHealth = useHealthIntegrationStore((s) => s.disconnect);
-  const setDailySummary = useHealthIntegrationStore((s) => s.setDailySummary);
-  const setTodayManual = useHealthIntegrationStore((s) => s.setTodayManual);
   const [editing, setEditing] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [aiKeyInput, setAiKeyInput] = useState('');
   const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
-  const [healthError, setHealthError] = useState('');
-  const [healthSyncing, setHealthSyncing] = useState(false);
-  const [manualSteps, setManualSteps] = useState(String(healthSummary.steps || ''));
-  const [manualCalories, setManualCalories] = useState(String(healthSummary.activeCalories || ''));
-
-  const todayWater = waterLogs[today] || 0;
-  const completedWorkouts = sessions.filter((session) => session.completedAt).length;
 
   const [name, setName] = useState(profile?.name || '');
   const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'undisclosed');
@@ -124,64 +92,6 @@ export function Profile() {
       limitations: parseCsvList(limitations),
     });
     setEditing(false);
-  };
-
-  const handleHealthConnect = async (platform: HealthPlatform) => {
-    setHealthError('');
-    setHealthSyncing(true);
-    try {
-      const summary = await syncNativeHealth(platform);
-      setDailySummary(summary);
-      setManualSteps(String(summary.steps));
-      setManualCalories(String(summary.activeCalories));
-    } catch (err) {
-      connectHealth('manual');
-      setHealthError(err instanceof Error ? err.message : 'Integração indisponível.');
-    } finally {
-      setHealthSyncing(false);
-    }
-  };
-
-  const copyShortcut = async (type: 'water' | 'start' | 'weight') => {
-    try {
-      const url = type === 'water'
-        ? buildShortcutUrl('add_water', { amount: 1 })
-        : type === 'start'
-          ? buildShortcutUrl('start_workout')
-          : buildShortcutUrl('log_weight', { value: Number(profile.weight).toFixed(1) });
-      await navigator.clipboard.writeText(url);
-      showToast('Atalho copiado. Cole no app Atalhos do iPhone.', 'success');
-    } catch {
-      showToast('Não consegui copiar. Tente novamente.', 'error');
-    }
-  };
-
-  const exportTrainingCalendar = () => {
-    const ics = buildTrainingCalendarIcs(profile, 8);
-    if (!ics) {
-      showToast('Defina seus dias de treino primeiro.', 'error');
-      return;
-    }
-    downloadTextFile('fitflow-treinos.ics', ics);
-    showToast('Calendário de treino baixado.', 'success');
-  };
-
-  const shareProgress = async () => {
-    const text = `${profile.name} no FitFlow: ${completedWorkouts} treinos concluídos, ${todayWater} copo(s) de água hoje.`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Meu progresso no FitFlow', text });
-        return;
-      } catch {
-        // segue para fallback
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('Resumo copiado para compartilhar.', 'success');
-    } catch {
-      showToast('Não consegui compartilhar agora.', 'error');
-    }
   };
 
   return (
@@ -558,117 +468,6 @@ export function Profile() {
               className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-semibold"
             >
               Restaurar acessibilidade padrão
-            </button>
-          </div>
-
-          {/* Health Integration */}
-          <div className="card space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-semibold text-white/80">Integração de saúde</h2>
-                <p className="text-xs text-white/35 mt-1">Passos e calorias ativas entram no cálculo do dia.</p>
-              </div>
-              {healthConnected && (
-                <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-300 text-[10px] font-semibold">
-                  {healthPlatform === 'manual' ? 'Manual' : 'Conectado'}
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Stat label="Passos hoje" value={`${healthSummary.steps}`} />
-              <Stat label="Calorias ativas" value={`${healthSummary.activeCalories} kcal`} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleHealthConnect('apple-health')}
-                disabled={healthSyncing}
-                className="py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium disabled:opacity-40"
-              >
-                iPhone Saúde
-              </button>
-              <button
-                onClick={() => handleHealthConnect('health-connect')}
-                disabled={healthSyncing}
-                className="py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-medium disabled:opacity-40"
-              >
-                Android Health
-              </button>
-            </div>
-
-            {healthError && (
-              <p className="text-xs text-yellow-300/80 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-                {healthError} Por enquanto, use entrada manual. Para sincronização automática, o GymPilot precisa estar empacotado como app iOS/Android.
-              </p>
-            )}
-
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                value={manualSteps}
-                onChange={(e) => setManualSteps(e.target.value)}
-                placeholder="Passos"
-                className="input-field text-sm"
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                value={manualCalories}
-                onChange={(e) => setManualCalories(e.target.value)}
-                placeholder="kcal ativas"
-                className="input-field text-sm"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setTodayManual(Number(manualSteps), Number(manualCalories))}
-                className="flex-1 py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold"
-              >
-                Salvar saúde do dia
-              </button>
-              {healthConnected && (
-                <button
-                  onClick={disconnectHealth}
-                  className="px-4 py-3 rounded-xl bg-white/5 text-white/40 text-sm"
-                >
-                  Desconectar
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="card space-y-3 border border-primary-500/20">
-            <h2 className="font-semibold text-white/80 flex items-center gap-2">
-              <MaterialIcon name="link" className="text-primary-300" />
-              Integrações web (iPhone)
-            </h2>
-            <p className="text-xs text-white/45">
-              Funciona sem app nativo: use o app Atalhos da Apple, calendário e compartilhamento do iPhone.
-            </p>
-
-            <div className="grid grid-cols-1 gap-2">
-              <button onClick={() => void copyShortcut('water')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
-                Copiar atalho: +1 copo d'água
-              </button>
-              <button onClick={() => void copyShortcut('start')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
-                Copiar atalho: iniciar treino de hoje
-              </button>
-              <button onClick={() => void copyShortcut('weight')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
-                Copiar atalho: registrar peso atual
-              </button>
-            </div>
-
-            <button onClick={exportTrainingCalendar} className="w-full py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold">
-              Baixar calendário de treinos (.ics)
-            </button>
-
-            <button onClick={() => void shareProgress()} className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-semibold">
-              Compartilhar progresso
             </button>
           </div>
 

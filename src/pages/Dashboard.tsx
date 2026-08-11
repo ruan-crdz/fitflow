@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useSessionStore } from '@/stores/useSessionStore';
@@ -37,13 +37,11 @@ type DashboardHistory = 'consistency' | 'load' | 'calories' | 'water' | 'bmi' | 
 export function Dashboard() {
   useTrainingReminder();
   const navigate = useNavigate();
-  const location = useLocation();
   const profile = useProfileStore((s) => s.profile)!;
   const activeSession = useSessionStore((s) => s.activeSession);
   const startSession = useSessionStore((s) => s.startSession);
   const sessions = useHistoryStore((s) => s.sessions);
   const weightEntries = useWeightStore((s) => s.entries);
-  const addWeightEntry = useWeightStore((s) => s.addEntry);
   const hasTodayWeight = useWeightStore((s) => s.hasTodayEntry());
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
@@ -62,7 +60,6 @@ export function Dashboard() {
   const [editingDashboard, setEditingDashboard] = useState(false);
   const [historyView, setHistoryView] = useState<DashboardHistory>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
-  const showToast = useToastStore((s) => s.show);
 
   const today = getToday();
   const todayFoodEntries = foodLogs[today] || [];
@@ -135,43 +132,6 @@ export function Dashboard() {
   const handleResumeWorkout = () => {
     navigate('/workout');
   };
-
-  useEffect(() => {
-    if (!location.search) return;
-    const params = new URLSearchParams(location.search);
-    const action = params.get('ff_action');
-    if (!action) return;
-
-    if (action === 'add_water') {
-      const amount = Math.max(1, Math.min(8, Number(params.get('amount') || '1')));
-      for (let i = 0; i < amount; i += 1) addGlass();
-      showToast(`${amount} copo(s) de água registrado(s).`, 'success');
-      navigate('/dashboard', { replace: true });
-      return;
-    }
-
-    if (action === 'log_weight') {
-      const value = Number(params.get('value') || '0');
-      if (value >= 30 && value <= 300) {
-        addWeightEntry(value);
-        showToast(`Peso de ${value.toFixed(1)} kg registrado.`, 'success');
-      } else {
-        showToast('Peso inválido no atalho.', 'error');
-      }
-      navigate('/dashboard', { replace: true });
-      return;
-    }
-
-    if (action === 'start_workout') {
-      const typeParam = (params.get('type') || '').toUpperCase() as WorkoutType;
-      const autoType = getTodayWorkoutType(profile.trainingDays) || activeSlots[0] || 'A';
-      const selectedType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[]).includes(typeParam) ? typeParam : autoType;
-      startSession(selectedType);
-      showToast(`Treino ${selectedType} iniciado pelo atalho.`, 'success');
-      navigate('/workout', { replace: true });
-      return;
-    }
-  }, [location.search, addGlass, addWeightEntry, navigate, showToast, startSession, profile.trainingDays, activeSlots]);
 
   return (
     <div className="gym-page">

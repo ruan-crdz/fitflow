@@ -1,7 +1,5 @@
 import type { Profile, WeekDay } from '@/types';
 
-type ShortcutAction = 'add_water' | 'start_workout' | 'log_weight';
-
 const WEEKDAY_INDEX: Record<WeekDay, number> = {
   dom: 0,
   seg: 1,
@@ -33,14 +31,17 @@ function nextDateForWeekday(base: Date, weekDay: WeekDay) {
   return date;
 }
 
-export function buildShortcutUrl(action: ShortcutAction, params?: Record<string, string | number>) {
-  const url = new URL(`${window.location.origin}${import.meta.env.BASE_URL}#/dashboard`);
-  url.searchParams.set('ff_action', action);
-  Object.entries(params || {}).forEach(([key, value]) => url.searchParams.set(key, String(value)));
-  return url.toString();
-}
-
-export function buildTrainingCalendarIcs(profile: Profile, weeks = 8) {
+export function buildTrainingCalendarIcs(
+  profile: Profile,
+  options?: {
+    weeks?: number;
+    startHour?: number;
+    startMinute?: number;
+  },
+) {
+  const weeks = options?.weeks ?? 8;
+  const startHour = Math.max(0, Math.min(23, Math.floor(options?.startHour ?? 19)));
+  const startMinute = Math.max(0, Math.min(59, Math.floor(options?.startMinute ?? 0)));
   const days = (profile.trainingDays || []).slice(0, 5);
   if (!days.length) return null;
 
@@ -59,7 +60,7 @@ export function buildTrainingCalendarIcs(profile: Profile, weeks = 8) {
     for (let week = 0; week < weeks; week += 1) {
       const start = new Date(first);
       start.setDate(first.getDate() + week * 7);
-      start.setHours(19, 0, 0, 0);
+      start.setHours(startHour, startMinute, 0, 0);
       const end = new Date(start);
       end.setMinutes(end.getMinutes() + (profile.sessionDurationMin || 60));
 
