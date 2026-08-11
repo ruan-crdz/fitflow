@@ -959,7 +959,9 @@ export function Social() {
                 className="input-field text-sm rounded-full"
                 placeholder="Mensagem..."
               />
-              <button onClick={sendMessage} disabled={!messageText.trim() && !messageFile} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40">-&gt;</button>
+              <button onClick={sendMessage} disabled={!messageText.trim() && !messageFile} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40 flex items-center justify-center">
+                <MaterialIcon name="send" />
+              </button>
             </div>
           </div>
         </div>

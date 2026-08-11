@@ -410,9 +410,9 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
               <button
                 onClick={handleAskAI}
                 disabled={aiLoading || !aiQuestion.trim()}
-                className="px-4 py-2.5 rounded-xl bg-primary-500 text-white text-sm font-medium disabled:opacity-40"
+                className="px-4 py-2.5 rounded-xl bg-primary-500 text-white text-sm font-medium disabled:opacity-40 flex items-center justify-center"
               >
-                {aiLoading ? '...' : '→'}
+                {aiLoading ? '...' : <MaterialIcon name="send" />}
               </button>
             </div>
           </motion.div>

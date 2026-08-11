@@ -318,7 +318,8 @@ export function AIChat() {
             disabled={!input.trim() || loading}
             className="w-12 h-12 rounded-xl bg-primary-500 flex items-center justify-center disabled:opacity-30 active:scale-90 transition-transform"
           >
-            <span className="text-lg">↑</span><MaterialIcon name="close" /><MaterialIcon name="check" /></button>
+            <MaterialIcon name="send" className="text-lg" />
+          </button>
         </div>
       </div>
     </div>
