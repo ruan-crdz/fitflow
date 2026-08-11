@@ -342,7 +342,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-white/80 flex items-center gap-2">
-            <MaterialIcon name="local_fire_department" className="text-primary-300" />
+            <MaterialIcon name="whatshot" className="text-primary-300" />
             Calorias do dia
           </h2>
           <span className="text-xs text-white/40">Meta: {calories} kcal</span>
@@ -387,7 +387,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
       {false && (
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="water_drop" className="text-primary-300" /> Água</h2>
+          <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="opacity" className="text-primary-300" /> Água</h2>
           <p className="text-xs text-white/40">{waterGlasses * 250}ml / {waterGoal * 250}ml</p>
         </div>
         <div className="h-3 bg-dark-300 rounded-full overflow-hidden">

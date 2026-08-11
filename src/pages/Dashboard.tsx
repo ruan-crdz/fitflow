@@ -235,7 +235,7 @@ export function Dashboard() {
           <p className="text-xs text-white/40 mt-1">Treinos feitos</p>
         </div>
         <div className="card text-center">
-          <MaterialIcon name="local_fire_department" className="text-2xl text-primary-300 mx-auto mb-1" />
+          <MaterialIcon name="whatshot" className="text-2xl text-primary-300 mx-auto mb-1" />
           <p className="text-3xl font-bold text-success">{streak}</p>
           <p className="text-xs text-white/40 mt-1">Semanas seguidas</p>
         </div>
@@ -252,7 +252,7 @@ export function Dashboard() {
         <div className="card space-y-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold text-white/80 flex items-center gap-2">
-              <MaterialIcon name="local_fire_department" className="text-primary-300" />
+              <MaterialIcon name="whatshot" className="text-primary-300" />
               Calorias do dia
             </h2>
             <div className="flex items-center gap-2">
@@ -338,19 +338,19 @@ export function Dashboard() {
       />}
 
       {/* BMI */}
-      {isWidgetVisible('bmi') && <div className="card flex items-center justify-between">
-        <div>
-          <p className="text-sm text-white/40 flex items-center gap-2">
-            <MaterialIcon name="monitor_weight" className="text-primary-300" />
+      {isWidgetVisible('bmi') && <div className="card space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="straighten" className="text-primary-300" />
             IMC
-          </p>
-          <p className="text-xl font-bold">{bmi}</p>
+          </h2>
+          <HistoryButton onClick={() => setHistoryView('bmi')} label="Histórico de IMC" />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-end justify-between gap-3">
+          <p className="text-3xl font-bold">{bmi}</p>
           <span className="text-sm px-3 py-1 rounded-full bg-primary-500/10 text-primary-300">
             {bmiCategory(bmi)}
           </span>
-          <HistoryButton onClick={() => setHistoryView('bmi')} label="Histórico de IMC" />
         </div>
       </div>}
 
@@ -358,7 +358,7 @@ export function Dashboard() {
       {isWidgetVisible('weight') && <div className="card space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold text-white/80 flex items-center gap-2">
-            <MaterialIcon name="monitoring" className="text-primary-300" />
+            <MaterialIcon name="show_chart" className="text-primary-300" />
             Evolução do peso
           </h2>
           <div className="flex items-center gap-2">
@@ -611,7 +611,7 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
       )}
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold text-white/80 flex items-center gap-2">
-          <MaterialIcon name="water_drop" className="text-primary-300" />
+          <MaterialIcon name="opacity" className="text-primary-300" />
           Água
         </h2>
         <div className="flex items-center gap-2">

@@ -45,7 +45,7 @@ export function WaterTracker({
       )}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-white/80 flex items-center gap-2">
-          <MaterialIcon name="water_drop" className="text-primary-300" />
+          <MaterialIcon name="opacity" className="text-primary-300" />
           Água
         </h2>
         <p className="text-xs text-white/40 font-mono">{ml}ml / {safeGoal * 250}ml</p>

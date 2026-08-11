@@ -37,7 +37,7 @@ export const WEEKDAY_OPTIONS: { value: WeekDay; label: string }[] = [
 ];
 
 export const GOAL_OPTIONS: { value: Goal; label: string; icon: string }[] = [
-  { value: 'lose', label: 'Perder gordura', icon: 'local_fire_department' },
+  { value: 'lose', label: 'Perder gordura', icon: 'whatshot' },
   { value: 'maintain', label: 'Manter', icon: 'balance' },
   { value: 'gain', label: 'Ganhar massa', icon: 'fitness_center' },
 ];

@@ -18,7 +18,7 @@ const variantClass: Record<MaterialIconVariant, string> = {
 export function MaterialIcon({ name, className = '', variant = 'outlined', title }: MaterialIconProps) {
   return (
     <span
-      className={`${variantClass[variant]} inline-flex items-center justify-center leading-none align-middle ${className}`}
+      className={`${variantClass[variant]} inline-flex w-[1em] min-w-[1em] max-w-[1em] items-center justify-center overflow-hidden leading-none align-middle ${className}`}
       aria-hidden={title ? undefined : true}
       title={title}
     >

@@ -126,7 +126,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
           {/* Tour 3 */}
           {step === 'tour3' && (
             <div className="space-y-8 text-center">
-              <MaterialIcon name="monitoring" className="text-6xl text-primary-300 mx-auto" />
+              <MaterialIcon name="show_chart" className="text-6xl text-primary-300 mx-auto" />
               <div>
                 <h2 className="text-2xl font-bold mb-2">Acompanhe tudo</h2>
                 <p className="text-white/50 leading-relaxed">

@@ -937,7 +937,7 @@ export function Social() {
             )}
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
               {[
-                { icon: 'local_fire_department', text: 'fogo' },
+                { icon: 'whatshot', text: 'fogo' },
                 { icon: 'fitness_center', text: 'força' },
                 { icon: 'sentiment_satisfied', text: 'risos' },
                 { icon: 'front_hand', text: 'palmas' },

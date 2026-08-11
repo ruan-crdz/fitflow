@@ -6,7 +6,7 @@ export type CyclePhase = 'menstrual' | 'follicular' | 'ovulatory' | 'luteal' | '
 
 export const CYCLE_PHASES: { value: CyclePhase; label: string; icon: string; tip: string }[] = [
   { value: 'none', label: 'Não informar', icon: 'remove', tip: '' },
-  { value: 'menstrual', label: 'Menstrual', icon: 'water_drop', tip: 'Reduza intensidade se sentir desconforto. Treinos leves são ok.' },
+  { value: 'menstrual', label: 'Menstrual', icon: 'opacity', tip: 'Reduza intensidade se sentir desconforto. Treinos leves são ok.' },
   { value: 'follicular', label: 'Folicular', icon: 'eco', tip: 'Energia em alta! Ótimo momento pra puxar mais carga.' },
   { value: 'ovulatory', label: 'Ovulatória', icon: 'star', tip: 'Pico de força e energia. Aproveite pra bater recordes!' },
   { value: 'luteal', label: 'Lútea', icon: 'dark_mode', tip: 'Energia pode cair. Foque em volume moderado e sono.' },
