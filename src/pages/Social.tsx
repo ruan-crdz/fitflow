@@ -270,6 +270,8 @@ export function Social() {
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const messageLongPressRef = useRef<number | null>(null);
+  const feedRefreshTimeoutRef = useRef<number | null>(null);
+  const messageRefreshTimeoutRef = useRef<number | null>(null);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -491,6 +493,24 @@ export function Social() {
     };
   }
 
+  function queueFeedRefresh() {
+    if (document.hidden) return;
+    if (feedRefreshTimeoutRef.current) window.clearTimeout(feedRefreshTimeoutRef.current);
+    feedRefreshTimeoutRef.current = window.setTimeout(() => {
+      feedRefreshTimeoutRef.current = null;
+      void refreshFeed(true);
+    }, 600);
+  }
+
+  function queueMessageRefresh() {
+    if (document.hidden) return;
+    if (messageRefreshTimeoutRef.current) window.clearTimeout(messageRefreshTimeoutRef.current);
+    messageRefreshTimeoutRef.current = window.setTimeout(() => {
+      messageRefreshTimeoutRef.current = null;
+      void Promise.all([refreshMessages(), refreshChatPreferences()]);
+    }, 350);
+  }
+
   useEffect(() => () => {
     postPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
   }, [postPreviews]);
@@ -548,37 +568,61 @@ export function Social() {
     });
     const channel = client
       .channel(`social-${session.user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, () => void refreshFeed(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, () => void refreshFeed(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, () => void refreshFeed(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, () => void refreshFeed(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, () => void refreshMessages())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, () => void refreshChatPreferences())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, queueFeedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, queueFeedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, queueFeedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, queueFeedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, queueMessageRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, queueMessageRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void refreshFriends())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_shares' }, () => void refreshShares())
       .subscribe();
     return () => {
       cancelled = true;
+      if (feedRefreshTimeoutRef.current) window.clearTimeout(feedRefreshTimeoutRef.current);
+      if (messageRefreshTimeoutRef.current) window.clearTimeout(messageRefreshTimeoutRef.current);
       void client.removeChannel(channel);
     };
   }, [session?.user.id]);
 
   useEffect(() => {
     if (!session || !supabase || !socialReady) return;
-    const interval = window.setInterval(() => {
+    const refreshVisibleSocial = () => {
+      if (document.hidden) return;
       void refreshFeed(true);
       void refreshRanking();
-    }, 5000);
-    return () => window.clearInterval(interval);
+    };
+    const interval = window.setInterval(refreshVisibleSocial, 30000);
+    const handleVisibility = () => {
+      if (!document.hidden) refreshVisibleSocial();
+    };
+    window.addEventListener('focus', refreshVisibleSocial);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshVisibleSocial);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [session?.user.id, socialReady]);
 
   useEffect(() => {
     if (!session || !supabase || !socialReady || !chatPeerId) return;
-    const interval = window.setInterval(() => {
+    const refreshVisibleChat = () => {
+      if (document.hidden) return;
       void refreshMessages();
       void refreshChatPreferences();
-    }, 1500);
-    return () => window.clearInterval(interval);
+    };
+    const interval = window.setInterval(refreshVisibleChat, 8000);
+    const handleVisibility = () => {
+      if (!document.hidden) refreshVisibleChat();
+    };
+    window.addEventListener('focus', refreshVisibleChat);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshVisibleChat);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [session?.user.id, socialReady, chatPeerId]);
 
   useEffect(() => {

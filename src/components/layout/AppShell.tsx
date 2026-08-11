@@ -45,10 +45,23 @@ export function AppShell({ children }: AppShellProps) {
     };
 
     void refreshUnread();
-    const interval = window.setInterval(() => void refreshUnread(), 2000);
+    const channel = client
+      .channel('app-shell-unread')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, () => void refreshUnread())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, () => void refreshUnread())
+      .subscribe();
+    const refreshWhenVisible = () => {
+      if (!document.hidden) void refreshUnread();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 30000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      void client.removeChannel(channel);
     };
   }, []);
 
