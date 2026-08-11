@@ -126,7 +126,10 @@ const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
 
 function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
-  if (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
+  if (
+    lower.includes('could not find')
+    && (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache'))
+  ) {
     return 'Seu Supabase ainda está com o schema antigo. Rode supabase/social-feed-upgrade.sql no SQL Editor.';
   }
   if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme esse usuário.';
@@ -397,7 +400,7 @@ export function Social() {
 
   useEffect(() => {
     if (!chatPeerId || !socialReady) return;
-    void updateChatPreference(chatPeerId, { last_read_at: new Date().toISOString() });
+    markChatRead(chatPeerId);
   }, [chatPeerId, socialReady, messages.length]);
 
   useEffect(() => {
@@ -951,7 +954,7 @@ export function Social() {
     setViewProfileId(null);
     setMessageText('');
     setMessageFile(null);
-    void updateChatPreference(peerId, { last_read_at: new Date().toISOString() });
+    markChatRead(peerId);
   }
 
   async function uploadMessageMedia(file: File | null) {
@@ -991,16 +994,19 @@ export function Social() {
       setSendingMessage(false);
       return;
     }
-    const { error } = await supabase.from('social_messages').insert({
+    const payload: Partial<SocialMessage> & { sender_id: string; receiver_id: string; body: string } = {
       sender_id: session.user.id,
       receiver_id: chatPeerId,
       body,
-      media_url: media.media_url,
-      media_type: media.media_type,
-    });
+    };
+    if (media.media_url) {
+      payload.media_url = media.media_url;
+      payload.media_type = media.media_type;
+    }
+    const { error } = await supabase.from('social_messages').insert(payload);
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
-      await updateChatPreference(chatPeerId, { hidden_before: null, is_archived: false, last_read_at: new Date().toISOString() });
+      await updateChatPreference(chatPeerId, { hidden_before: null, is_archived: false, last_read_at: new Date().toISOString() }, false);
       await refreshMessages();
     }
     setSendingMessage(false);
@@ -1032,7 +1038,11 @@ export function Social() {
     else await refreshMessages();
   }
 
-  async function updateChatPreference(peerId: string, next: Partial<ChatPreference>) {
+  function markChatRead(peerId: string) {
+    void updateChatPreference(peerId, { last_read_at: new Date().toISOString() }, false);
+  }
+
+  async function updateChatPreference(peerId: string, next: Partial<ChatPreference>, showError = true) {
     if (!supabase || !session) return;
     const payload = {
       user_id: session.user.id,
@@ -1044,8 +1054,19 @@ export function Social() {
       ...next,
       updated_at: new Date().toISOString(),
     };
+    setChatPreferences((prev) => ({
+      ...prev,
+      [peerId]: {
+        user_id: session.user.id,
+        peer_id: peerId,
+        is_archived: payload.is_archived,
+        is_pinned: payload.is_pinned,
+        hidden_before: payload.hidden_before,
+        last_read_at: payload.last_read_at,
+      },
+    }));
     const { error } = await supabase.from('social_chat_preferences').upsert(payload);
-    if (error) toast(ptSupabaseError(error.message), 'error');
+    if (error && showError) toast(ptSupabaseError(error.message), 'error');
     else await refreshChatPreferences();
   }
 
@@ -1158,7 +1179,7 @@ export function Social() {
           </div>
 
           {authMode === 'signup' && (
-            <p className="text-xs text-white/35">Depois de criar, confirme seu e-mail. Dá para personalizar esse e-mail no Supabase em Authentication &gt; Email Templates.</p>
+            <p className="text-xs text-white/35">Depois de criar a conta, você já pode entrar no Social.</p>
           )}
 
           <button
@@ -1206,19 +1227,21 @@ export function Social() {
   if (chatPeerId) {
     const chatPeer = profiles[chatPeerId];
     return (
-      <div className="min-h-[100dvh] flex flex-col px-5 pt-0 pb-48">
-        <div className="sticky top-0 z-50 -mx-5 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5 flex items-center gap-3">
-          <button onClick={() => { setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
-          <button onClick={() => { setChatPeerId(null); setViewProfileId(chatPeerId); }} className="flex items-center gap-3 text-left min-w-0">
-            <Avatar profile={chatPeer} size="sm" />
-            <div className="min-w-0">
-              <h1 className="text-base font-bold truncate">{chatPeer?.display_name || 'Mensagem'}</h1>
-              <p className="text-[11px] text-white/35 truncate">@{chatPeer?.username}</p>
-            </div>
-          </button>
+      <div className="min-h-[100dvh] px-5 pt-28 pb-36">
+        <div className="fixed left-0 right-0 top-0 z-50 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5">
+          <div className="mx-auto max-w-md flex items-center gap-3">
+            <button onClick={() => { markChatRead(chatPeerId); setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
+            <button onClick={() => { markChatRead(chatPeerId); setChatPeerId(null); setViewProfileId(chatPeerId); }} className="flex items-center gap-3 text-left min-w-0">
+              <Avatar profile={chatPeer} size="sm" />
+              <div className="min-w-0">
+                <h1 className="text-base font-bold truncate">{chatPeer?.display_name || 'Mensagem'}</h1>
+                <p className="text-[11px] text-white/35 truncate">@{chatPeer?.username}</p>
+              </div>
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-4 space-y-2">
+        <div className="space-y-2">
           {chatMessages.map((message) => {
             const mine = message.sender_id === currentUserId;
             return (
@@ -1264,7 +1287,7 @@ export function Social() {
           )}
         </div>
 
-        <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-3 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
+        <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-2 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
           <div className="max-w-md mx-auto space-y-2">
             {messagePreview && (
               <div className="relative w-24">
@@ -1312,7 +1335,8 @@ export function Social() {
                 <Avatar profile={conversation.profile} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold truncate text-white/85">
-                    {conversation.preference?.is_pinned ? 'Fixado - ' : ''}{conversation.profile?.display_name}
+                    {conversation.preference?.is_pinned && <MaterialIcon name="push_pin" className="mr-1 align-[-3px] text-base text-primary-300" />}
+                    {conversation.profile?.display_name}
                   </p>
                   <p className="text-xs text-white/35 truncate">
                     {conversation.lastMessage ? (conversation.lastMessage.body || 'Foto') : 'Toque para começar uma conversa'}
