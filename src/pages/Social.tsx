@@ -1477,15 +1477,18 @@ export function Social() {
 
   return (
     <div className="px-5 pt-14 pb-28 space-y-5">
-      <div className="flex items-center justify-between">
-        <button onClick={() => setViewProfileId(currentUserId)} className="flex items-center gap-3 text-left">
-          <Avatar profile={profile} />
-          <div>
-            <h1 className="text-[26px] font-black leading-none">Social</h1>
-            <p className="text-xs text-white/35">@{profile.username}</p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-[26px] font-black leading-none">Social</h1>
+          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+        </div>
+        <button onClick={() => setViewProfileId(currentUserId)} className="flex w-full items-center gap-3 text-left rounded-3xl bg-white/5 border border-white/10 p-3 active:bg-white/10">
+          <Avatar profile={profile} size="sm" />
+          <div className="min-w-0">
+            <p className="text-base font-black truncate">{profile.display_name}</p>
+            <p className="text-xs text-white/35 truncate">@{profile.username}</p>
           </div>
         </button>
-        <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
       </div>
 
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
