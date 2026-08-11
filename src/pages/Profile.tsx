@@ -322,12 +322,11 @@ export function Profile() {
                   key={t.id}
                   onClick={() => setTheme(t.id)}
                   aria-pressed={themeId === t.id}
-                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
+                  className={`relative flex items-center justify-center p-2 rounded-xl border transition-all ${
                     themeId === t.id ? 'border-primary-500 bg-primary-500/10 scale-105 shadow-[0_0_0_1px_rgba(var(--color-primary-rgb),0.35)]' : 'border-white/5'
                   }`}
                 >
                   <div className="w-6 h-6 rounded-full" style={{ backgroundColor: t.colors.primary }} />
-                  <MaterialIcon name={themeId === t.id ? 'check_circle' : t.icon} className={`text-[16px] ${themeId === t.id ? 'text-primary-300' : 'text-white/40'}`} />
                 </button>
               ))}
             </div>

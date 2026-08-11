@@ -359,7 +359,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
-            <p className={`text-lg font-bold ${progressCalories >= 1 ? 'text-red-400' : 'text-primary-300'}`}>{totals.calories}</p>
+            <p className="text-lg font-bold text-primary-300">{totals.calories}</p>
             <p className="text-[10px] text-white/40">Consumidas</p>
           </div>
           <div>
@@ -367,7 +367,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             <p className="text-[10px] text-white/40">Queimadas</p>
           </div>
           <div>
-            <p className={`text-lg font-bold ${remaining > 0 ? 'text-primary-300' : 'text-red-400'}`}>{remaining}</p>
+            <p className="text-lg font-bold text-primary-300">{remaining}</p>
             <p className="text-[10px] text-white/40">{remaining > 0 ? 'Restantes' : 'Excedido'}</p>
           </div>
         </div>

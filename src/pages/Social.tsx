@@ -1007,18 +1007,6 @@ export function Social() {
                 <button onClick={() => setMessageFile(null)} className="absolute -right-2 -top-2 w-7 h-7 rounded-full bg-black/80 text-white text-xs">X</button>
               </div>
             )}
-            <div className="flex gap-1 overflow-x-auto no-scrollbar">
-              {[
-                { icon: 'whatshot', text: 'fogo' },
-                { icon: 'fitness_center', text: 'força' },
-                { icon: 'sentiment_satisfied', text: 'risos' },
-                { icon: 'front_hand', text: 'palmas' },
-                { icon: 'favorite', text: 'coração' },
-                { icon: 'mood', text: 'surpresa' },
-              ].map((item) => (
-                <button key={item.icon} onClick={() => setMessageText((prev) => prev + item.text)} className="w-9 h-9 rounded-full bg-white/5 text-lg text-primary-300"><MaterialIcon name={item.icon} /></button>
-              ))}
-            </div>
             <div className="flex gap-2">
               <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
                 <MaterialIcon name="perm_media" className="text-xl text-primary-300" />

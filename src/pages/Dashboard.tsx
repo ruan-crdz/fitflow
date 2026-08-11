@@ -189,7 +189,7 @@ export function Dashboard() {
               animate={{ scale: 1 }}
               className="text-center py-6"
             >
-              <MaterialIcon name="check_circle" className="text-5xl text-green-400" />
+              <MaterialIcon name="check_circle" className="text-5xl text-primary-300" />
               <p className="text-lg font-semibold mt-3">Treino concluído!</p>
               <p className="text-white/40 text-sm mt-1">Descanse e se recupere</p>
             </motion.div>
@@ -236,7 +236,7 @@ export function Dashboard() {
         </div>
         <div className="card text-center">
           <MaterialIcon name="whatshot" className="text-2xl text-primary-300 mx-auto mb-1" />
-          <p className="text-3xl font-bold text-success">{streak}</p>
+          <p className="text-3xl font-bold text-primary-300">{streak}</p>
           <p className="text-xs text-white/40 mt-1">Semanas seguidas</p>
         </div>
       </div>}
@@ -270,7 +270,7 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <p className={`text-lg font-bold ${progressCalories >= 1 ? 'text-red-400' : 'text-primary-300'}`}>{totals.calories}</p>
+              <p className="text-lg font-bold text-primary-300">{totals.calories}</p>
               <p className="text-[10px] text-white/40">Consumidas</p>
             </div>
             <div>
@@ -278,14 +278,14 @@ export function Dashboard() {
               <p className="text-[10px] text-white/40">Queimadas</p>
             </div>
             <div>
-              <p className={`text-lg font-bold ${remaining > 0 ? 'text-primary-300' : 'text-red-400'}`}>{remaining}</p>
+              <p className="text-lg font-bold text-primary-300">{remaining}</p>
               <p className="text-[10px] text-white/40">{remaining > 0 ? 'Restantes' : 'Excedido'}</p>
             </div>
           </div>
           <div className="space-y-2 pt-2 border-t border-white/5">
-            <MacroBar label="Proteína" current={totals.protein} goal={macros.protein} color="bg-red-400" />
-            <MacroBar label="Carboidratos" current={totals.carbs} goal={macros.carbs} color="bg-yellow-400" />
-            <MacroBar label="Gorduras" current={totals.fat} goal={macros.fat} color="bg-green-400" />
+            <MacroBar label="Proteína" current={totals.protein} goal={macros.protein} color="bg-primary-500" />
+            <MacroBar label="Carboidratos" current={totals.carbs} goal={macros.carbs} color="bg-primary-500" />
+            <MacroBar label="Gorduras" current={totals.fat} goal={macros.fat} color="bg-primary-500" />
           </div>
         </div>
       )}

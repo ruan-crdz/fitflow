@@ -39,7 +39,7 @@ export function WeightChart({ entries }: WeightChartProps) {
   const lastW = weights[weights.length - 1];
   const diff = lastW - firstW;
   const diffStr = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
-  const diffColor = diff <= 0 ? 'text-green-400' : 'text-red-400';
+  const diffColor = 'text-primary-300';
 
   return (
     <div className="space-y-2">
