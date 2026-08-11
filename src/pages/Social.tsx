@@ -387,7 +387,7 @@ export function Social() {
           type: 'comment_like',
           userId: like.user_id,
           postId: comment.post_id,
-          text: 'curtiu seu comentÃ¡rio',
+          text: 'curtiu seu comentário',
           createdAt: like.created_at || comment.created_at,
         });
       }
@@ -833,7 +833,7 @@ export function Social() {
         setPostFiles([]);
         setEditingPostId(null);
         setShowPostModal(false);
-        toast('Post atualizado!', 'success');
+        toast('Publicação atualizada!', 'success');
         await refreshFeed();
       }
       setLoading(false);
@@ -849,7 +849,7 @@ export function Social() {
       setPostBody('');
       setPostFiles([]);
       setShowPostModal(false);
-      toast('Post publicado!', 'success');
+      toast('Publicação publicada!', 'success');
       await refreshFeed();
     }
     setLoading(false);
@@ -869,7 +869,7 @@ export function Social() {
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setDeletedPostUndo(post);
-      toast('Post excluído.', 'success');
+      toast('Publicação excluída.', 'success');
       await refreshFeed();
     }
   }
@@ -884,7 +884,7 @@ export function Social() {
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setDeletedPostUndo(null);
-      toast('Post restaurado.', 'success');
+      toast('Publicação restaurada.', 'success');
       await refreshFeed();
     }
   }
@@ -925,7 +925,7 @@ export function Social() {
     const scrollHeightBefore = page.scrollHeight;
     const post = posts.find((item) => item.id === postId);
     if (post?.comments_enabled === false) {
-      toast('Comentários desativados nessa postagem.', 'info');
+      toast('Comentários desativados nessa publicação.', 'info');
       return;
     }
     if (commentText[postId].trim().length > 240) {
@@ -1596,7 +1596,7 @@ export function Social() {
                   <button
                     onClick={() => openFocusedPost(relatedPost.id)}
                     className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0 active:scale-95 transition-transform"
-                    aria-label="Abrir publicaÃ§Ã£o"
+                    aria-label="Abrir publicação"
                   >
                     {relatedImage ? (
                       <img src={relatedImage.image_url} alt="" className="w-full h-full object-cover" />
@@ -1753,7 +1753,7 @@ export function Social() {
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-2xl bg-white/5 border border-white/5 p-3">
             <p className="text-xl font-black text-white">{ownProfilePosts.length}</p>
-            <p className="text-xs text-white/40">Posts</p>
+            <p className="text-xs text-white/40">Publicações</p>
           </div>
           <button onClick={() => setProfileListMode(profileListMode === 'followers' ? null : 'followers')} className="rounded-2xl bg-white/5 border border-white/5 p-3">
             <p className="text-xl font-black text-white">{profileFollowers.length}</p>
@@ -1828,7 +1828,7 @@ export function Social() {
               className={`py-2 rounded-full text-sm font-black flex items-center justify-center gap-2 ${profilePostMode === 'mine' ? 'bg-primary-500 text-white' : 'text-white/45'}`}
             >
               <MaterialIcon name="grid_on" className="text-base" />
-              Posts
+              Publicações
             </button>
             <button
               onClick={() => setProfilePostMode('tagged')}
@@ -1847,7 +1847,7 @@ export function Social() {
                   <img src={postImages[0].image_url} alt="" className="w-full h-full object-cover bg-dark-200" />
                 ) : (
                   <div className="w-full h-full p-2 flex items-center justify-center">
-                    <p className="text-[10px] leading-tight text-white/55 line-clamp-5 break-words">{post.body || 'Post'}</p>
+                    <p className="text-[10px] leading-tight text-white/55 line-clamp-5 break-words">{post.body || 'Publicação'}</p>
                   </div>
                 )}
               </button>
@@ -1856,7 +1856,7 @@ export function Social() {
           </div>
           {profileGridPosts.length === 0 && (
             <p className="rounded-2xl bg-white/5 border border-white/10 p-4 text-sm text-white/35">
-              {profilePostMode === 'mine' ? 'Nenhum post ainda.' : 'Nenhuma marcação ainda.'}
+              {profilePostMode === 'mine' ? 'Nenhuma publicação ainda.' : 'Nenhuma marcação ainda.'}
             </p>
           )}
         </div>
@@ -1941,7 +1941,7 @@ export function Social() {
           >
             &lt;
           </button>
-          <h2 className="text-xl font-black">PublicaÃ§Ã£o</h2>
+          <h2 className="text-xl font-black">Publicação</h2>
           <div className="w-11" />
         </div>
       ) : (
@@ -2068,7 +2068,7 @@ export function Social() {
                     <button
                       onClick={() => setPostMenuOpenId((id) => (id === post.id ? null : post.id))}
                       className="w-9 h-9 rounded-full bg-white/5 text-white/50 flex items-center justify-center"
-                      aria-label="Opções da postagem"
+                      aria-label="Opções da publicação"
                     >
                       <MaterialIcon name="more_horiz" className="text-xl" />
                     </button>
@@ -2192,7 +2192,7 @@ export function Social() {
             </div>
           );
         })}
-        {visibleFeedPosts.length === 0 && <p className="card text-sm text-white/35">{focusedPostId ? 'PublicaÃ§Ã£o nÃ£o encontrada.' : 'Nenhuma postagem ainda.'}</p>}
+        {visibleFeedPosts.length === 0 && <p className="card text-sm text-white/35">{focusedPostId ? 'Publicação não encontrada.' : 'Nenhuma publicação ainda.'}</p>}
       </div>
         </>
       )}
@@ -2200,7 +2200,7 @@ export function Social() {
       <button
         onClick={() => setShowPostModal(true)}
         className="fixed left-1/2 -translate-x-1/2 bottom-[calc(92px+env(safe-area-inset-bottom))] z-40 w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] border border-white/15 flex items-center justify-center"
-        aria-label="Criar postagem"
+        aria-label="Criar publicação"
       >
         <MaterialIcon name="add" className="text-3xl" />
       </button>
@@ -2248,7 +2248,7 @@ export function Social() {
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70">
           <div className="w-full max-w-md rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black">{editingPostId ? 'Editar postagem' : 'Nova postagem'}</h2>
+              <h2 className="text-lg font-black">{editingPostId ? 'Editar publicação' : 'Nova publicação'}</h2>
               <button onClick={() => { setShowPostModal(false); setEditingPostId(null); setPostBody(''); setPostFiles([]); }} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
             </div>
             <textarea value={postBody} onChange={(e) => setPostBody(e.target.value)} className="input-field text-sm min-h-28 resize-none" placeholder="Escreva alguma coisa..." />
