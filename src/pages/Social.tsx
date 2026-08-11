@@ -83,6 +83,24 @@ interface WorkoutShare {
   imported_at?: string | null;
 }
 
+interface SocialMessage {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  body: string;
+  media_url?: string | null;
+  media_type?: 'image' | 'video' | null;
+  created_at: string;
+}
+
+interface ChatPreference {
+  user_id: string;
+  peer_id: string;
+  is_archived: boolean;
+  is_pinned: boolean;
+  hidden_before?: string | null;
+}
+
 const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
   { key: 'show_consistency', label: 'Consistencia' },
   { key: 'show_load_progression', label: 'Progressao de carga' },
@@ -159,8 +177,14 @@ export function Social() {
   const [likes, setLikes] = useState<Like[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [shares, setShares] = useState<WorkoutShare[]>([]);
+  const [messages, setMessages] = useState<SocialMessage[]>([]);
+  const [chatPreferences, setChatPreferences] = useState<Record<string, ChatPreference>>({});
+  const [rankingStats, setRankingStats] = useState<SocialProfileStats[]>([]);
+  const [socialMode, setSocialMode] = useState<'ranking' | 'feed'>('feed');
   const [feedMode, setFeedMode] = useState<'general' | 'friends'>('general');
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [chatPeerId, setChatPeerId] = useState<string | null>(null);
+  const [showConversations, setShowConversations] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -170,6 +194,9 @@ export function Social() {
   const [searchUsername, setSearchUsername] = useState('');
   const [searchResults, setSearchResults] = useState<SocialProfile[]>([]);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const [messageFile, setMessageFile] = useState<File | null>(null);
+  const [showArchivedChats, setShowArchivedChats] = useState(false);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -179,6 +206,41 @@ export function Social() {
   const selectedProfile = viewProfileId ? profiles[viewProfileId] : profile;
   const feedPosts = posts.filter((post) => feedMode === 'general' || post.user_id === currentUserId || acceptedFriendIds.includes(post.user_id));
   const inboxShares = shares.filter((s) => s.receiver_id === currentUserId);
+  const conversations = useMemo(() => acceptedFriendIds
+    .map((friendId) => {
+      const preference = chatPreferences[friendId];
+      const lastMessage = messages
+        .filter((message) => message.sender_id === friendId || message.receiver_id === friendId)
+        .filter((message) => !preference?.hidden_before || new Date(message.created_at) > new Date(preference.hidden_before))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      return { friendId, profile: profiles[friendId], lastMessage, preference };
+    })
+    .filter((item) => item.profile)
+    .filter((item) => showArchivedChats ? item.preference?.is_archived : !item.preference?.is_archived)
+    .sort((a, b) => {
+      if (Boolean(a.preference?.is_pinned) !== Boolean(b.preference?.is_pinned)) return a.preference?.is_pinned ? -1 : 1;
+      return new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime();
+    }), [acceptedFriendIds, chatPreferences, messages, profiles, showArchivedChats]);
+  const chatMessages = chatPeerId
+    ? messages.filter((message) => (
+      (message.sender_id === currentUserId && message.receiver_id === chatPeerId)
+      || (message.sender_id === chatPeerId && message.receiver_id === currentUserId)
+    )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
+    : [];
+  const rankingRows = rankingStats
+    .map((stats) => ({ stats, profile: profiles[stats.user_id] }))
+    .filter((row) => row.profile)
+    .sort((a, b) => b.stats.consistency_count - a.stats.consistency_count);
+  const postPreviews = useMemo(() => postFiles.map((file) => ({
+    name: file.name,
+    type: file.type.startsWith('video/') ? 'video' : 'image',
+    url: URL.createObjectURL(file),
+  })), [postFiles]);
+  const messagePreview = useMemo(() => (messageFile ? {
+    name: messageFile.name,
+    type: messageFile.type.startsWith('video/') ? 'video' : 'image',
+    url: URL.createObjectURL(messageFile),
+  } : null), [messageFile]);
   const foodTotals = useMemo(() => {
     const entries = foodLogs[todayKey()] || [];
     return entries.reduce(
@@ -192,6 +254,14 @@ export function Social() {
     );
   }, [foodLogs]);
   const waterGlasses = waterLogs[todayKey()] || 0;
+
+  useEffect(() => () => {
+    postPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
+  }, [postPreviews]);
+
+  useEffect(() => () => {
+    if (messagePreview) URL.revokeObjectURL(messagePreview.url);
+  }, [messagePreview]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -225,6 +295,8 @@ export function Social() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, () => void refreshFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, () => void refreshFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, () => void refreshFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, () => void refreshMessages())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, () => void refreshChatPreferences())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void refreshFriends())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_shares' }, () => void refreshShares())
       .subscribe();
@@ -236,7 +308,7 @@ export function Social() {
 
   async function refreshAll() {
     setLoading(true);
-    await Promise.all([refreshProfile(), refreshFriends(), refreshFeed(), refreshShares(), syncMyStats()]);
+    await Promise.all([refreshProfile(), refreshFriends(), refreshFeed(), refreshShares(), refreshMessages(), refreshChatPreferences(), refreshRanking(), syncMyStats()]);
     setLoading(false);
   }
 
@@ -327,6 +399,38 @@ export function Social() {
     const list = (data || []) as WorkoutShare[];
     setShares(list);
     await loadProfiles(list.flatMap((s) => [s.sender_id, s.receiver_id]));
+  }
+
+  async function refreshMessages() {
+    if (!supabase) return;
+    const { data } = await supabase
+      .from('social_messages')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(300);
+    const list = (data || []) as SocialMessage[];
+    setMessages(list);
+    await loadProfiles(list.flatMap((message) => [message.sender_id, message.receiver_id]));
+  }
+
+  async function refreshChatPreferences() {
+    if (!supabase || !session) return;
+    const { data } = await supabase.from('social_chat_preferences').select('*').eq('user_id', session.user.id);
+    const next: Record<string, ChatPreference> = {};
+    ((data || []) as ChatPreference[]).forEach((item) => { next[item.peer_id] = item; });
+    setChatPreferences(next);
+  }
+
+  async function refreshRanking() {
+    if (!supabase) return;
+    const { data } = await supabase
+      .from('social_profile_stats')
+      .select('*')
+      .order('consistency_count', { ascending: false })
+      .limit(50);
+    const list = (data || []) as SocialProfileStats[];
+    setRankingStats(list);
+    await loadProfiles(list.map((item) => item.user_id));
   }
 
   async function handleAuth() {
@@ -528,6 +632,81 @@ export function Social() {
     else await refreshFriends();
   }
 
+  function openChat(peerId: string) {
+    if (!acceptedFriendIds.includes(peerId)) {
+      toast('Voce so pode mandar mensagem para amigos.', 'info');
+      return;
+    }
+    setChatPeerId(peerId);
+    setShowConversations(false);
+    setViewProfileId(null);
+    setMessageText('');
+    setMessageFile(null);
+  }
+
+  async function uploadMessageMedia() {
+    if (!supabase || !session || !messageFile) return { media_url: null, media_type: null };
+    const ext = messageFile.name.split('.').pop() || (messageFile.type.startsWith('video/') ? 'mp4' : 'jpg');
+    const path = `${session.user.id}/dm-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('social-posts').upload(path, messageFile, { upsert: true, contentType: messageFile.type });
+    if (error) {
+      toast(error.message, 'error');
+      return { media_url: null, media_type: null };
+    }
+    const { data } = supabase.storage.from('social-posts').getPublicUrl(path);
+    return {
+      media_url: data.publicUrl,
+      media_type: messageFile.type.startsWith('video/') ? 'video' as const : 'image' as const,
+    };
+  }
+
+  async function sendMessage() {
+    if (!supabase || !session || !chatPeerId || (!messageText.trim() && !messageFile)) return;
+    if (!acceptedFriendIds.includes(chatPeerId)) {
+      toast('Voce so pode mandar mensagem para amigos.', 'error');
+      return;
+    }
+    const media = await uploadMessageMedia();
+    const { error } = await supabase.from('social_messages').insert({
+      sender_id: session.user.id,
+      receiver_id: chatPeerId,
+      body: messageText.trim(),
+      media_url: media.media_url,
+      media_type: media.media_type,
+    });
+    if (error) toast(error.message, 'error');
+    else {
+      setMessageText('');
+      setMessageFile(null);
+      await updateChatPreference(chatPeerId, { hidden_before: null, is_archived: false });
+      await refreshMessages();
+    }
+  }
+
+  async function updateChatPreference(peerId: string, next: Partial<ChatPreference>) {
+    if (!supabase || !session) return;
+    const payload = {
+      user_id: session.user.id,
+      peer_id: peerId,
+      is_archived: chatPreferences[peerId]?.is_archived ?? false,
+      is_pinned: chatPreferences[peerId]?.is_pinned ?? false,
+      hidden_before: chatPreferences[peerId]?.hidden_before ?? null,
+      ...next,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('social_chat_preferences').upsert(payload);
+    if (error) toast(error.message, 'error');
+    else await refreshChatPreferences();
+  }
+
+  async function deleteChat(peerId: string) {
+    await updateChatPreference(peerId, {
+      hidden_before: new Date().toISOString(),
+      is_archived: false,
+      is_pinned: false,
+    });
+  }
+
   async function importShare(share: WorkoutShare) {
     if (!supabase) return;
     const preview = previewImport(share.payload.code);
@@ -646,6 +825,136 @@ export function Social() {
     ? friendships.find((f) => [f.requester_id, f.addressee_id].includes(currentUserId) && [f.requester_id, f.addressee_id].includes(viewProfileId))
     : null;
 
+  if (chatPeerId) {
+    const chatPeer = profiles[chatPeerId];
+    return (
+      <div className="min-h-[100dvh] flex flex-col px-5 pt-14 pb-28">
+        <div className="flex items-center gap-3 pb-4 border-b border-white/5">
+          <button onClick={() => { setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
+          <button onClick={() => { setChatPeerId(null); setViewProfileId(chatPeerId); }} className="flex items-center gap-3 text-left min-w-0">
+            <Avatar profile={chatPeer} size="sm" />
+            <div className="min-w-0">
+              <h1 className="text-base font-bold truncate">{chatPeer?.display_name || 'Mensagem'}</h1>
+              <p className="text-[11px] text-white/35 truncate">@{chatPeer?.username}</p>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 space-y-2">
+          {chatMessages.map((message) => {
+            const mine = message.sender_id === currentUserId;
+            return (
+              <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[78%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}>
+                  {message.media_url && message.media_type === 'image' && (
+                    <img src={message.media_url} alt="" className="mb-2 max-h-72 rounded-xl object-cover" />
+                  )}
+                  {message.media_url && message.media_type === 'video' && (
+                    <video src={message.media_url} controls className="mb-2 max-h-72 rounded-xl" />
+                  )}
+                  {message.body && <p>{message.body}</p>}
+                </div>
+              </div>
+            );
+          })}
+          {chatMessages.length === 0 && (
+            <div className="h-full flex items-center justify-center text-center text-sm text-white/35 px-8">
+              Comece a conversa com {chatPeer?.display_name || 'esse amigo'}.
+            </div>
+          )}
+        </div>
+
+        <div className="fixed left-0 right-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
+          <div className="max-w-md mx-auto space-y-2">
+            {messagePreview && (
+              <div className="relative w-24">
+                {messagePreview.type === 'image' ? (
+                  <img src={messagePreview.url} alt="" className="w-24 h-24 rounded-2xl object-cover" />
+                ) : (
+                  <video src={messagePreview.url} className="w-24 h-24 rounded-2xl object-cover" />
+                )}
+                <button onClick={() => setMessageFile(null)} className="absolute -right-2 -top-2 w-7 h-7 rounded-full bg-black/80 text-white text-xs">X</button>
+              </div>
+            )}
+            <div className="flex gap-1 overflow-x-auto no-scrollbar">
+              {['🔥', '💪', '😂', '👏', '❤️', '😮'].map((emoji) => (
+                <button key={emoji} onClick={() => setMessageText((prev) => `${prev}${emoji}`)} className="w-9 h-9 rounded-full bg-white/5 text-lg">{emoji}</button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 16l4-4a3 3 0 0 1 4 0l4 4" />
+                  <path d="M14 14l1-1a3 3 0 0 1 4 0l1 1" />
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="8" cy="9" r="1.5" />
+                </svg>
+                <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
+              </label>
+              <input
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void sendMessage(); }}
+                className="input-field text-sm rounded-full"
+                placeholder="Mensagem..."
+              />
+              <button onClick={sendMessage} disabled={!messageText.trim() && !messageFile} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40">-&gt;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showConversations) {
+    return (
+      <div className="px-5 pt-14 pb-28 space-y-5">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setShowConversations(false)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
+          <h1 className="text-xl font-black">Mensagens</h1>
+          <button onClick={() => setShowArchivedChats((prev) => !prev)} className="px-3 py-2 rounded-full bg-white/5 text-xs font-bold text-white/50">
+            {showArchivedChats ? 'Ativas' : 'Arquivo'}
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {conversations.map((conversation) => (
+            <div key={conversation.friendId} className="rounded-3xl bg-white/5 border border-white/10 p-3 space-y-3">
+              <button onClick={() => openChat(conversation.friendId)} className="w-full flex items-center gap-3 text-left">
+                <Avatar profile={conversation.profile} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold truncate">
+                    {conversation.preference?.is_pinned ? 'Fixado - ' : ''}{conversation.profile?.display_name}
+                  </p>
+                  <p className="text-xs text-white/35 truncate">
+                    {conversation.lastMessage ? (conversation.lastMessage.body || (conversation.lastMessage.media_type === 'video' ? 'Video' : 'Foto')) : 'Toque para comecar uma conversa'}
+                  </p>
+                </div>
+              </button>
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => updateChatPreference(conversation.friendId, { is_pinned: !conversation.preference?.is_pinned })} className="py-2 rounded-full bg-white/5 text-[11px] font-bold text-white/55">
+                  {conversation.preference?.is_pinned ? 'Desfixar' : 'Fixar'}
+                </button>
+                <button onClick={() => updateChatPreference(conversation.friendId, { is_archived: !conversation.preference?.is_archived })} className="py-2 rounded-full bg-white/5 text-[11px] font-bold text-white/55">
+                  {conversation.preference?.is_archived ? 'Desarquivar' : 'Arquivar'}
+                </button>
+                <button onClick={() => deleteChat(conversation.friendId)} className="py-2 rounded-full bg-red-500/10 text-[11px] font-bold text-red-300">
+                  Excluir
+                </button>
+              </div>
+            </div>
+          ))}
+          {conversations.length === 0 && (
+            <div className="card text-center space-y-2">
+              <h2 className="font-bold">Sem conversas ainda</h2>
+              <p className="text-sm text-white/40">Adicione amigos para liberar mensagens privadas.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (selectedProfile && viewProfileId) {
     const isMine = selectedProfile.id === currentUserId;
     return (
@@ -668,13 +977,20 @@ export function Social() {
             {selectedProfile.bio && <p className="text-sm text-white/60 mt-2 max-w-xs">{selectedProfile.bio}</p>}
           </div>
           {!isMine && (
-            <button
-              onClick={() => addFriend(selectedProfile.id)}
-              disabled={myFriendshipWithViewed?.status === 'accepted' || myFriendshipWithViewed?.status === 'pending'}
-              className="px-5 py-3 rounded-2xl bg-primary-500 text-white text-sm font-bold disabled:opacity-40"
-            >
-              {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : myFriendshipWithViewed?.status === 'pending' ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => addFriend(selectedProfile.id)}
+                disabled={myFriendshipWithViewed?.status === 'accepted' || myFriendshipWithViewed?.status === 'pending'}
+                className="px-5 py-3 rounded-2xl bg-primary-500 text-white text-sm font-bold disabled:opacity-40"
+              >
+                {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : myFriendshipWithViewed?.status === 'pending' ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
+              </button>
+              {myFriendshipWithViewed?.status === 'accepted' && (
+                <button onClick={() => openChat(selectedProfile.id)} className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold">
+                  Mensagem
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -729,6 +1045,42 @@ export function Social() {
         <button onClick={() => supabase!.auth.signOut()} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
       </div>
 
+      <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+        <button onClick={() => setSocialMode('ranking')} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
+        <button onClick={() => setSocialMode('feed')} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
+      </div>
+
+      {socialMode === 'ranking' && (
+        <div className="space-y-3">
+          <div className="rounded-3xl bg-primary-500/10 border border-primary-500/20 p-4">
+            <p className="text-xs font-bold text-primary-200 uppercase">Gym Rats</p>
+            <h2 className="text-2xl font-black">Ranking de consistencia</h2>
+            <p className="text-sm text-white/45">Quem mais aparece, sobe. Simples e brutal.</p>
+          </div>
+          {rankingRows.map((row, index) => (
+            <button key={row.stats.user_id} onClick={() => setViewProfileId(row.stats.user_id)} className="w-full flex items-center gap-3 rounded-3xl bg-white/5 border border-white/10 p-3 text-left">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${index === 0 ? 'bg-primary-500 text-white' : 'bg-white/10 text-white/70'}`}>
+                {index + 1}
+              </div>
+              <Avatar profile={row.profile} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold truncate">{row.profile?.display_name}</p>
+                <p className="text-xs text-white/35 truncate">@{row.profile?.username}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-black">{row.stats.consistency_count}</p>
+                <p className="text-[10px] text-white/35">treinos</p>
+              </div>
+            </button>
+          ))}
+          {rankingRows.length === 0 && (
+            <p className="card text-sm text-white/35">Ranking vazio por enquanto.</p>
+          )}
+        </div>
+      )}
+
+      {socialMode === 'feed' && (
+        <>
       <div className="space-y-2">
         <div className="flex gap-2">
           <input
@@ -852,6 +1204,8 @@ export function Social() {
         })}
         {feedPosts.length === 0 && <p className="card text-sm text-white/35">Nenhuma postagem ainda.</p>}
       </div>
+        </>
+      )}
 
       <button
         onClick={() => setShowPostModal(true)}
@@ -859,6 +1213,19 @@ export function Social() {
         aria-label="Criar postagem"
       >
         +
+      </button>
+
+      <button
+        onClick={() => setShowConversations(true)}
+        className="fixed right-6 bottom-[calc(96px+env(safe-area-inset-bottom))] z-40 w-14 h-14 rounded-full bg-[rgb(var(--color-bg-card-rgb))] text-white border border-white/15 shadow-[0_12px_35px_rgba(0,0,0,0.45)] flex items-center justify-center"
+        aria-label="Mensagens"
+      >
+        <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 11.5a8.4 8.4 0 0 1-8.6 8.5 9.6 9.6 0 0 1-3.7-.7L3 21l1.6-5a8.2 8.2 0 0 1-.9-3.8A8.4 8.4 0 0 1 12.3 4 8.4 8.4 0 0 1 21 11.5Z" />
+          <path d="M8 12h.01" />
+          <path d="M12 12h.01" />
+          <path d="M16 12h.01" />
+        </svg>
       </button>
 
       {showPostModal && (
@@ -869,6 +1236,21 @@ export function Social() {
               <button onClick={() => setShowPostModal(false)} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
             </div>
             <textarea value={postBody} onChange={(e) => setPostBody(e.target.value)} className="input-field text-sm min-h-28 resize-none" placeholder="Escreva alguma coisa..." />
+            {postPreviews.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                {postPreviews.map((preview, index) => (
+                  <div key={`${preview.name}-${index}`} className="relative min-w-24">
+                    <img src={preview.url} alt="" className="w-24 h-24 rounded-2xl object-cover" />
+                    <button
+                      onClick={() => setPostFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))}
+                      className="absolute -right-2 -top-2 w-7 h-7 rounded-full bg-black/80 text-white text-xs"
+                    >
+                      X
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <label className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary-500/40 bg-primary-500/10 px-4 py-5 text-sm font-bold text-primary-200">
               Escolher fotos
               <input type="file" accept="image/*" multiple onChange={(e) => setPostFiles(Array.from(e.target.files || []).slice(0, 6))} className="hidden" />
