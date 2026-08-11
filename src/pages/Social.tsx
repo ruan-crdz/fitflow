@@ -77,6 +77,7 @@ interface Comment {
   user_id: string;
   body: string;
   deleted_at?: string | null;
+  edited_at?: string | null;
   created_at: string;
 }
 
@@ -894,7 +895,7 @@ export function Social() {
     }
     const { error } = await supabase
       .from('social_post_comments')
-      .update({ body: editingCommentText.trim() })
+      .update({ body: editingCommentText.trim(), edited_at: new Date().toISOString() })
       .eq('id', commentId)
       .eq('user_id', session.user.id);
     if (error) toast(ptSupabaseError(error.message), 'error');
@@ -1981,6 +1982,9 @@ export function Social() {
                               <p className="whitespace-pre-wrap break-words">
                                 <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button> {comment.body}
                               </p>
+                              {comment.edited_at && (
+                                <p className="text-[10px] text-white/30">editado</p>
+                              )}
                               <div className="flex items-center justify-between gap-2">
                                 <button onClick={() => toggleCommentLike(comment.id)} className={`flex items-center gap-1 text-[11px] font-bold ${likedComment ? 'text-primary-300' : 'text-white/35'}`}>
                                   <MaterialIcon name="fitness_center" variant={likedComment ? 'filled' : 'outlined'} className="text-base" />

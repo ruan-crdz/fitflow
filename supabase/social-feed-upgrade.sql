@@ -271,7 +271,8 @@ create table if not exists public.social_post_comments (
 );
 
 alter table public.social_post_comments
-  add column if not exists deleted_at timestamptz;
+  add column if not exists deleted_at timestamptz,
+  add column if not exists edited_at timestamptz;
 
 create table if not exists public.social_post_comment_likes (
   comment_id uuid not null references public.social_post_comments(id) on delete cascade,
