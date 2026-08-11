@@ -1265,6 +1265,10 @@ export function Social() {
     ))
     .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index)
     .slice(0, 8);
+  const activeCommentMenu = commentMenuOpenId ? comments.find((comment) => comment.id === commentMenuOpenId) : null;
+  const activeCommentPost = activeCommentMenu ? posts.find((post) => post.id === activeCommentMenu.post_id) : null;
+  const activeCommentOwn = activeCommentMenu?.user_id === currentUserId;
+  const activeCommentCanDelete = Boolean(activeCommentMenu && (activeCommentOwn || activeCommentPost?.user_id === currentUserId));
 
   function insertMention(username: string) {
     if (mentionMatch) {
@@ -2091,30 +2095,6 @@ export function Social() {
                                     >
                                       <MaterialIcon name="more_horiz" className="text-lg" />
                                     </button>
-                                    {commentMenuOpenId === comment.id && (
-                                      <div className="absolute right-0 bottom-9 z-[90] w-44 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
-                                        {ownComment && (
-                                          <button
-                                            onClick={() => {
-                                              setCommentMenuOpenId(null);
-                                              setEditingCommentId(comment.id);
-                                              setEditingCommentText(comment.body);
-                                            }}
-                                            className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
-                                          >
-                                            <MaterialIcon name="edit" className="text-base text-primary-300" />
-                                            Editar
-                                          </button>
-                                        )}
-                                        <button
-                                          onClick={() => { setCommentMenuOpenId(null); void deleteComment(comment); }}
-                                          className={`w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 active:bg-red-500/10 ${ownComment ? 'border-t border-white/5' : ''}`}
-                                        >
-                                          <MaterialIcon name="delete" className="text-base" />
-                                          Apagar
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
                                 )}
                               </div>
@@ -2159,6 +2139,37 @@ export function Social() {
       >
         <MaterialIcon name="chat_bubble" className="text-2xl text-primary-300" variant="outlined" />
       </button>
+
+      {activeCommentMenu && activeCommentCanDelete && (
+        <div className="fixed inset-0 z-[120] bg-black/20" onClick={() => setCommentMenuOpenId(null)}>
+          <div
+            data-social-menu
+            onClick={(event) => event.stopPropagation()}
+            className="absolute left-4 right-4 bottom-[calc(172px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden"
+          >
+            {activeCommentOwn && (
+              <button
+                onClick={() => {
+                  setCommentMenuOpenId(null);
+                  setEditingCommentId(activeCommentMenu.id);
+                  setEditingCommentText(activeCommentMenu.body);
+                }}
+                className="w-full px-5 py-4 text-left text-sm text-white/75 flex items-center gap-3 active:bg-white/5"
+              >
+                <MaterialIcon name="edit" className="text-lg text-primary-300" />
+                Editar comentário
+              </button>
+            )}
+            <button
+              onClick={() => { setCommentMenuOpenId(null); void deleteComment(activeCommentMenu); }}
+              className={`w-full px-5 py-4 text-left text-sm text-red-300 flex items-center gap-3 active:bg-red-500/10 ${activeCommentOwn ? 'border-t border-white/5' : ''}`}
+            >
+              <MaterialIcon name="delete" className="text-lg" />
+              Apagar comentário
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPostModal && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70">
