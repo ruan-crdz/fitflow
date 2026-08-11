@@ -127,7 +127,9 @@ create table if not exists public.social_messages (
 alter table public.social_messages
   alter column body set default '',
   add column if not exists media_url text,
-  add column if not exists media_type text check (media_type is null or media_type in ('image', 'video'));
+  add column if not exists media_type text check (media_type is null or media_type in ('image', 'video')),
+  add column if not exists edited_at timestamptz,
+  add column if not exists deleted_at timestamptz;
 
 create table if not exists public.social_chat_preferences (
   user_id uuid not null references public.social_profiles(id) on delete cascade,
@@ -135,6 +137,7 @@ create table if not exists public.social_chat_preferences (
   is_archived boolean not null default false,
   is_pinned boolean not null default false,
   hidden_before timestamptz,
+  last_read_at timestamptz,
   updated_at timestamptz not null default now(),
   primary key (user_id, peer_id),
   check (user_id <> peer_id)
@@ -147,6 +150,7 @@ drop policy if exists "messages visible to sender and receiver" on public.social
 drop policy if exists "users send own messages" on public.social_messages;
 drop policy if exists "messages visible to both users" on public.social_messages;
 drop policy if exists "friends send direct messages" on public.social_messages;
+drop policy if exists "users update own messages" on public.social_messages;
 drop policy if exists "users read own chat preferences" on public.social_chat_preferences;
 drop policy if exists "users upsert own chat preferences" on public.social_chat_preferences;
 drop policy if exists "users update own chat preferences" on public.social_chat_preferences;
@@ -172,6 +176,12 @@ create policy "friends send direct messages"
         )
     )
   );
+
+create policy "users update own messages"
+  on public.social_messages for update
+  to authenticated
+  using (auth.uid() = sender_id)
+  with check (auth.uid() = sender_id);
 
 create policy "users read own chat preferences"
   on public.social_chat_preferences for select

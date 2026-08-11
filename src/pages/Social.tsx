@@ -96,8 +96,10 @@ interface SocialMessage {
   receiver_id: string;
   body: string;
   media_url?: string | null;
-  media_type?: 'image' | 'video' | null;
+  media_type?: 'image' | null;
   created_at: string;
+  edited_at?: string | null;
+  deleted_at?: string | null;
 }
 
 interface ChatPreference {
@@ -106,6 +108,7 @@ interface ChatPreference {
   is_archived: boolean;
   is_pinned: boolean;
   hidden_before?: string | null;
+  last_read_at?: string | null;
 }
 
 const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
@@ -120,7 +123,7 @@ const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
 
 function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
-  if (lower.includes('media_type') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
+  if (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
     return 'Seu Supabase ainda está com o schema antigo. Rode supabase/social-feed-upgrade.sql no SQL Editor.';
   }
   if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme esse usuário.';
@@ -136,6 +139,16 @@ function normalizeUsername(value: string) {
 
 function todayKey() {
   return getToday();
+}
+
+function formatSocialDate(value: string) {
+  return new Date(value).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function SocialLoading() {
@@ -225,6 +238,10 @@ export function Social() {
   const [messageText, setMessageText] = useState('');
   const [messageFile, setMessageFile] = useState<File | null>(null);
   const [showArchivedChats, setShowArchivedChats] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
+  const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -237,11 +254,16 @@ export function Social() {
   const conversations = useMemo(() => acceptedFriendIds
     .map((friendId) => {
       const preference = chatPreferences[friendId];
-      const lastMessage = messages
+      const visibleMessages = messages
         .filter((message) => message.sender_id === friendId || message.receiver_id === friendId)
+        .filter((message) => !message.deleted_at)
         .filter((message) => !preference?.hidden_before || new Date(message.created_at) > new Date(preference.hidden_before))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      return { friendId, profile: profiles[friendId], lastMessage, preference };
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const unreadCount = visibleMessages.filter((message) => (
+        message.sender_id === friendId
+        && (!preference?.last_read_at || new Date(message.created_at) > new Date(preference.last_read_at))
+      )).length;
+      return { friendId, profile: profiles[friendId], lastMessage: visibleMessages[0], preference, unreadCount };
     })
     .filter((item) => item.profile)
     .filter((item) => showArchivedChats ? item.preference?.is_archived : !item.preference?.is_archived)
@@ -254,6 +276,7 @@ export function Social() {
       (message.sender_id === currentUserId && message.receiver_id === chatPeerId)
       || (message.sender_id === chatPeerId && message.receiver_id === currentUserId)
     )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
+      .filter((message) => !message.deleted_at)
     : [];
   const rankingRows = rankingStats
     .filter((stats) => rankingMode === 'general' || stats.user_id === currentUserId || acceptedFriendIds.includes(stats.user_id))
@@ -267,7 +290,7 @@ export function Social() {
   })), [postFiles]);
   const messagePreview = useMemo(() => (messageFile ? {
     name: messageFile.name,
-    type: messageFile.type.startsWith('video/') ? 'video' : 'image',
+    type: 'image',
     url: URL.createObjectURL(messageFile),
   } : null), [messageFile]);
   const foodTotals = useMemo(() => {
@@ -353,6 +376,11 @@ export function Social() {
     }, 1500);
     return () => window.clearInterval(interval);
   }, [session?.user.id, socialReady, chatPeerId]);
+
+  useEffect(() => {
+    if (!chatPeerId || !socialReady) return;
+    void updateChatPreference(chatPeerId, { last_read_at: new Date().toISOString() });
+  }, [chatPeerId, socialReady, messages.length]);
 
   useEffect(() => {
     const term = searchUsername.trim();
@@ -868,13 +896,18 @@ export function Social() {
     setViewProfileId(null);
     setMessageText('');
     setMessageFile(null);
+    void updateChatPreference(peerId, { last_read_at: new Date().toISOString() });
   }
 
-  async function uploadMessageMedia() {
-    if (!supabase || !session || !messageFile) return { media_url: null, media_type: null };
-    const ext = messageFile.name.split('.').pop() || (messageFile.type.startsWith('video/') ? 'mp4' : 'jpg');
+  async function uploadMessageMedia(file: File | null) {
+    if (!supabase || !session || !file) return { media_url: null, media_type: null };
+    if (!file.type.startsWith('image/')) {
+      toast('Envie apenas fotos na DM.', 'error');
+      return { media_url: null, media_type: null };
+    }
+    const ext = file.name.split('.').pop() || 'jpg';
     const path = `${session.user.id}/dm-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('social-posts').upload(path, messageFile, { upsert: true, contentType: messageFile.type });
+    const { error } = await supabase.storage.from('social-posts').upload(path, file, { upsert: true, contentType: file.type });
     if (error) {
       toast(ptSupabaseError(error.message), 'error');
       return { media_url: null, media_type: null };
@@ -882,31 +915,66 @@ export function Social() {
     const { data } = supabase.storage.from('social-posts').getPublicUrl(path);
     return {
       media_url: data.publicUrl,
-      media_type: messageFile.type.startsWith('video/') ? 'video' as const : 'image' as const,
+      media_type: 'image' as const,
     };
   }
 
   async function sendMessage() {
     if (!supabase || !session || !chatPeerId || (!messageText.trim() && !messageFile)) return;
+    if (sendingMessage) return;
     if (!acceptedFriendIds.includes(chatPeerId)) {
       toast('Você só pode mandar mensagem para amigos.', 'error');
       return;
     }
-    const media = await uploadMessageMedia();
+    setSendingMessage(true);
+    const body = messageText.trim();
+    const file = messageFile;
+    setMessageText('');
+    setMessageFile(null);
+    const media = await uploadMessageMedia(file);
+    if (file && !media.media_url) {
+      setSendingMessage(false);
+      return;
+    }
     const { error } = await supabase.from('social_messages').insert({
       sender_id: session.user.id,
       receiver_id: chatPeerId,
-      body: messageText.trim(),
+      body,
       media_url: media.media_url,
       media_type: media.media_type,
     });
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
-      setMessageText('');
-      setMessageFile(null);
-      await updateChatPreference(chatPeerId, { hidden_before: null, is_archived: false });
+      await updateChatPreference(chatPeerId, { hidden_before: null, is_archived: false, last_read_at: new Date().toISOString() });
       await refreshMessages();
     }
+    setSendingMessage(false);
+  }
+
+  async function updateMessage(messageId: string) {
+    if (!supabase || !session || !editingMessageText.trim()) return;
+    const { error } = await supabase
+      .from('social_messages')
+      .update({ body: editingMessageText.trim(), edited_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .eq('sender_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      setEditingMessageId(null);
+      setEditingMessageText('');
+      await refreshMessages();
+    }
+  }
+
+  async function deleteMessage(messageId: string) {
+    if (!supabase || !session) return;
+    const { error } = await supabase
+      .from('social_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .eq('sender_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else await refreshMessages();
   }
 
   async function updateChatPreference(peerId: string, next: Partial<ChatPreference>) {
@@ -917,6 +985,7 @@ export function Social() {
       is_archived: chatPreferences[peerId]?.is_archived ?? false,
       is_pinned: chatPreferences[peerId]?.is_pinned ?? false,
       hidden_before: chatPreferences[peerId]?.hidden_before ?? null,
+      last_read_at: chatPreferences[peerId]?.last_read_at ?? null,
       ...next,
       updated_at: new Date().toISOString(),
     };
@@ -1061,8 +1130,8 @@ export function Social() {
   if (chatPeerId) {
     const chatPeer = profiles[chatPeerId];
     return (
-      <div className="min-h-[100dvh] flex flex-col px-5 pt-14 pb-48">
-        <div className="flex items-center gap-3 pb-4 border-b border-white/5">
+      <div className="min-h-[100dvh] flex flex-col px-5 pt-0 pb-48">
+        <div className="sticky top-0 z-50 -mx-5 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5 flex items-center gap-3">
           <button onClick={() => { setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <button onClick={() => { setChatPeerId(null); setViewProfileId(chatPeerId); }} className="flex items-center gap-3 text-left min-w-0">
             <Avatar profile={chatPeer} size="sm" />
@@ -1082,10 +1151,32 @@ export function Social() {
                   {message.media_url && message.media_type === 'image' && (
                     <img src={message.media_url} alt="" className="mb-2 max-h-72 rounded-xl object-cover" />
                   )}
-                  {message.media_url && message.media_type === 'video' && (
-                    <video src={message.media_url} controls className="mb-2 max-h-72 rounded-xl" />
+                  {message.body && (
+                    editingMessageId === message.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingMessageText}
+                          onChange={(e) => setEditingMessageText(e.target.value.slice(0, 1000))}
+                          className="w-full min-h-20 rounded-xl bg-black/15 border border-white/10 px-3 py-2 text-sm resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditingMessageId(null); setEditingMessageText(''); }} className="flex-1 py-2 rounded-xl bg-white/10 text-xs font-semibold">Cancelar</button>
+                          <button onClick={() => updateMessage(message.id)} className="flex-1 py-2 rounded-xl bg-white text-black text-xs font-bold">Salvar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                    )
                   )}
-                  {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
+                  {message.edited_at && editingMessageId !== message.id && (
+                    <p className={`mt-1 text-[10px] ${mine ? 'text-white/55' : 'text-white/30'}`}>editado</p>
+                  )}
+                  {mine && editingMessageId !== message.id && (
+                    <div className="mt-1 flex justify-end gap-2 text-[10px]">
+                      {message.body && <button onClick={() => { setEditingMessageId(message.id); setEditingMessageText(message.body); }} className={mine ? 'text-white/65' : 'text-white/35'}>Editar</button>}
+                      <button onClick={() => deleteMessage(message.id)} className={mine ? 'text-white/65' : 'text-red-300'}>Apagar</button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1101,18 +1192,14 @@ export function Social() {
           <div className="max-w-md mx-auto space-y-2">
             {messagePreview && (
               <div className="relative w-24">
-                {messagePreview.type === 'image' ? (
-                  <img src={messagePreview.url} alt="" className="w-24 h-24 rounded-2xl object-cover" />
-                ) : (
-                  <video src={messagePreview.url} className="w-24 h-24 rounded-2xl object-cover" />
-                )}
+                <img src={messagePreview.url} alt="" className="w-24 h-24 rounded-2xl object-cover" />
                 <button onClick={() => setMessageFile(null)} className="absolute -right-2 -top-2 w-7 h-7 rounded-full bg-black/80 text-white text-xs">X</button>
               </div>
             )}
             <div className="flex gap-2">
               <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
                 <MaterialIcon name="perm_media" className="text-xl text-primary-300" />
-                <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
               </label>
               <input
                 value={messageText}
@@ -1121,7 +1208,7 @@ export function Social() {
                 className="input-field text-sm rounded-full"
                 placeholder="Mensagem..."
               />
-              <button onClick={sendMessage} disabled={!messageText.trim() && !messageFile} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40 flex items-center justify-center">
+              <button onClick={sendMessage} disabled={sendingMessage || (!messageText.trim() && !messageFile)} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40 flex items-center justify-center">
                 <MaterialIcon name="send" />
               </button>
             </div>
@@ -1144,28 +1231,40 @@ export function Social() {
 
         <div className="space-y-2">
           {conversations.map((conversation) => (
-            <div key={conversation.friendId} className="rounded-3xl bg-white/5 border border-white/10 p-3 space-y-3">
-              <button onClick={() => openChat(conversation.friendId)} className="w-full flex items-center gap-3 text-left">
+            <div key={conversation.friendId} className="relative rounded-3xl bg-white/5 border border-white/10 p-3">
+              <button onClick={() => openChat(conversation.friendId)} className="w-full flex items-center gap-3 text-left pr-12">
                 <Avatar profile={conversation.profile} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold truncate">
+                  <p className="text-sm font-bold truncate text-white/85">
                     {conversation.preference?.is_pinned ? 'Fixado - ' : ''}{conversation.profile?.display_name}
                   </p>
                   <p className="text-xs text-white/35 truncate">
-                    {conversation.lastMessage ? (conversation.lastMessage.body || (conversation.lastMessage.media_type === 'video' ? 'Vídeo' : 'Foto')) : 'Toque para começar uma conversa'}
+                    {conversation.lastMessage ? (conversation.lastMessage.body || 'Foto') : 'Toque para começar uma conversa'}
                   </p>
                 </div>
+                {conversation.unreadCount > 0 && (
+                  <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
+                    {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
+                  </span>
+                )}
               </button>
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => updateChatPreference(conversation.friendId, { is_pinned: !conversation.preference?.is_pinned })} className="py-2 rounded-full bg-white/5 text-[11px] font-bold text-white/55">
-                  {conversation.preference?.is_pinned ? 'Desfixar' : 'Fixar'}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <button onClick={() => setChatMenuOpenId((id) => (id === conversation.friendId ? null : conversation.friendId))} className="w-9 h-9 rounded-full bg-white/5 text-white/45 flex items-center justify-center" aria-label="Opções da conversa">
+                  <MaterialIcon name="more_horiz" className="text-xl" />
                 </button>
-                <button onClick={() => updateChatPreference(conversation.friendId, { is_archived: !conversation.preference?.is_archived })} className="py-2 rounded-full bg-white/5 text-[11px] font-bold text-white/55">
-                  {conversation.preference?.is_archived ? 'Desarquivar' : 'Arquivar'}
-                </button>
-                <button onClick={() => deleteChat(conversation.friendId)} className="py-2 rounded-full bg-red-500/10 text-[11px] font-bold text-red-300">
-                  Excluir
-                </button>
+                {chatMenuOpenId === conversation.friendId && (
+                  <div className="absolute right-0 top-10 z-30 w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                    <button onClick={() => { setChatMenuOpenId(null); void updateChatPreference(conversation.friendId, { is_pinned: !conversation.preference?.is_pinned }); }} className="w-full px-4 py-3 text-left text-sm text-white/70">
+                      {conversation.preference?.is_pinned ? 'Desfixar' : 'Fixar'}
+                    </button>
+                    <button onClick={() => { setChatMenuOpenId(null); void updateChatPreference(conversation.friendId, { is_archived: !conversation.preference?.is_archived }); }} className="w-full px-4 py-3 text-left text-sm text-white/70 border-t border-white/5">
+                      {conversation.preference?.is_archived ? 'Desarquivar' : 'Arquivar'}
+                    </button>
+                    <button onClick={() => { setChatMenuOpenId(null); void deleteChat(conversation.friendId); }} className="w-full px-4 py-3 text-left text-sm text-red-300 border-t border-white/5">
+                      Excluir
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -1435,6 +1534,7 @@ export function Social() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold truncate">{author?.display_name || 'Usuário'}</p>
                     <p className="text-[10px] text-white/35 truncate">@{author?.username}</p>
+                    <p className="text-[10px] text-white/25 truncate">{formatSocialDate(post.created_at)}</p>
                   </div>
                 </button>
                 {post.user_id === currentUserId && (
