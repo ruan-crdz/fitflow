@@ -681,7 +681,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               <motion.button
                 whileTap={{ scale: 0.92 }}
                 onClick={() => setSelected(type)}
-                className={`w-full py-3 rounded-xl font-semibold transition-all ${
+                className={`w-full h-12 rounded-xl font-semibold transition-all ${
                   selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
                 }`}
               >
@@ -731,7 +731,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                 setSelected(slot);
               }
             }}
-            className="min-w-[52px] py-3 rounded-xl border-2 border-dashed border-white/15 text-white/30 font-bold text-lg"
+            className="min-w-[52px] h-12 rounded-xl border-2 border-dashed border-white/15 text-white/30 font-bold text-lg flex items-center justify-center"
           >
             +
           </motion.button>
