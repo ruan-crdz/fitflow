@@ -30,12 +30,15 @@ export function AppShell({ children }: AppShellProps) {
       }
       const [{ data: messages }, { data: prefs }] = await Promise.all([
         client.from('social_messages').select('sender_id, created_at, deleted_at').eq('receiver_id', userId).is('deleted_at', null).limit(300),
-        client.from('social_chat_preferences').select('peer_id, last_read_at').eq('user_id', userId),
+        client.from('social_chat_preferences').select('peer_id, last_read_at, hidden_before, is_archived').eq('user_id', userId),
       ]);
-      const prefMap = new Map((prefs || []).map((pref) => [pref.peer_id, pref.last_read_at]));
+      const prefMap = new Map((prefs || []).map((pref) => [pref.peer_id, pref]));
       const unreadSenders = new Set<string>();
       (messages || []).forEach((message) => {
-        const lastRead = prefMap.get(message.sender_id);
+        const preference = prefMap.get(message.sender_id);
+        if (preference?.is_archived) return;
+        if (preference?.hidden_before && new Date(message.created_at).getTime() <= new Date(preference.hidden_before).getTime()) return;
+        const lastRead = preference?.last_read_at;
         if (!lastRead || new Date(message.created_at).getTime() > new Date(lastRead).getTime()) unreadSenders.add(message.sender_id);
       });
       if (!cancelled) setUnreadChats(unreadSenders.size);
