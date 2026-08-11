@@ -204,6 +204,7 @@ export function Social() {
 
   const [postBody, setPostBody] = useState('');
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [postMenuOpenId, setPostMenuOpenId] = useState<string | null>(null);
   const [postFiles, setPostFiles] = useState<File[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
@@ -1345,23 +1346,44 @@ export function Social() {
           const postComments = comments.filter((comment) => comment.post_id === post.id);
           return (
             <div key={post.id} className="card space-y-3">
-              <button onClick={() => setViewProfileId(post.user_id)} className="flex items-center gap-2 text-left">
-                <Avatar profile={author} size="sm" />
-                <div>
-                  <p className="text-sm font-bold">{author?.display_name || 'Usuário'}</p>
-                  <p className="text-[10px] text-white/35">@{author?.username}</p>
-                </div>
-              </button>
-              {post.user_id === currentUserId && (
-                <div className="flex gap-1">
-                  <button onClick={() => startEditPost(post)} className="w-9 h-9 rounded-full bg-white/5 text-white/50 flex items-center justify-center" aria-label="Editar post">
-                    <MaterialIcon name="edit" className="text-base" />
-                  </button>
-                  <button onClick={() => deletePost(post.id)} className="w-9 h-9 rounded-full bg-red-500/10 text-red-300 flex items-center justify-center" aria-label="Excluir post">
-                    <MaterialIcon name="delete" className="text-base" />
-                  </button>
-                </div>
-              )}
+              <div className="relative flex items-start justify-between gap-3">
+                <button onClick={() => setViewProfileId(post.user_id)} className="flex items-center gap-2 text-left min-w-0">
+                  <Avatar profile={author} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{author?.display_name || 'Usuário'}</p>
+                    <p className="text-[10px] text-white/35 truncate">@{author?.username}</p>
+                  </div>
+                </button>
+                {post.user_id === currentUserId && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setPostMenuOpenId((id) => (id === post.id ? null : post.id))}
+                      className="w-9 h-9 rounded-full bg-white/5 text-white/50 flex items-center justify-center"
+                      aria-label="Opções da postagem"
+                    >
+                      <MaterialIcon name="more_horiz" className="text-xl" />
+                    </button>
+                    {postMenuOpenId === post.id && (
+                      <div className="absolute right-0 top-11 z-20 w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                        <button
+                          onClick={() => { setPostMenuOpenId(null); startEditPost(post); }}
+                          className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
+                        >
+                          <MaterialIcon name="edit" className="text-base text-primary-300" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => { setPostMenuOpenId(null); void deletePost(post.id); }}
+                          className="w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 border-t border-white/5 active:bg-red-500/10"
+                        >
+                          <MaterialIcon name="delete" className="text-base" />
+                          Excluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap break-words">{post.body}</p>}
               {postImages.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
