@@ -233,6 +233,7 @@ export function Social() {
   const [showPostModal, setShowPostModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
+  const [focusedPostBackProfileId, setFocusedPostBackProfileId] = useState<string | null>(null);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
   const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -431,8 +432,9 @@ export function Social() {
   }, [foodLogs]);
   const waterGlasses = waterLogs[todayKey()] || 0;
 
-  function openFocusedPost(postId: string) {
+  function openFocusedPost(postId: string, backProfileId: string | null = null) {
     setFocusedPostId(postId);
+    setFocusedPostBackProfileId(backProfileId);
     setSocialMode('feed');
     setShowNotifications(false);
     setShowConversations(false);
@@ -442,6 +444,13 @@ export function Social() {
     setSearchUsername('');
     setSearchResults([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function closeFocusedPost() {
+    const backProfileId = focusedPostBackProfileId;
+    setFocusedPostId(null);
+    setFocusedPostBackProfileId(null);
+    if (backProfileId) setViewProfileId(backProfileId);
   }
 
   useEffect(() => () => {
@@ -1821,7 +1830,7 @@ export function Social() {
           {profileGridPosts.map((post) => {
             const postImages = images.filter((img) => img.post_id === post.id);
             return (
-              <button key={post.id} onClick={() => openFocusedPost(post.id)} className="aspect-square rounded-lg bg-white/5 border border-white/5 overflow-hidden text-left active:opacity-80">
+              <button key={post.id} onClick={() => openFocusedPost(post.id, selectedProfile.id)} className="aspect-square rounded-lg bg-white/5 border border-white/5 overflow-hidden text-left active:opacity-80">
                 {postImages[0] ? (
                   <img src={postImages[0].image_url} alt="" className="w-full h-full object-cover bg-dark-200" />
                 ) : (
@@ -1870,8 +1879,8 @@ export function Social() {
       </div>
 
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
-        <button onClick={() => { setFocusedPostId(null); setSocialMode('ranking'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
-        <button onClick={() => { setFocusedPostId(null); setSocialMode('feed'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
+        <button onClick={() => { setFocusedPostId(null); setFocusedPostBackProfileId(null); setSocialMode('ranking'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
+        <button onClick={() => { setFocusedPostId(null); setFocusedPostBackProfileId(null); setSocialMode('feed'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
       </div>
 
       {socialMode === 'ranking' && (
@@ -1914,7 +1923,7 @@ export function Social() {
       {focusedPostId ? (
         <div className="flex items-center justify-between">
           <button
-            onClick={() => setFocusedPostId(null)}
+            onClick={closeFocusedPost}
             className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl"
             aria-label="Voltar para o feed"
           >
