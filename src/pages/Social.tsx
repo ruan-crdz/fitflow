@@ -85,6 +85,7 @@ interface Comment {
 interface CommentLike {
   comment_id: string;
   user_id: string;
+  created_at?: string;
 }
 
 interface WorkoutShare {
@@ -316,7 +317,7 @@ export function Social() {
     const mentionPattern = new RegExp(`(^|\\s)@${myUsername}(?=\\s|$|[.,!?])`, 'i');
     const items: {
       id: string;
-      type: 'like' | 'comment' | 'mention' | 'follow_request';
+      type: 'like' | 'comment_like' | 'comment' | 'mention' | 'follow_request';
       userId: string;
       postId?: string;
       friendshipId?: string;
@@ -373,6 +374,20 @@ export function Social() {
       }
     });
 
+    commentLikes.forEach((like) => {
+      const comment = comments.find((item) => item.id === like.comment_id);
+      if (comment?.user_id === currentUserId && like.user_id !== currentUserId) {
+        items.push({
+          id: `comment-like-${like.comment_id}-${like.user_id}`,
+          type: 'comment_like',
+          userId: like.user_id,
+          postId: comment.post_id,
+          text: 'curtiu seu comentÃ¡rio',
+          createdAt: like.created_at || comment.created_at,
+        });
+      }
+    });
+
     posts.forEach((post) => {
       if (post.user_id !== currentUserId && post.body && mentionPattern.test(post.body)) {
         items.push({
@@ -387,7 +402,7 @@ export function Social() {
     });
 
     return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
-  }, [comments, currentUserId, incoming, likes, posts, profile]);
+  }, [commentLikes, comments, currentUserId, incoming, likes, posts, profile]);
   const postPreviews = useMemo(() => postFiles.map((file) => ({
     name: file.name,
     type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -1511,7 +1526,7 @@ export function Social() {
             const actor = profiles[notification.userId];
             const relatedPost = notification.postId ? posts.find((post) => post.id === notification.postId) : null;
             const relatedImage = relatedPost ? images.find((image) => image.post_id === relatedPost.id) : null;
-            const icon = notification.type === 'like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : notification.type === 'follow_request' ? 'person_add' : 'alternate_email';
+            const icon = notification.type === 'like' || notification.type === 'comment_like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : notification.type === 'follow_request' ? 'person_add' : 'alternate_email';
             return (
               <div key={notification.id} className="rounded-3xl bg-white/5 border border-white/10 p-3 flex items-center gap-3">
                 <button onClick={() => setViewProfileId(notification.userId)} className="shrink-0">
@@ -1550,7 +1565,7 @@ export function Social() {
                     )}
                   </div>
                 ) : (
-                  <MaterialIcon name={icon} variant={notification.type === 'like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
+                  <MaterialIcon name={icon} variant={notification.type === 'like' || notification.type === 'comment_like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
                 )}
               </div>
             );
