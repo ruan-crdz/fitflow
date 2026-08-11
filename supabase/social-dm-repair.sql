@@ -74,15 +74,26 @@ create policy "friends send direct messages"
   with check (
     auth.uid() = sender_id
     and sender_id <> receiver_id
-    and exists (
-      select 1
-      from public.friendships f
-      where f.status = 'accepted'
-        and (f.deleted_at is null)
-        and (
-          (f.requester_id = sender_id and f.addressee_id = receiver_id)
-          or (f.requester_id = receiver_id and f.addressee_id = sender_id)
+    and (
+      exists (
+        select 1
+        from public.friendships f
+        where f.status = 'accepted'
+          and (f.deleted_at is null)
+          and (
+            (f.requester_id = sender_id and f.addressee_id = receiver_id)
+            or (f.requester_id = receiver_id and f.addressee_id = sender_id)
+          )
+      )
+      or exists (
+        select 1
+        from public.social_profiles sender_profile
+        join public.social_profiles receiver_profile on receiver_profile.id = receiver_id
+        where sender_profile.id = sender_id
+          and sender_profile.is_private = false
+          and receiver_profile.is_private = false
         )
+      )
     )
   );
 

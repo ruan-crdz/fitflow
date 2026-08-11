@@ -47,6 +47,7 @@ interface Friendship {
   addressee_id: string;
   status: 'pending' | 'accepted' | 'blocked';
   deleted_at?: string | null;
+  created_at: string;
 }
 
 interface Post {
@@ -258,6 +259,7 @@ export function Social() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState('');
   const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
+  const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -314,12 +316,24 @@ export function Social() {
     const mentionPattern = new RegExp(`(^|\\s)@${myUsername}(?=\\s|$|[.,!?])`, 'i');
     const items: {
       id: string;
-      type: 'like' | 'comment' | 'mention';
+      type: 'like' | 'comment' | 'mention' | 'follow_request';
       userId: string;
-      postId: string;
+      postId?: string;
+      friendshipId?: string;
       text: string;
       createdAt: string;
     }[] = [];
+
+    incoming.forEach((request) => {
+      items.push({
+        id: `follow-${request.id}`,
+        type: 'follow_request',
+        userId: request.requester_id,
+        friendshipId: request.id,
+        text: 'quer seguir você',
+        createdAt: request.created_at,
+      });
+    });
 
     likes.forEach((like) => {
       const post = posts.find((item) => item.id === like.post_id);
@@ -373,7 +387,7 @@ export function Social() {
     });
 
     return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
-  }, [comments, currentUserId, likes, posts, profile]);
+  }, [comments, currentUserId, incoming, likes, posts, profile]);
   const postPreviews = useMemo(() => postFiles.map((file) => ({
     name: file.name,
     type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -412,6 +426,7 @@ export function Social() {
       setPostMenuOpenId(null);
       setChatMenuOpenId(null);
       setCommentMenuOpenId(null);
+      setMessageMenuOpenId(null);
     }
     window.addEventListener('pointerdown', closeOpenMenus);
     return () => window.removeEventListener('pointerdown', closeOpenMenus);
@@ -961,6 +976,21 @@ export function Social() {
     }
     if (!addresseeId) return;
     const targetProfile = profiles[addresseeId];
+    const incomingRequest = friendships.find((friendship) => (
+      friendship.requester_id === addresseeId
+      && friendship.addressee_id === session.user.id
+      && friendship.status === 'pending'
+      && !friendship.deleted_at
+    ));
+    if (incomingRequest) {
+      await updateFriendship(incomingRequest.id, 'accepted');
+      toast('Solicitação aceita! Agora vocês se seguem.', 'success');
+      setSearchUsername('');
+      setSearchResults([]);
+      setSearchTouched(false);
+      setSearchLoading(false);
+      return;
+    }
     const { error } = await supabase.from('friendships').insert({
       requester_id: session.user.id,
       addressee_id: addresseeId,
@@ -1059,12 +1089,14 @@ export function Social() {
   }
 
   function openChat(peerId: string) {
+    const peerProfile = profiles[peerId];
     const hasConversation = messages.some((message) => (
       (message.sender_id === currentUserId && message.receiver_id === peerId)
       || (message.sender_id === peerId && message.receiver_id === currentUserId)
     ));
-    if (!acceptedFriendIds.includes(peerId) && !hasConversation) {
-      toast('Você só pode mandar mensagem para amigos.', 'info');
+    const canOpen = acceptedFriendIds.includes(peerId) || hasConversation || (profile?.is_private === false && peerProfile?.is_private === false);
+    if (!canOpen) {
+      toast('Perfis privados só recebem mensagem de quem já seguem.', 'info');
       return;
     }
     setChatPeerId(peerId);
@@ -1098,8 +1130,10 @@ export function Social() {
   async function sendMessage() {
     if (!supabase || !session || !chatPeerId || (!messageText.trim() && !messageFile)) return;
     if (sendingMessage) return;
-    if (!acceptedFriendIds.includes(chatPeerId)) {
-      toast('Você só pode mandar mensagem para amigos.', 'error');
+    const chatPeer = profiles[chatPeerId];
+    const canSend = acceptedFriendIds.includes(chatPeerId) || (profile?.is_private === false && chatPeer?.is_private === false);
+    if (!canSend) {
+      toast('Perfis privados só recebem mensagem de quem já seguem.', 'error');
       return;
     }
     setSendingMessage(true);
@@ -1330,7 +1364,7 @@ export function Social() {
 
   if (chatPeerId) {
     const chatPeer = profiles[chatPeerId];
-    const canSendToChatPeer = acceptedFriendIds.includes(chatPeerId);
+    const canSendToChatPeer = acceptedFriendIds.includes(chatPeerId) || (profile?.is_private === false && chatPeer?.is_private === false);
     return (
       <div className="min-h-[100dvh] px-5 pt-28 pb-36">
         <div className="fixed left-0 right-0 top-0 z-50 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5">
@@ -1351,7 +1385,7 @@ export function Social() {
             const mine = message.sender_id === currentUserId;
             return (
               <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[78%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}>
+                <div className={`relative max-w-[78%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}>
                   {message.media_url && message.media_type === 'image' && (
                     <img src={message.media_url} alt="" className="mb-2 max-h-72 rounded-xl object-cover" />
                   )}
@@ -1376,9 +1410,38 @@ export function Social() {
                     <p className={`mt-1 text-[10px] ${mine ? 'text-white/55' : 'text-white/30'}`}>editado</p>
                   )}
                   {mine && editingMessageId !== message.id && (
-                    <div className="mt-1 flex justify-end gap-2 text-[10px]">
-                      {message.body && <button onClick={() => { setEditingMessageId(message.id); setEditingMessageText(message.body); }} className={mine ? 'text-white/65' : 'text-white/35'}>Editar</button>}
-                      <button onClick={() => deleteMessage(message.id)} className={mine ? 'text-white/65' : 'text-red-300'}>Apagar</button>
+                    <div className="mt-1 flex justify-end" data-social-menu>
+                      <button
+                        onClick={() => setMessageMenuOpenId((id) => (id === message.id ? null : message.id))}
+                        className="w-7 h-7 rounded-full bg-white/10 text-white/65 flex items-center justify-center"
+                        aria-label="Opções da mensagem"
+                      >
+                        <MaterialIcon name="more_horiz" className="text-base" />
+                      </button>
+                      {messageMenuOpenId === message.id && (
+                        <div className="absolute right-0 bottom-8 z-[90] w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                          {message.body && (
+                            <button
+                              onClick={() => {
+                                setMessageMenuOpenId(null);
+                                setEditingMessageId(message.id);
+                                setEditingMessageText(message.body);
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
+                            >
+                              <MaterialIcon name="edit" className="text-base text-primary-300" />
+                              Editar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { setMessageMenuOpenId(null); void deleteMessage(message.id); }}
+                            className={`w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 active:bg-red-500/10 ${message.body ? 'border-t border-white/5' : ''}`}
+                          >
+                            <MaterialIcon name="delete" className="text-base" />
+                            Apagar
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1402,7 +1465,7 @@ export function Social() {
             )}
             {!canSendToChatPeer && (
               <p className="rounded-2xl bg-white/5 px-3 py-2 text-center text-xs text-white/40">
-                Conversa arquivada. Siga novamente para enviar mensagens.
+                Mensagens bloqueadas. Se algum perfil for privado, vocês precisam se seguir.
               </p>
             )}
             <div className="flex gap-2">
@@ -1440,7 +1503,7 @@ export function Social() {
         <div className="space-y-2">
           {notifications.map((notification) => {
             const actor = profiles[notification.userId];
-            const icon = notification.type === 'like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : 'alternate_email';
+            const icon = notification.type === 'like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : notification.type === 'follow_request' ? 'person_add' : 'alternate_email';
             return (
               <div key={notification.id} className="rounded-3xl bg-white/5 border border-white/10 p-3 flex items-center gap-3">
                 <button onClick={() => setViewProfileId(notification.userId)} className="shrink-0">
@@ -1451,6 +1514,22 @@ export function Social() {
                     <button onClick={() => setViewProfileId(notification.userId)} className="font-black text-white">@{actor?.username || 'usuario'}</button> {notification.text}
                   </p>
                   <p className="text-[10px] text-white/30">{formatSocialDate(notification.createdAt)}</p>
+                  {notification.type === 'follow_request' && notification.friendshipId && (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => updateFriendship(notification.friendshipId!, 'accepted')}
+                        className="px-3 py-2 rounded-xl bg-primary-500 text-white text-xs font-black"
+                      >
+                        Aceitar
+                      </button>
+                      <button
+                        onClick={() => updateFriendship(notification.friendshipId!, 'blocked')}
+                        className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-black"
+                      >
+                        Recusar
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <MaterialIcon name={icon} variant={notification.type === 'like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
               </div>
@@ -1469,14 +1548,23 @@ export function Social() {
 
   if (showConversations) {
     return (
-      <div className="px-5 pt-14 pb-28 space-y-5">
+      <div className="px-5 pt-14 pb-[calc(140px+env(safe-area-inset-bottom))] space-y-5">
         <div className="flex items-center justify-between">
           <button onClick={() => setShowConversations(false)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <h1 className="text-xl font-black">Mensagens</h1>
-          <button onClick={() => setShowArchivedChats((prev) => !prev)} className="px-3 py-2 rounded-full bg-white/5 text-xs font-bold text-white/50">
-            {showArchivedChats ? 'Ativas' : 'Arquivo'}
-          </button>
+          <div className="w-11" />
         </div>
+
+        <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+          <button onClick={() => setShowArchivedChats(false)} className={`py-2 rounded-full text-sm font-black ${!showArchivedChats ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ativas</button>
+          <button onClick={() => setShowArchivedChats(true)} className={`py-2 rounded-full text-sm font-black ${showArchivedChats ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Arquivadas</button>
+        </div>
+
+        {showArchivedChats && (
+          <p className="rounded-2xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white/40">
+            Conversas arquivadas ficam guardadas aqui até você desarquivar.
+          </p>
+        )}
 
         <div className="space-y-2">
           {conversations.map((conversation) => (
@@ -1520,8 +1608,8 @@ export function Social() {
           ))}
           {conversations.length === 0 && (
             <div className="card text-center space-y-2">
-              <h2 className="font-bold">Sem conversas ainda</h2>
-              <p className="text-sm text-white/40">Adicione amigos para liberar mensagens privadas.</p>
+              <h2 className="font-bold">{showArchivedChats ? 'Sem conversas arquivadas' : 'Sem conversas ativas'}</h2>
+              <p className="text-sm text-white/40">{showArchivedChats ? 'Quando você arquivar uma conversa, ela aparece aqui.' : 'Adicione amigos ou converse com perfis públicos.'}</p>
             </div>
           )}
         </div>
@@ -1531,6 +1619,7 @@ export function Social() {
 
   if (selectedProfile && viewProfileId) {
     const isMine = selectedProfile.id === currentUserId;
+    const canMessageViewedProfile = !isMine && (myFriendshipWithViewed?.status === 'accepted' || (profile?.is_private === false && selectedProfile.is_private === false));
     const profileFollowers = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.addressee_id === selectedProfile.id && !friendship.deleted_at);
     const profileFollowing = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.requester_id === selectedProfile.id && !friendship.deleted_at);
     const profileList = (profileListMode === 'followers' ? profileFollowers : profileFollowing)
@@ -1568,7 +1657,7 @@ export function Social() {
               >
                 {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : myFriendshipWithViewed?.status === 'pending' ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
               </button>
-              {myFriendshipWithViewed?.status === 'accepted' && (
+              {canMessageViewedProfile && (
                 <button onClick={() => openChat(selectedProfile.id)} className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold">
                   Mensagem
                 </button>
@@ -1983,7 +2072,7 @@ export function Social() {
                                       <MaterialIcon name="more_horiz" className="text-lg" />
                                     </button>
                                     {commentMenuOpenId === comment.id && (
-                                      <div className="absolute right-0 top-9 z-20 w-44 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                                      <div className="absolute right-0 bottom-9 z-[90] w-44 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
                                         {ownComment && (
                                           <button
                                             onClick={() => {
