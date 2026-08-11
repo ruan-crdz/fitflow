@@ -267,7 +267,7 @@ export function Social() {
   const [editingMessageText, setEditingMessageText] = useState('');
   const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
-  const chatTopRef = useRef<HTMLDivElement | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const messageLongPressRef = useRef<number | null>(null);
 
   const currentUserId = session?.user.id || '';
@@ -316,7 +316,7 @@ export function Social() {
       || (message.sender_id === chatPeerId && message.receiver_id === currentUserId)
     )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
       .filter((message) => !message.deleted_at)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     : [];
   const rankingRows = rankingStats
     .filter((stats) => rankingMode === 'general' || stats.user_id === currentUserId || acceptedFriendIds.includes(stats.user_id))
@@ -587,9 +587,10 @@ export function Social() {
 
   useEffect(() => {
     if (!chatPeerId) return;
-    requestAnimationFrame(() => {
-      chatTopRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
-    });
+    const scrollToLatest = () => chatEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+    requestAnimationFrame(scrollToLatest);
+    const timeout = window.setTimeout(scrollToLatest, 80);
+    return () => window.clearTimeout(timeout);
   }, [chatPeerId, chatMessages.length]);
 
   useEffect(() => {
@@ -1539,7 +1540,6 @@ export function Social() {
         </div>
 
         <div className="space-y-2">
-          <div ref={chatTopRef} />
           {chatMessages.map((message) => {
             const mine = message.sender_id === currentUserId;
             return (
@@ -1623,6 +1623,7 @@ export function Social() {
               Comece a conversa com {chatPeer?.display_name || 'esse amigo'}.
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
         <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-2 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
