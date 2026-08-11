@@ -290,7 +290,7 @@ export function Profile() {
 
           {/* Cycle Phase */}
           <div className="card space-y-3">
-            <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="cycle" className="text-primary-300" /> Fase do ciclo</h2>
+            <h2 className="font-semibold text-white/80 flex items-center gap-2"><MaterialIcon name="autorenew" className="text-primary-300" /> Fase do ciclo</h2>
             <div className="grid grid-cols-2 gap-2">
               {CYCLE_PHASES.map((cp) => (
                 <button
@@ -321,12 +321,13 @@ export function Profile() {
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id)}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
-                    themeId === t.id ? 'border-white/40 scale-105' : 'border-white/5'
+                  aria-pressed={themeId === t.id}
+                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
+                    themeId === t.id ? 'border-primary-500 bg-primary-500/10 scale-105 shadow-[0_0_0_1px_rgba(var(--color-primary-rgb),0.35)]' : 'border-white/5'
                   }`}
                 >
                   <div className="w-6 h-6 rounded-full" style={{ backgroundColor: t.colors.primary }} />
-                  <MaterialIcon name={t.icon} className="text-[16px] text-white/40" />
+                  <MaterialIcon name={themeId === t.id ? 'check_circle' : t.icon} className={`text-[16px] ${themeId === t.id ? 'text-primary-300' : 'text-white/40'}`} />
                 </button>
               ))}
             </div>
@@ -337,11 +338,12 @@ export function Profile() {
                   <button
                     key={t.id}
                     onClick={() => setTheme(t.id)}
+                    aria-pressed={themeId === t.id}
                     className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${
-                      themeId === t.id ? 'border-white/40 bg-white/5' : 'border-white/5'
+                      themeId === t.id ? 'border-primary-500 bg-primary-500/10 shadow-[0_0_0_1px_rgba(var(--color-primary-rgb),0.35)]' : 'border-white/5'
                     }`}
                   >
-                    <MaterialIcon name={t.icon} className="text-lg text-primary-300" />
+                    <MaterialIcon name={themeId === t.id ? 'check_circle' : t.icon} className="text-lg text-primary-300" />
                     <span className="text-xs font-medium text-white/70">{t.name}</span>
                   </button>
                 ))}

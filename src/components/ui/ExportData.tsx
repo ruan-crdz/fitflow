@@ -49,7 +49,7 @@ export function ExportData() {
 
   return (
     <div className="space-y-2">
-      <button onClick={downloadBackup} className="card flex items-center gap-3 w-full text-left border-primary-500/20">
+      <button onClick={downloadBackup} className="card flex items-center gap-3 w-full text-left">
         <MaterialIcon name="star" className="text-primary-300" />
         <div>
           <p className="font-medium text-sm">Baixar backup completo</p>

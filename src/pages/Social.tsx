@@ -860,6 +860,13 @@ export function Social() {
     ].filter(Boolean) as { label: string; value: string }[];
   }
 
+  async function confirmSignOut() {
+    if (!supabase) return;
+    const shouldSignOut = window.confirm('Sair da conta? Você vai precisar entrar novamente para usar o Social.');
+    if (!shouldSignOut) return;
+    await supabase.auth.signOut();
+  }
+
   if (!isSupabaseConfigured || !supabase) {
     return (
       <div className="px-5 pt-14 pb-6 space-y-4">
@@ -927,7 +934,7 @@ export function Social() {
             <h1 className="text-[26px] font-bold">Social</h1>
             <p className="text-xs text-white/35">Complete seu perfil online</p>
           </div>
-          <button onClick={() => supabase!.auth.signOut()} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
         </div>
         <div className="card space-y-3">
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome exibido" />
@@ -1090,7 +1097,7 @@ export function Social() {
         <div className="flex items-center justify-between">
           <button onClick={() => setViewProfileId(null)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <h1 className="text-lg font-bold">@{selectedProfile.username}</h1>
-          <button onClick={() => supabase!.auth.signOut()} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
         </div>
 
         <div className="flex flex-col items-center text-center space-y-3">
@@ -1191,7 +1198,7 @@ export function Social() {
             <p className="text-xs text-white/35">@{profile.username}</p>
           </div>
         </button>
-        <button onClick={() => supabase!.auth.signOut()} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+        <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
       </div>
 
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
