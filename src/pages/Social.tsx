@@ -453,6 +453,14 @@ export function Social() {
     if (backProfileId) setViewProfileId(backProfileId);
   }
 
+  function restoreScrollAfterContentGrowth(beforeTop: number, beforeHeight: number) {
+    requestAnimationFrame(() => {
+      const page = document.scrollingElement || document.documentElement;
+      const growth = page.scrollHeight - beforeHeight;
+      page.scrollTop = beforeTop + Math.max(0, growth);
+    });
+  }
+
   useEffect(() => () => {
     postPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
   }, [postPreviews]);
@@ -912,6 +920,9 @@ export function Social() {
 
   async function addComment(postId: string) {
     if (!supabase || !session || !commentText[postId]?.trim()) return;
+    const page = document.scrollingElement || document.documentElement;
+    const scrollTopBefore = page.scrollTop;
+    const scrollHeightBefore = page.scrollHeight;
     const post = posts.find((item) => item.id === postId);
     if (post?.comments_enabled === false) {
       toast('Comentários desativados nessa postagem.', 'info');
@@ -930,6 +941,7 @@ export function Social() {
     else {
       setCommentText((prev) => ({ ...prev, [postId]: '' }));
       await refreshFeed();
+      restoreScrollAfterContentGrowth(scrollTopBefore, scrollHeightBefore);
     }
   }
 
