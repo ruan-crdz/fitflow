@@ -73,6 +73,35 @@ function sanitizeExercises(exercises: CustomExercise[] | undefined, prefix: stri
   }));
 }
 
+function cloneExercises(exercises: CustomExercise[]): CustomExercise[] {
+  return exercises.map((exercise) => ({
+    ...exercise,
+    setRows: exercise.setRows?.map((row) => ({ ...row })),
+    cardioBlocks: exercise.cardioBlocks?.map((block) => ({ ...block })),
+  }));
+}
+
+function materializeActiveWorkouts(
+  activeSlots: WorkoutType[],
+  customWorkouts: Record<WorkoutType, CustomExercise[] | null> | undefined,
+): Record<WorkoutType, CustomExercise[] | null> {
+  const prev = customWorkouts || EMPTY_WORKOUTS;
+  const next: Record<WorkoutType, CustomExercise[] | null> = { ...EMPTY_WORKOUTS };
+
+  WORKOUT_TYPES.forEach((type) => {
+    const existing = prev[type];
+    if (Array.isArray(existing) && existing.length > 0) {
+      next[type] = cloneExercises(existing);
+    } else if (activeSlots.includes(type)) {
+      next[type] = cloneDefaultWorkout(type);
+    } else {
+      next[type] = null;
+    }
+  });
+
+  return next;
+}
+
 function pickImportSlots(workouts: WorkoutImportItem[]): WorkoutType[] {
   const used = new Set<WorkoutType>();
   return workouts.slice(0, WORKOUT_TYPES.length).map((workout) => {
@@ -108,20 +137,23 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
 
       setExercises: (type, exercises) =>
         set((state) => {
-          const prev = state.customWorkouts || EMPTY_WORKOUTS;
-          return { customWorkouts: { ...prev, [type]: exercises } };
+          const activeSlots = state.activeSlots.includes(type) ? state.activeSlots : [...state.activeSlots, type];
+          const next = materializeActiveWorkouts(activeSlots, state.customWorkouts);
+          next[type] = cloneExercises(exercises);
+          return { activeSlots, customWorkouts: next };
         }),
 
       reorderExercises: (type, fromIndex, toIndex) =>
         set((state) => {
           if (fromIndex === toIndex) return state;
-          const prev = state.customWorkouts || EMPTY_WORKOUTS;
+          const activeSlots = state.activeSlots.includes(type) ? state.activeSlots : [...state.activeSlots, type];
+          const prev = materializeActiveWorkouts(activeSlots, state.customWorkouts);
           const base = prev[type] || cloneDefaultWorkout(type);
-          const list = [...base];
+          const list = cloneExercises(base);
           const [moved] = list.splice(fromIndex, 1);
           if (!moved) return state;
           list.splice(toIndex, 0, moved);
-          return { customWorkouts: { ...prev, [type]: list } };
+          return { activeSlots, customWorkouts: { ...prev, [type]: list } };
         }),
 
       reorderSlots: (fromIndex, toIndex) =>
@@ -170,10 +202,11 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
 
       swapExercise: (type, oldId, newExercise) =>
         set((state) => {
-          const prev = state.customWorkouts || EMPTY_WORKOUTS;
+          const activeSlots = state.activeSlots.includes(type) ? state.activeSlots : [...state.activeSlots, type];
+          const prev = materializeActiveWorkouts(activeSlots, state.customWorkouts);
           const current = prev[type] || cloneDefaultWorkout(type);
           const updated = current.map((e) => (e.id === oldId ? newExercise : e));
-          return { customWorkouts: { ...prev, [type]: updated } };
+          return { activeSlots, customWorkouts: { ...prev, [type]: cloneExercises(updated) } };
         }),
 
       addSlot: () => {
@@ -344,7 +377,7 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
     }),
     {
       name: 'fitflow-custom-workouts',
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>;
         const base = { A: null, B: null, C: null, D: null, E: null };
@@ -364,6 +397,10 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
           if (cw.E) slots.push('E');
           state.activeSlots = slots;
         }
+        state.customWorkouts = materializeActiveWorkouts(
+          state.activeSlots as WorkoutType[],
+          state.customWorkouts as Record<WorkoutType, CustomExercise[] | null>,
+        );
         return state as unknown as CustomWorkoutState;
       },
     },
