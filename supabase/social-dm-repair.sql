@@ -12,6 +12,33 @@ create table if not exists public.social_messages (
 alter table public.friendships
   add column if not exists deleted_at timestamptz;
 
+create or replace function public.enforce_friendship_rules()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if exists (select 1 from public.social_profiles p where p.id = new.addressee_id and p.is_private = true) then
+      new.status := 'pending';
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    if old.status = 'pending' and new.status = 'accepted' and auth.uid() <> old.addressee_id then
+      raise exception 'Apenas quem recebeu a solicitação pode aceitar.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_friendship_rules_trigger on public.friendships;
+create trigger enforce_friendship_rules_trigger
+  before insert or update on public.friendships
+  for each row execute function public.enforce_friendship_rules();
+
 alter table public.social_messages
   alter column body set default '',
   add column if not exists media_url text,

@@ -975,7 +975,9 @@ export function Social() {
       return;
     }
     if (!addresseeId) return;
-    const targetProfile = profiles[addresseeId];
+    const targetProfile = profiles[addresseeId]
+      || searchResults.find((item) => item.id === addresseeId)
+      || (selectedProfile?.id === addresseeId ? selectedProfile : undefined);
     const incomingRequest = friendships.find((friendship) => (
       friendship.requester_id === addresseeId
       && friendship.addressee_id === session.user.id
@@ -1503,6 +1505,8 @@ export function Social() {
         <div className="space-y-2">
           {notifications.map((notification) => {
             const actor = profiles[notification.userId];
+            const relatedPost = notification.postId ? posts.find((post) => post.id === notification.postId) : null;
+            const relatedImage = relatedPost ? images.find((image) => image.post_id === relatedPost.id) : null;
             const icon = notification.type === 'like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : notification.type === 'follow_request' ? 'person_add' : 'alternate_email';
             return (
               <div key={notification.id} className="rounded-3xl bg-white/5 border border-white/10 p-3 flex items-center gap-3">
@@ -1531,7 +1535,19 @@ export function Social() {
                     </div>
                   )}
                 </div>
-                <MaterialIcon name={icon} variant={notification.type === 'like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
+                {relatedPost ? (
+                  <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0">
+                    {relatedImage ? (
+                      <img src={relatedImage.image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full p-1.5 flex items-center justify-center">
+                        <p className="text-[9px] leading-tight text-white/45 line-clamp-3 break-words">{relatedPost.body || 'Publicação'}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <MaterialIcon name={icon} variant={notification.type === 'like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
+                )}
               </div>
             );
           })}
@@ -1619,6 +1635,8 @@ export function Social() {
 
   if (selectedProfile && viewProfileId) {
     const isMine = selectedProfile.id === currentUserId;
+    const viewedIncomingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.addressee_id === currentUserId;
+    const viewedOutgoingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.requester_id === currentUserId;
     const canMessageViewedProfile = !isMine && (myFriendshipWithViewed?.status === 'accepted' || (profile?.is_private === false && selectedProfile.is_private === false));
     const profileFollowers = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.addressee_id === selectedProfile.id && !friendship.deleted_at);
     const profileFollowing = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.requester_id === selectedProfile.id && !friendship.deleted_at);
@@ -1652,10 +1670,10 @@ export function Social() {
             <div className="flex gap-2">
               <button
                 onClick={() => addFriend(selectedProfile.id)}
-                disabled={myFriendshipWithViewed?.status === 'accepted' || myFriendshipWithViewed?.status === 'pending'}
+                disabled={myFriendshipWithViewed?.status === 'accepted' || viewedOutgoingRequest}
                 className="px-5 py-3 rounded-2xl bg-primary-500 text-white text-sm font-bold disabled:opacity-40"
               >
-                {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : myFriendshipWithViewed?.status === 'pending' ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
+                {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : viewedIncomingRequest ? 'Aceitar' : viewedOutgoingRequest ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
               </button>
               {canMessageViewedProfile && (
                 <button onClick={() => openChat(selectedProfile.id)} className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold">
@@ -1875,7 +1893,9 @@ export function Social() {
         {searchResults.length > 0 && (
           <div className="rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 overflow-hidden">
             {searchResults.map((result) => {
-              const relation = friendships.find((f) => [f.requester_id, f.addressee_id].includes(currentUserId) && [f.requester_id, f.addressee_id].includes(result.id));
+              const relation = friendships.find((f) => !f.deleted_at && [f.requester_id, f.addressee_id].includes(currentUserId) && [f.requester_id, f.addressee_id].includes(result.id));
+              const isIncomingRequest = relation?.status === 'pending' && relation.addressee_id === currentUserId;
+              const isOutgoingRequest = relation?.status === 'pending' && relation.requester_id === currentUserId;
               return (
                 <div key={result.id} className="flex items-center justify-between gap-3 p-3 border-b border-white/5 last:border-b-0">
                   <button onClick={() => setViewProfileId(result.id)} className="flex items-center gap-3 text-left min-w-0">
@@ -1887,10 +1907,10 @@ export function Social() {
                   </button>
                   <button
                     onClick={() => addFriend(result.id)}
-                    disabled={relation?.status === 'accepted' || relation?.status === 'pending'}
+                    disabled={relation?.status === 'accepted' || isOutgoingRequest}
                     className="px-3 py-2 rounded-full bg-primary-500 text-white text-xs font-bold disabled:opacity-40"
                   >
-                    {relation?.status === 'accepted' ? 'Amigo' : relation?.status === 'pending' ? 'Solicitado' : result.is_private ? 'Solicitar' : 'Adicionar'}
+                    {relation?.status === 'accepted' ? 'Amigo' : isIncomingRequest ? 'Aceitar' : isOutgoingRequest ? 'Solicitado' : result.is_private ? 'Solicitar' : 'Adicionar'}
                   </button>
                 </div>
               );

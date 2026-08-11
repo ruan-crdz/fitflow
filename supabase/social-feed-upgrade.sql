@@ -36,6 +36,33 @@ create policy "users update received or sent friendships"
   using (auth.uid() = requester_id or auth.uid() = addressee_id)
   with check (auth.uid() = requester_id or auth.uid() = addressee_id);
 
+create or replace function public.enforce_friendship_rules()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if exists (select 1 from public.social_profiles p where p.id = new.addressee_id and p.is_private = true) then
+      new.status := 'pending';
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    if old.status = 'pending' and new.status = 'accepted' and auth.uid() <> old.addressee_id then
+      raise exception 'Apenas quem recebeu a solicitação pode aceitar.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_friendship_rules_trigger on public.friendships;
+create trigger enforce_friendship_rules_trigger
+  before insert or update on public.friendships
+  for each row execute function public.enforce_friendship_rules();
+
 create or replace function public.handle_new_social_user()
 returns trigger
 language plpgsql
