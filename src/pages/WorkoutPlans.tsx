@@ -1187,7 +1187,14 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
             {/* Loading */}
             {aiLoading && (
-              <div className="w-72 h-40 rounded-2xl bg-dark-100 border border-white/10 flex items-center justify-center">
+              <div className="w-72 h-40 rounded-2xl bg-dark-100 border border-white/10 flex flex-col items-center justify-center gap-3">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
+                  className="text-4xl text-primary-300"
+                >
+                  <MaterialIcon name="smart_toy" />
+                </motion.div>
                 <span className="text-white/30 animate-pulse text-sm">Analisando distribuição muscular...</span>
               </div>
             )}

@@ -456,7 +456,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
               className="text-3xl inline-block mb-3"
-            ><MaterialIcon name="search" /></motion.div>
+            ><MaterialIcon name="smart_toy" className="text-primary-300" /></motion.div>
             <p className="text-sm text-primary-300 font-semibold">Analisando com IA...</p>
             <p className="text-[10px] text-white/30 mt-1">Identificando alimento e estimando macros</p>
           </motion.div>
