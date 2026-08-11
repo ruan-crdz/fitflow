@@ -166,6 +166,13 @@ create table if not exists public.social_chat_preferences (
   check (user_id <> peer_id)
 );
 
+alter table public.social_chat_preferences
+  add column if not exists is_archived boolean not null default false,
+  add column if not exists is_pinned boolean not null default false,
+  add column if not exists hidden_before timestamptz,
+  add column if not exists last_read_at timestamptz,
+  add column if not exists updated_at timestamptz not null default now();
+
 alter table public.social_messages enable row level security;
 alter table public.social_chat_preferences enable row level security;
 
@@ -463,3 +470,5 @@ create policy "users delete own social images"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'social-posts' and auth.uid()::text = (storage.foldername(name))[1]);
+
+notify pgrst, 'reload schema';

@@ -132,7 +132,8 @@ function ptSupabaseError(message: string) {
     lower.includes('could not find')
     && (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache'))
   ) {
-    return 'Seu Supabase ainda está com o schema antigo. Rode supabase/social-feed-upgrade.sql no SQL Editor.';
+    const missing = message.match(/'([^']+)'/)?.[1];
+    return `Falta atualizar o Supabase${missing ? ` (${missing})` : ''}. Rode supabase/social-feed-upgrade.sql no SQL Editor.`;
   }
   if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme esse usuário.';
   if (lower.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
