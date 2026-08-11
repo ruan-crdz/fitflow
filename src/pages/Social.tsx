@@ -181,6 +181,7 @@ export function Social() {
   const [chatPreferences, setChatPreferences] = useState<Record<string, ChatPreference>>({});
   const [rankingStats, setRankingStats] = useState<SocialProfileStats[]>([]);
   const [socialMode, setSocialMode] = useState<'ranking' | 'feed'>('feed');
+  const [rankingMode, setRankingMode] = useState<'general' | 'friends'>('general');
   const [feedMode, setFeedMode] = useState<'general' | 'friends'>('general');
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [chatPeerId, setChatPeerId] = useState<string | null>(null);
@@ -191,8 +192,11 @@ export function Social() {
   const [postBody, setPostBody] = useState('');
   const [postFiles, setPostFiles] = useState<File[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
+  const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
   const [searchUsername, setSearchUsername] = useState('');
   const [searchResults, setSearchResults] = useState<SocialProfile[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchTouched, setSearchTouched] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [messageText, setMessageText] = useState('');
   const [messageFile, setMessageFile] = useState<File | null>(null);
@@ -228,6 +232,7 @@ export function Social() {
     )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
     : [];
   const rankingRows = rankingStats
+    .filter((stats) => rankingMode === 'general' || stats.user_id === currentUserId || acceptedFriendIds.includes(stats.user_id))
     .map((stats) => ({ stats, profile: profiles[stats.user_id] }))
     .filter((row) => row.profile)
     .sort((a, b) => b.stats.consistency_count - a.stats.consistency_count);
@@ -305,6 +310,25 @@ export function Social() {
       void client.removeChannel(channel);
     };
   }, [session?.user.id]);
+
+  useEffect(() => {
+    const term = searchUsername.trim();
+    if (!session || socialMode !== 'feed') return;
+    if (term.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchTouched(false);
+      return;
+    }
+
+    setSearchTouched(true);
+    setSearchLoading(true);
+    const timeout = window.setTimeout(() => {
+      void searchProfiles(term);
+    }, 2000);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchUsername, session?.user.id, socialMode]);
 
   async function refreshAll() {
     setLoading(true);
@@ -550,10 +574,31 @@ export function Social() {
 
   async function toggleLike(postId: string) {
     if (!supabase || !session) return;
+    if (pendingLikes[postId]) return;
     const liked = likes.some((l) => l.post_id === postId && l.user_id === session.user.id);
-    if (liked) await supabase.from('social_post_likes').delete().eq('post_id', postId).eq('user_id', session.user.id);
-    else await supabase.from('social_post_likes').insert({ post_id: postId, user_id: session.user.id });
-    await refreshFeed();
+    const optimisticLike = { post_id: postId, user_id: session.user.id };
+
+    setPendingLikes((prev) => ({ ...prev, [postId]: true }));
+    setLikes((prev) => (
+      liked
+        ? prev.filter((like) => !(like.post_id === postId && like.user_id === session.user.id))
+        : [...prev, optimisticLike]
+    ));
+
+    const { error } = liked
+      ? await supabase.from('social_post_likes').delete().eq('post_id', postId).eq('user_id', session.user.id)
+      : await supabase.from('social_post_likes').insert(optimisticLike);
+
+    if (error) {
+      setLikes((prev) => (
+        liked
+          ? [...prev, optimisticLike]
+          : prev.filter((like) => !(like.post_id === postId && like.user_id === session.user.id))
+      ));
+      toast('Nao consegui atualizar a curtida agora.', 'error');
+    }
+
+    setPendingLikes((prev) => ({ ...prev, [postId]: false }));
   }
 
   async function addComment(postId: string) {
@@ -598,24 +643,37 @@ export function Social() {
       toast(targetProfile?.is_private ? 'Solicitacao enviada!' : 'Amigo adicionado!', 'success');
       setSearchUsername('');
       setSearchResults([]);
+      setSearchTouched(false);
+      setSearchLoading(false);
       await refreshFriends();
     }
   }
 
-  async function searchProfiles() {
+  async function searchProfiles(query = searchUsername.trim()) {
     if (!supabase) return;
-    const term = searchUsername.trim();
+    const term = query.trim();
     if (term.length < 2) {
       setSearchResults([]);
+      setSearchLoading(false);
+      setSearchTouched(false);
       return;
     }
+    setSearchLoading(true);
+    setSearchTouched(true);
     const clean = normalizeUsername(term);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('social_profiles')
       .select('id, username, display_name, bio, avatar_url, is_private')
       .or(`username.ilike.%${clean}%,display_name.ilike.%${term}%`)
       .neq('id', currentUserId)
       .limit(10);
+    if (term !== searchUsername.trim()) return;
+    setSearchLoading(false);
+    if (error) {
+      setSearchResults([]);
+      toast('Nao consegui buscar agora. Tente de novo.', 'error');
+      return;
+    }
     const results = (data || []) as SocialProfile[];
     setSearchResults(results);
     setProfiles((prev) => {
@@ -1053,9 +1111,13 @@ export function Social() {
       {socialMode === 'ranking' && (
         <div className="space-y-3">
           <div className="rounded-3xl bg-primary-500/10 border border-primary-500/20 p-4">
-            <p className="text-xs font-bold text-primary-200 uppercase">Gym Rats</p>
+            <p className="text-xs font-bold text-primary-200 uppercase">Liga GymPilot</p>
             <h2 className="text-2xl font-black">Ranking de consistencia</h2>
-            <p className="text-sm text-white/45">Quem mais aparece, sobe. Simples e brutal.</p>
+            <p className="text-sm text-white/45">Treinou, pontuou. Sumiu, caiu.</p>
+          </div>
+          <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+            <button onClick={() => setRankingMode('general')} className={`py-2 rounded-full text-sm font-bold ${rankingMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
+            <button onClick={() => setRankingMode('friends')} className={`py-2 rounded-full text-sm font-bold ${rankingMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
           </div>
           {rankingRows.map((row, index) => (
             <button key={row.stats.user_id} onClick={() => setViewProfileId(row.stats.user_id)} className="w-full flex items-center gap-3 rounded-3xl bg-white/5 border border-white/10 p-3 text-left">
@@ -1074,7 +1136,9 @@ export function Social() {
             </button>
           ))}
           {rankingRows.length === 0 && (
-            <p className="card text-sm text-white/35">Ranking vazio por enquanto.</p>
+            <p className="card text-sm text-white/35">
+              {rankingMode === 'friends' ? 'Nenhum amigo no ranking ainda.' : 'Ranking vazio por enquanto.'}
+            </p>
           )}
         </div>
       )}
@@ -1082,16 +1146,24 @@ export function Social() {
       {socialMode === 'feed' && (
         <>
       <div className="space-y-2">
-        <div className="flex gap-2">
+        <div>
           <input
             value={searchUsername}
             onChange={(e) => setSearchUsername(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void searchProfiles(); }}
             className="input-field text-sm rounded-full"
             placeholder="Buscar pessoas"
           />
-          <button onClick={searchProfiles} className="px-4 rounded-full bg-white/10 border border-white/10 text-sm font-bold">Buscar</button>
         </div>
+        {searchLoading && (
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-3 text-sm text-white/45">
+            Buscando perfis...
+          </div>
+        )}
+        {!searchLoading && searchTouched && searchUsername.trim().length >= 2 && searchResults.length === 0 && (
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-3 text-sm text-white/45">
+            Nenhum perfil encontrado.
+          </div>
+        )}
         {searchResults.length > 0 && (
           <div className="rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 overflow-hidden">
             {searchResults.map((result) => {
@@ -1183,8 +1255,13 @@ export function Social() {
                 </div>
               )}
               <div className="flex items-center gap-3">
-                <button onClick={() => toggleLike(post.id)} className={`px-3 py-2 rounded-xl text-xs font-bold ${liked ? 'bg-red-500/20 text-red-300' : 'bg-white/5 text-white/50'}`}>
-                  Like {postLikes.length}
+                <button
+                  onClick={() => toggleLike(post.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${liked ? 'bg-primary-500/15 text-primary-300 border border-primary-500/25' : 'bg-white/5 text-white/50 border border-white/5'}`}
+                  aria-label={liked ? 'Remover curtida' : 'Curtir'}
+                >
+                  <span className={`text-lg leading-none transition-all ${liked ? 'grayscale-0 scale-110' : 'grayscale opacity-45'}`}>💪</span>
+                  <span>{postLikes.length}</span>
                 </button>
                 <span className="text-xs text-white/35">{postComments.length} comentario(s)</span>
               </div>
