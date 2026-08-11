@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
+import { useFoodStore } from '@/stores/useFoodStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import type { WorkoutType } from '@/types';
@@ -19,6 +20,7 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
   const isEnabled = useAIStore((s) => s.isEnabled);
   const assistantName = useAIConfigStore((s) => s.assistantName);
   const profile = useProfileStore((s) => s.profile);
+  const todayTotals = useFoodStore((s) => s.getTodayTotals());
   const [feedback, setFeedback] = useState<string | null>(null);
   const [meal, setMeal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,15 +58,18 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
 
     Promise.all([
       fetchAI(
-        `Você é personal trainer. Dê um feedback curto (2 frases max, sem emoji) sobre este treino concluído. Seja motivadora e específica sobre os exercícios.
+        `Você é um assistente de treino baseado em evidências. Dê um feedback curto (2 frases max, sem emoji) sobre este treino concluído.
+      Seja prática e motivadora, mas NÃO afirme progressão de carga, técnica perfeita ou intensidade se isso não estiver explicitamente nos dados.
 Perfil: ${profile.name}, objetivo ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
 Treino: ${workout.label} (${workout.focus}), duração ${durationMin}min.
 Exercícios: ${exercisesSummary}`
       ),
       fetchAI(
-        `Você é nutricionista esportiva. Sugira UMA refeição pós-treino rápida e prática (1-2 frases, com quantidades aproximadas). Não use emoji de comida.
+        `Você é um assistente de nutrição esportiva educacional. Sugira UMA refeição pós-treino rápida e prática (1-2 frases, com quantidades aproximadas). Não use emoji de comida.
+      Personalize com base no que a pessoa já consumiu hoje e no que ainda precisa fechar no dia. Se faltarem dados essenciais, deixe isso explícito.
 Perfil: ${profile.name}, ${profile.weight}kg, objetivo ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}.
-Acabou de treinar: ${workout.focus}, ${durationMin}min.`
+      Acabou de treinar: ${workout.focus}, ${durationMin}min.
+      Consumo do dia até agora: ${todayTotals.calories} kcal, proteína ${todayTotals.protein}g, carboidratos ${todayTotals.carbs}g, gorduras ${todayTotals.fat}g.`
       ),
     ])
       .then(([fb, ml]) => {

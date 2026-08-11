@@ -13,6 +13,7 @@ import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { getToday } from '@/utils/date';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { addMacros, findFoodInTable, macrosForFood, toGrams, type MacroTotals } from '@/utils/nutrition';
 
 type IngredientUnit = 'g' | 'un' | 'colher_sopa' | 'colher_cha' | 'ml' | 'copo' | 'xicara';
 
@@ -21,6 +22,21 @@ interface IngredientInput {
   amount: string;
   unit: IngredientUnit;
   calories?: string;
+}
+
+interface CameraDetectedItem {
+  name: string;
+  amount?: number;
+  unit?: IngredientUnit;
+  confidence?: number;
+}
+
+interface UnknownMapping {
+  originalName: string;
+  mappedFood: string;
+  grams: number;
+  confidence: number;
+  note?: string;
 }
 
 const FOOD_UNITS: { value: IngredientUnit; label: string }[] = [
@@ -41,6 +57,51 @@ const UNIT_LABEL: Record<IngredientUnit, string> = {
   ml: 'ml',
   copo: 'copo(s)',
   xicara: 'xícara(s)',
+};
+
+const UNKNOWN_MAPPING_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['mappings'],
+  properties: {
+    mappings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['originalName', 'mappedFood', 'grams', 'confidence', 'note'],
+        properties: {
+          originalName: { type: 'string' },
+          mappedFood: { type: 'string' },
+          grams: { type: 'number' },
+          confidence: { type: 'number' },
+          note: { type: ['string', 'null'] },
+        },
+      },
+    },
+  },
+};
+
+const CAMERA_ITEMS_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'amount', 'unit', 'confidence'],
+        properties: {
+          name: { type: 'string' },
+          amount: { type: ['number', 'null'] },
+          unit: { type: ['string', 'null'], enum: ['g', 'un', 'colher_sopa', 'colher_cha', 'ml', 'copo', 'xicara', null] },
+          confidence: { type: 'number' },
+        },
+      },
+    },
+  },
 };
 
 export function Health() {
@@ -94,7 +155,6 @@ export function Health() {
     }
     setMealLoading(true);
     setMealResult(null);
-    const profile = useProfileStore.getState().profile!;
     const description = validIngredients.map((i) => `${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]} de ` : ''}${i.name.trim()}`).join(', ');
     const manualItems = validIngredients.filter((i) => Number(i.calories) > 0);
     const manualCalories = manualItems.reduce((sum, item) => sum + Number(item.calories || 0), 0);
@@ -129,32 +189,72 @@ export function Health() {
       return;
     }
     try {
-      const aiPrompt = `Calcule macros e calorias APENAS dos itens sem kcal manual.
+      const totalsFromKnown: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      const unknownItems: IngredientInput[] = [];
 
-ITENS PARA CALCULAR:
-${ingredientsWithoutCalories.map((i) => `- ${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]}` : 'porção padrão'} de ${i.name.trim()}`).join('\n')}
+      for (const item of ingredientsWithoutCalories) {
+        const food = findFoodInTable(item.name);
+        if (!food) {
+          unknownItems.push(item);
+          continue;
+        }
+        const amount = item.amount ? Number(item.amount) : null;
+        const grams = toGrams(amount, item.unit, food.defaultPortionGrams);
+        const macros = macrosForFood(food, grams);
+        Object.assign(totalsFromKnown, addMacros(totalsFromKnown, macros));
+      }
 
-ITENS JA PREENCHIDOS PELO USUARIO, NAO RECALCULE:
-${manualItems.length ? manualItems.map((i) => `- ${i.name.trim()}: ${Number(i.calories)} kcal`).join('\n') : '- nenhum'}
+      let totalsUnknown: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      const notes: string[] = [];
 
-REGRAS:
-- Some no JSON final as kcal manuais (${manualCalories} kcal) + sua estimativa dos itens sem kcal.
-- Não altere as kcal manuais informadas pelo usuário.
-- Use tabelas nutricionais brasileiras (TACO) como referência.
-- Considere os pesos informados. Se não informou peso, estime porção padrão.
-- Arredonde para inteiros.
+      if (unknownItems.length > 0) {
+        const aiPrompt = `Mapeie alimentos desconhecidos para uma opção nutricional equivalente e gramagem estimada.
 
-Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`;
+Alimentos para mapear:
+${unknownItems.map((i) => `- ${i.name} (${i.amount || 'sem quantidade'} ${i.unit || ''})`).join('\n')}
 
-      const response = await askAI(apiKey!, profile, aiPrompt, true);
-      const parsed = JSON.parse(response);
-      if (parsed.calories > 0) {
-        setMealResult({ ...parsed, name: parsed.name || mealName, description });
+Regras:
+- mappedFood deve ser o nome mais próximo para cálculo nutricional.
+- grams deve refletir porção plausível em gramas.
+- confidence entre 0 e 1.
+- Não calcule macros, apenas mapeie.`;
+
+        const response = await askAI(apiKey!, profile, aiPrompt, {
+          schemaName: 'health_unknown_food_mapping',
+          jsonSchema: UNKNOWN_MAPPING_SCHEMA,
+        });
+        const parsed = JSON.parse(response) as { mappings: UnknownMapping[] };
+
+        for (const mapping of parsed.mappings || []) {
+          const food = findFoodInTable(mapping.mappedFood);
+          if (!food) {
+            notes.push(`${mapping.originalName}: sem correspondência confiável`);
+            continue;
+          }
+          const grams = mapping.grams > 0 ? mapping.grams : food.defaultPortionGrams;
+          const macros = macrosForFood(food, grams);
+          totalsUnknown = addMacros(totalsUnknown, macros);
+          if (mapping.confidence < 0.65) notes.push(`${mapping.originalName}: baixa confiança (${Math.round(mapping.confidence * 100)}%)`);
+        }
+      }
+
+      const totals = addMacros(totalsFromKnown, totalsUnknown);
+      const finalResult = {
+        name: mealName,
+        description: notes.length ? `${description} | Revisar: ${notes.join('; ')}` : description,
+        calories: totals.calories + manualCalories,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fat: totals.fat,
+      };
+
+      if (finalResult.calories > 0) {
+        setMealResult(finalResult);
       } else {
-        useToastStore.getState().show('Não consegui calcular. Detalhe melhor.', 'error');
+        useToastStore.getState().show('Não consegui calcular com segurança. Detalhe melhor os itens.', 'error');
       }
     } catch {
-      useToastStore.getState().show('Erro ao calcular. Verifique sua chave IA.', 'error');
+      useToastStore.getState().show('Erro ao calcular. Verifique os itens e tente novamente.', 'error');
     }
     setMealLoading(false);
   };
@@ -244,28 +344,22 @@ Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas
           messages: [
             {
               role: 'system',
-              content: 'Você é um nutricionista esportivo. Sempre responda em JSON válido.',
+              content: 'Você identifica alimentos em foto. Retorne apenas itens detectados e nível de confiança em JSON válido. Não calcule macros.',
             },
             {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: `Analise esta foto de alimento/bebida com MÁXIMA precisão.
+                  text: `Analise esta foto de alimento/bebida.
 
 INSTRUÇÕES:
 1. Identifique TODOS os itens visíveis (comida, bebida, snack, doce, embalagem)
-2. Se for uma EMBALAGEM ou produto industrializado (chocolate, salgadinho, cerveja, refrigerante etc), use as informações nutricionais conhecidas do produto
-3. Estime a porção baseado no que está visível (1 unidade, 1 lata, 1 prato etc)
-4. Para pratos caseiros, estime baseado no tamanho do prato/recipiente
-5. Considere método de preparo (grelhado, frito, cozido)
+2. Estime porção quando possível (amount + unit).
+3. Forneça confidence (0 a 1) por item.
+4. Não calcule calorias/macros aqui.
 
-Exemplos:
-- Sonho de Valsa (1 bombom): ~125kcal, P:1g, C:14g, G:7g
-- Cerveja Brahma 350ml: ~150kcal, P:1g, C:11g, G:0g
-- Prato com arroz+feijão+carne: ~550kcal, P:35g, C:60g, G:15g
-
-RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}${extraHint}`,
+RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}]}${extraHint}`,
                 },
                 {
                   type: 'image_url',
@@ -275,7 +369,14 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             },
           ],
           max_tokens: 300,
-          response_format: { type: 'json_object' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'camera_detected_items',
+              strict: true,
+              schema: CAMERA_ITEMS_SCHEMA,
+            },
+          },
         }),
       });
 
@@ -291,34 +392,39 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
             body: JSON.stringify({
               model: 'gpt-4o-mini',
               messages: [
-                { role: 'system', content: 'Você é um nutricionista. Responda em JSON válido.' },
+                { role: 'system', content: 'Você identifica alimentos em imagem e retorna itens com confiança em JSON.' },
                 { role: 'user', content: [
-                  { type: 'text', text: `Identifique este alimento/produto e estime calorias e macros da porção visível. JSON: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0}${extraHint}` },
+                  { type: 'text', text: `Identifique itens da imagem e porção estimada. JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.7}]}${extraHint}` },
                   { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' } },
                 ] },
               ],
               max_tokens: 200,
-              response_format: { type: 'json_object' },
+              response_format: {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'camera_detected_items_fallback',
+                  strict: true,
+                  schema: CAMERA_ITEMS_SCHEMA,
+                },
+              },
             }),
           });
           if (!fallback.ok) throw new Error(msg);
           const fallbackData = await fallback.json();
           const content = fallbackData.choices[0].message.content;
-          const parsed = JSON.parse(content);
-          if (parsed.calories > 0) {
-            addEntry({
-              id: `food_${Date.now()}`,
-              name: parsed.name,
-              calories: parsed.calories,
-              protein: parsed.protein || 0,
-              carbs: parsed.carbs || 0,
-              fat: parsed.fat || 0,
-              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            });
-            toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
-          } else {
+          const parsed = JSON.parse(content) as { items?: CameraDetectedItem[] };
+          const items = parsed.items || [];
+          if (items.length === 0) {
             toast('Não identificado. Tente foto mais nítida.', 'error');
+            return;
           }
+          setIngredients(items.slice(0, 6).map((item) => ({
+            name: item.name,
+            amount: item.amount ? String(Math.round(item.amount)) : '',
+            unit: item.unit || 'g',
+          })));
+          setShowAddModal(true);
+          toast('Revise os itens detectados e confirme para calcular os macros.', 'info');
           return;
         }
         throw new Error(msg);
@@ -326,20 +432,18 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
       const data = await response.json();
       const content = data.choices[0].message.content;
-      const parsed = JSON.parse(content);
-      if (parsed.calories > 0) {
-        addEntry({
-          id: `food_${Date.now()}`,
-          name: parsed.name,
-          calories: parsed.calories,
-          protein: parsed.protein || 0,
-          carbs: parsed.carbs || 0,
-          fat: parsed.fat || 0,
-          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        });
-        toast(`${parsed.name} — ${parsed.calories} kcal`, 'success');
-      } else {
+      const parsed = JSON.parse(content) as { items?: CameraDetectedItem[] };
+      const items = parsed.items || [];
+      if (items.length === 0) {
         toast('Não consegui identificar. Tente outra foto.', 'error');
+      } else {
+        setIngredients(items.slice(0, 6).map((item) => ({
+          name: item.name,
+          amount: item.amount ? String(Math.round(item.amount)) : '',
+          unit: item.unit || 'g',
+        })));
+        setShowAddModal(true);
+        toast('Itens detectados. Confirme e calcule para salvar.', 'success');
       }
     } catch (err) {
       if (restartedWithHint || controller.signal.aborted) return;

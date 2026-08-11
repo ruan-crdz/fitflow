@@ -10,7 +10,6 @@ import { BackupRestore } from '@/pages/BackupRestore';
 import { Dashboard } from '@/pages/Dashboard';
 import { Workout } from '@/pages/Workout';
 import { WorkoutComplete } from '@/pages/WorkoutComplete';
-import { History } from '@/pages/History';
 import { Profile } from '@/pages/Profile';
 import { WorkoutPlans } from '@/pages/WorkoutPlans';
 import { AIIntro } from '@/pages/AIIntro';
@@ -69,7 +68,6 @@ export function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/workout" element={<Workout />} />
             <Route path="/workout/complete" element={<WorkoutComplete />} />
-            <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/plans" element={<WorkoutPlans />} />
             <Route path="/plans/reeval" element={<AIReeval />} />

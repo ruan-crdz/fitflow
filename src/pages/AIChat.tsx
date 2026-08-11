@@ -4,7 +4,7 @@ import { useAIStore } from '@/stores/useAIStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
-import { sendMessage, type ChatMessage } from '@/utils/ai';
+import { sendMessageWithActions, type ChatMessage, type ReplaceExerciseAction } from '@/utils/ai';
 import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
@@ -18,33 +18,7 @@ const SUGGESTIONS = [
   'Quanto tempo pra ver resultado?',
 ];
 
-interface ReplaceExerciseAction {
-  type: 'replace_exercise';
-  scope: 'all' | 'workout';
-  workoutType?: WorkoutType;
-  fromName: string;
-  toName: string;
-}
-
 const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
-
-function extractAction(reply: string): { cleanReply: string; action: ReplaceExerciseAction | null } {
-  const match = reply.match(/\[ACTION:([\s\S]*?)\]/);
-  if (!match) return { cleanReply: reply, action: null };
-
-  try {
-    const parsed = JSON.parse(match[1]) as ReplaceExerciseAction;
-    if (parsed.type !== 'replace_exercise' || !parsed.fromName || !parsed.toName) {
-      return { cleanReply: reply.replace(match[0], '').trim(), action: null };
-    }
-    return {
-      cleanReply: reply.replace(match[0], '').trim(),
-      action: parsed.scope === 'workout' ? parsed : { ...parsed, scope: 'all' },
-    };
-  } catch {
-    return { cleanReply: reply.replace(match[0], '').trim(), action: null };
-  }
-}
 
 export function AIChat() {
   const apiKey = useAIStore((s) => s.apiKey);
@@ -75,10 +49,9 @@ export function AIChat() {
     setLoading(true);
 
     try {
-      const reply = await sendMessage(apiKey, newMessages);
-      const { cleanReply, action } = extractAction(reply);
+      const { reply, action } = await sendMessageWithActions(apiKey, newMessages);
       setPendingAction(action);
-      setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
+      setMessages([...newMessages, { role: 'assistant', content: reply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro desconhecido');
     } finally {
@@ -169,10 +142,9 @@ export function AIChat() {
           content: 'Feedback negativo: o usuario nao gostou da ultima resposta. Refaça a resposta anterior com mais precisao, mais alinhada ao perfil, sem inventar dados, usando base cientifica e respeitando a personalidade configurada.',
         },
       ];
-      const reply = await sendMessage(apiKey, retryMessages);
-      const { cleanReply, action } = extractAction(reply);
+      const { reply, action } = await sendMessageWithActions(apiKey, retryMessages);
       setPendingAction(action);
-      setMessages([...messages, { role: 'assistant', content: cleanReply }]);
+      setMessages([...messages, { role: 'assistant', content: reply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro desconhecido');
     } finally {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSessionStore } from '@/stores/useSessionStore';
@@ -16,9 +16,22 @@ import { getRestDuration } from '@/utils/rest';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
-import { askAI } from '@/utils/ai';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
+import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
+
+interface InlineSwapAction {
+  sourceExerciseId: string;
+  replacementExerciseId: string;
+  reason?: string;
+}
+
+interface CatalogOption {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  image: string;
+}
 
 export function Workout() {
   const navigate = useNavigate();
@@ -26,11 +39,12 @@ export function Workout() {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [showQuickSwap, setShowQuickSwap] = useState(false);
   const [aiQuestion, setAIQuestion] = useState('');
   const [aiAnswer, setAIAnswer] = useState('');
   const [aiLoading, setAILoading] = useState(false);
-  const [swapSuggestion, setSwapSuggestion] = useState<{ name: string; muscleGroup: string; image?: string } | null>(null);
-  const { activeSession, completeSet, nextExercise, previousExercise, goToExercise, endSession } =
+  const [swapSuggestion, setSwapSuggestion] = useState<{ option: CatalogOption; reason?: string } | null>(null);
+  const { activeSession, completeSet, previousExercise, goToExercise, endSession, markExerciseSkipped, syncExerciseStates } =
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const assistantName = useAIConfigStore((s) => s.assistantName);
@@ -39,6 +53,7 @@ export function Workout() {
   const goal = useProfileStore((s) => s.profile?.goal || 'maintain');
   const { notes, setNote } = useNotesStore();
   const getExercises = useCustomWorkoutStore((s) => s.getExercises);
+  const swapExercise = useCustomWorkoutStore((s) => s.swapExercise);
 
   const { formatted } = useTimer(activeSession?.startedAt ?? null);
 
@@ -51,7 +66,6 @@ export function Workout() {
   const exercises = getExercises(activeSession.workoutType);
   const currentIndex = Math.min(activeSession.currentExerciseIndex, exercises.length - 1);
   const exercise = exercises[currentIndex];
-  const isLastExercise = currentIndex === exercises.length - 1;
 
   if (!exercise) {
     navigate('/dashboard');
@@ -59,10 +73,17 @@ export function Workout() {
   }
 
   const completedSets = activeSession.setsCompleted[exercise.id] || 0;
+  const exerciseStates = activeSession.exerciseStates || {};
   const isCardio = exercise.muscleGroup === 'Cardio';
   const cardioBlocks = exercise.cardioBlocks || [];
   const totalCardioMinutes = cardioBlocks.reduce((acc, block) => acc + block.minutes, 0);
   const allSetsComplete = completedSets >= exercise.sets;
+  const allExercisesComplete = exercises.every((item) => (activeSession.setsCompleted[item.id] || 0) >= item.sets);
+
+  const exerciseIdsKey = exercises.map((item) => item.id).join('|');
+  useEffect(() => {
+    syncExerciseStates(exercises.map((item) => item.id));
+  }, [syncExerciseStates, exerciseIdsKey]);
 
   const totalSetsInWorkout = exercises.reduce((acc, e) => acc + e.sets, 0);
   const completedTotalSets = Object.entries(activeSession.setsCompleted).reduce(
@@ -85,11 +106,24 @@ export function Workout() {
       : `${exercise.sets} series x ${exercise.repsMin}-${exercise.repsMax} reps`;
 
   const handleNext = () => {
-    if (isLastExercise) {
+    if (allExercisesComplete) {
       navigate('/workout/complete');
-    } else {
-      nextExercise();
+      return;
     }
+
+    const nextIdx = exercises.findIndex((item, index) => {
+      const done = activeSession.setsCompleted[item.id] || 0;
+      if (done >= item.sets) return false;
+      return index > currentIndex;
+    });
+
+    if (nextIdx >= 0) {
+      goToExercise(nextIdx);
+      return;
+    }
+
+    const firstIncomplete = exercises.findIndex((item) => (activeSession.setsCompleted[item.id] || 0) < item.sets);
+    if (firstIncomplete >= 0) goToExercise(firstIncomplete);
   };
 
   const handlePrevious = () => {
@@ -98,6 +132,9 @@ export function Workout() {
   };
 
   const handlePickExercise = (index: number) => {
+    if (index !== currentIndex && !allSetsComplete) {
+      markExerciseSkipped(exercise.id);
+    }
     setResting(false);
     goToExercise(index);
     setShowExercisePicker(false);
@@ -117,26 +154,108 @@ export function Workout() {
     setAILoading(true);
     setAIAnswer('');
     try {
-      const context = `Exercício atual: ${exercise.name} (${exercise.muscleGroup}, ${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}).
-Treino: ${workout.label} — ${workout.focus}.
-Equipamentos disponíveis: academia completa.
+      const normalizeText = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const catalogOptions: CatalogOption[] = EXERCISE_CATALOG.map((item, index) => ({
+        id: `catalog_${index}_${normalizeText(item.name).replace(/[^a-z0-9]+/g, '_')}`,
+        name: item.name,
+        muscleGroup: item.muscleGroup,
+        image: item.image,
+      }));
+      const catalogById = new Map(catalogOptions.map((item) => [item.id, item]));
 
-IMPORTANTE: Se a usuária pedir pra SUBSTITUIR o exercício, responda com uma sugestão E inclua no final da resposta este bloco JSON:
-[SWAP:{"name":"Nome do exercício substituto","muscleGroup":"grupo","image":"URL da imagem"}]
-O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
-      const answer = await askAI(apiKey, profile, `${context}\n\nPergunta da usuária: ${aiQuestion}`);
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Você é um assistente de treino baseado em evidências.
+Se a usuária pedir para trocar/substituir o exercício atual, use a função replace_workout_exercise com IDs válidos da lista fornecida.
+Se faltarem dados de equipamento/disponibilidade/dor para decidir com segurança, faça pergunta curta antes de sugerir troca.
+Não invente IDs e não use exercícios fora da lista.`,
+            },
+            {
+              role: 'user',
+              content: `Exercício atual:
+- id: ${exercise.id}
+- nome: ${exercise.name}
+- grupo: ${exercise.muscleGroup}
+- série/reps: ${exercise.sets}x${exercise.repsMin}-${exercise.repsMax}
 
-      // Check if AI suggested a swap
-      const swapMatch = answer.match(/\[SWAP:(\{[^}]+\})\]/);
-      if (swapMatch) {
-        const cleanAnswer = answer.replace(/\[SWAP:[^\]]+\]/, '').trim();
-        setAIAnswer(cleanAnswer + '\n\nDeseja substituir? Toque "Trocar" abaixo.');
+Treino atual: ${workout.label} — ${workout.focus}
+Objetivo da usuária: ${profile.goal}
+
+Exercícios válidos para substituição (id | nome | grupo):
+${catalogOptions.map((item) => `- ${item.id} | ${item.name} | ${item.muscleGroup}`).join('\n')}
+
+Pergunta da usuária: ${aiQuestion}`,
+            },
+          ],
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'replace_workout_exercise',
+                description: 'Solicita substituição do exercício atual por outro do catálogo.',
+                parameters: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['sourceExerciseId', 'replacementExerciseId'],
+                  properties: {
+                    sourceExerciseId: { type: 'string' },
+                    replacementExerciseId: { type: 'string' },
+                    reason: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'Erro na API');
+      }
+
+      const data = await response.json();
+      const choice = data.choices?.[0];
+      const answer = (choice?.message?.content || '').trim();
+      const toolCalls = choice?.message?.tool_calls as Array<{ function?: { name?: string; arguments?: string } }> | undefined;
+      const swapCall = toolCalls?.find((toolCall) => toolCall.function?.name === 'replace_workout_exercise');
+
+      if (swapCall?.function?.arguments) {
+        let action: InlineSwapAction | null = null;
         try {
-          const swapData = JSON.parse(swapMatch[1]);
-          setSwapSuggestion(swapData);
-        } catch { /* ignore parse error */ }
+          action = JSON.parse(swapCall.function.arguments) as InlineSwapAction;
+        } catch {
+          action = null;
+        }
+
+        if (action?.sourceExerciseId !== exercise.id) {
+          setAIAnswer('Posso trocar, mas preciso que seja para o exercício atual. Tenta pedir novamente com o contexto desta tela.');
+          setSwapSuggestion(null);
+        } else {
+          const replacement = catalogById.get(action.replacementExerciseId);
+          if (!replacement) {
+            setAIAnswer('A sugestão veio com ID inválido. Tenta novamente que eu recalculo a troca.');
+            setSwapSuggestion(null);
+          } else {
+            setSwapSuggestion({ option: replacement, reason: action.reason });
+            setAIAnswer((answer || 'Tenho uma sugestão de troca para você.') + '\n\nDeseja substituir? Toque "Trocar" abaixo.');
+          }
+        }
       } else {
-        setAIAnswer(answer);
+        setSwapSuggestion(null);
+        setAIAnswer(answer || 'Não consegui responder com segurança. Reformule sua pergunta.');
       }
     } catch {
       setAIAnswer('Erro ao consultar IA. Tente novamente.');
@@ -150,16 +269,105 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
     const newId = `swap_${Date.now()}`;
     doSwap(activeSession!.workoutType, exercise.id, {
       id: newId,
-      name: swapSuggestion.name,
+      name: swapSuggestion.option.name,
       sets: exercise.sets,
       repsMin: exercise.repsMin,
       repsMax: exercise.repsMax,
-      muscleGroup: swapSuggestion.muscleGroup || exercise.muscleGroup,
-      image: swapSuggestion.image,
+      muscleGroup: swapSuggestion.option.muscleGroup || exercise.muscleGroup,
+      image: swapSuggestion.option.image,
     });
     setSwapSuggestion(null);
     setAIAnswer('Exercício trocado! Avance para continuar.');
     setShowAIChat(false);
+  };
+
+  const resolveCatalogGroup = (muscleGroup: string) => {
+    const lower = muscleGroup.toLowerCase();
+    if (lower.includes('costas')) return 'Costas';
+    if (lower.includes('peito') || lower.includes('peitoral')) return 'Peitoral';
+    if (lower.includes('bíceps') || lower.includes('biceps')) return 'Bíceps';
+    if (lower.includes('tríceps') || lower.includes('triceps')) return 'Tríceps';
+    if (lower.includes('ombro')) return 'Ombros';
+    if (lower.includes('quadríceps') || lower.includes('quadriceps')) return 'Quadríceps';
+    if (lower.includes('posterior')) return 'Posterior de Coxa';
+    if (lower.includes('glúte') || lower.includes('glute')) return 'Glúteos';
+    if (lower.includes('panturrilha')) return 'Panturrilhas';
+    if (lower.includes('abd')) return 'Abdômen';
+    if (lower.includes('cardio')) return 'Cardio';
+    return muscleGroup;
+  };
+
+  const normalizeText = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+  const getMovementTags = (exerciseName: string, muscleGroup: string) => {
+    const text = `${normalizeText(exerciseName)} ${normalizeText(muscleGroup)}`;
+    const tags = new Set<string>();
+
+    if (text.includes('remada')) tags.add('pull-horizontal');
+    if (text.includes('puxada') || text.includes('pulldown') || text.includes('graviton') || text.includes('barra fixa')) tags.add('pull-vertical');
+    if (text.includes('supino')) tags.add('push-horizontal');
+    if (text.includes('desenvolvimento')) tags.add('push-vertical');
+    if (text.includes('agachamento') || text.includes('leg press') || text.includes('hack')) tags.add('knee-dominant');
+    if (text.includes('stiff') || text.includes('levantamento') || text.includes('deadlift') || text.includes('hip thrust')) tags.add('hip-hinge');
+    if (text.includes('cadeira extensora')) tags.add('knee-isolation');
+    if (text.includes('flexora')) tags.add('hamstring-isolation');
+    if (text.includes('panturrilha')) tags.add('calf');
+    if (text.includes('abd')) tags.add('core');
+    if (text.includes('cardio') || text.includes('esteira') || text.includes('bike') || text.includes('bicicleta') || text.includes('eliptico') || text.includes('remo')) tags.add('cardio');
+
+    if (tags.size === 0) tags.add(`group:${resolveCatalogGroup(muscleGroup)}`);
+    return tags;
+  };
+
+  const replacementScore = (
+    targetName: string,
+    targetGroup: string,
+    optionName: string,
+    optionGroup: string,
+  ) => {
+    const targetTags = getMovementTags(targetName, targetGroup);
+    const optionTags = getMovementTags(optionName, optionGroup);
+    let score = 0;
+
+    if (resolveCatalogGroup(targetGroup) === resolveCatalogGroup(optionGroup)) score += 30;
+
+    targetTags.forEach((tag) => {
+      if (optionTags.has(tag)) score += 40;
+    });
+
+    const targetWords = normalizeText(targetName).split(/\s+/).filter(Boolean);
+    const optionWords = normalizeText(optionName).split(/\s+/).filter(Boolean);
+    const wordOverlap = targetWords.filter((word) => optionWords.includes(word)).length;
+    score += Math.min(wordOverlap * 6, 18);
+
+    return score;
+  };
+
+  const quickSwapOptions = EXERCISE_CATALOG
+    .filter((item) => item.muscleGroup === resolveCatalogGroup(exercise.muscleGroup) && item.name !== exercise.name)
+    .map((item) => ({
+      ...item,
+      score: replacementScore(exercise.name, exercise.muscleGroup, item.name, item.muscleGroup),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  const handleQuickSwap = (name: string, muscleGroup: string, image: string) => {
+    swapExercise(activeSession.workoutType, exercise.id, {
+      id: `swap_${Date.now()}`,
+      name,
+      sets: exercise.sets,
+      repsMin: exercise.repsMin,
+      repsMax: exercise.repsMax,
+      muscleGroup,
+      image,
+    });
+    setShowQuickSwap(false);
+    setResting(false);
   };
 
   return (
@@ -284,7 +492,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
               onClick={handleNext}
               className="btn-success text-xl py-5"
             >
-              {isLastExercise ? 'Finalizar treino' : 'Próximo Exercício →'}
+              {allExercisesComplete ? 'Finalizar treino' : 'Próximo Exercício →'}
             </motion.button>
           )}
 
@@ -303,6 +511,12 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
               Pular →
             </button>
           </div>
+          <button
+            onClick={() => setShowQuickSwap(true)}
+            className="btn-secondary py-2.5 text-xs"
+          >
+            Aparelho ocupado? Trocar exercício equivalente
+          </button>
         </div>
       </motion.div>
 
@@ -339,6 +553,14 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
                 {exercises.map((item, index) => {
                   const done = activeSession.setsCompleted[item.id] || 0;
                   const selectedItem = index === currentIndex;
+                  const state = exerciseStates[item.id] || (selectedItem ? 'in_progress' : 'pending');
+                  const stateLabel = state === 'completed'
+                    ? 'Concluído'
+                    : state === 'in_progress'
+                      ? 'Atual'
+                      : state === 'skipped_temporarily'
+                        ? 'Pulado'
+                        : 'Pendente';
                   return (
                     <button
                       key={item.id}
@@ -359,13 +581,61 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
                           <p className="text-sm font-semibold truncate">{item.name}</p>
                           <p className="text-[10px] text-white/35 truncate">{item.muscleGroup}</p>
                         </div>
-                        <span className="text-[10px] text-white/45 whitespace-nowrap">
-                          {Math.min(done, item.sets)}/{item.sets}
-                        </span>
+                        <div className="text-right">
+                          <span className="block text-[10px] text-white/45 whitespace-nowrap">
+                            {Math.min(done, item.sets)}/{item.sets}
+                          </span>
+                          <span className="block text-[10px] text-primary-300 whitespace-nowrap">{stateLabel}</span>
+                        </div>
                       </div>
                     </button>
                   );
                 })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showQuickSwap && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70"
+            onClick={() => setShowQuickSwap(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+              className="w-full max-w-md max-h-[78vh] overflow-y-auto rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">Trocar exercício</h2>
+                  <p className="text-xs text-white/35">Mesmo grupo muscular, sem quebrar o treino.</p>
+                </div>
+                <button onClick={() => setShowQuickSwap(false)} className="text-white/35 text-xl"><MaterialIcon name="close" /></button>
+              </div>
+
+              <div className="space-y-2">
+                {quickSwapOptions.map((option) => (
+                  <button
+                    key={option.name}
+                    onClick={() => handleQuickSwap(option.name, option.muscleGroup, option.image)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left active:border-primary-400/50"
+                  >
+                    <p className="text-sm font-semibold">{option.name}</p>
+                    <p className="text-[10px] text-white/35">{option.muscleGroup} • similaridade {option.score}</p>
+                  </button>
+                ))}
+                {quickSwapOptions.length === 0 && (
+                  <p className="text-xs text-white/40">Nenhuma opção equivalente disponível no catálogo.</p>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -394,7 +664,7 @@ O exercício substituto DEVE ser da lista de exercícios com foto do app.`;
                   <button
                     onClick={handleSwapAccept}
                     className="mt-2 w-full py-2.5 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-medium"
-                  ><span className="inline-flex items-center gap-1"><MaterialIcon name="check" /> Trocar por {swapSuggestion.name}</span></button>
+                  ><span className="inline-flex items-center gap-1"><MaterialIcon name="check" /> Trocar por {swapSuggestion.option.name}</span></button>
                 )}
               </div>
             )}

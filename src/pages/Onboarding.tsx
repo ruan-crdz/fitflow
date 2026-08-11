@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
-import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus } from '@/types';
+import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus, TrainingLocation } from '@/types';
 
-type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'focus' | 'customSplit' | 'setup';
+type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'personalization' | 'focus' | 'customSplit' | 'setup';
 
 interface OnboardingProps {
   onBack?: () => void;
@@ -24,6 +24,13 @@ export function Onboarding({ onBack }: OnboardingProps) {
   const [goal, setGoal] = useState<Goal>('lose');
   const [experience, setExperience] = useState<ExperienceLevel>('beginner');
   const [days, setDays] = useState<WeekDay[]>([]);
+  const [sessionDurationMin, setSessionDurationMin] = useState('60');
+  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>('academia');
+  const [equipmentText, setEquipmentText] = useState('');
+  const [trainingAgeMonths, setTrainingAgeMonths] = useState('');
+  const [preferredExercisesText, setPreferredExercisesText] = useState('');
+  const [dislikedExercisesText, setDislikedExercisesText] = useState('');
+  const [limitationsText, setLimitationsText] = useState('');
   const [focus, setFocus] = useState<TrainingFocus>('balanced');
   const [customSplit, setCustomSplit] = useState<Record<string, string>>({});
 
@@ -43,15 +50,29 @@ export function Onboarding({ onBack }: OnboardingProps) {
   const ageNumber = Number(age);
   const weightNumber = Number(weight);
   const heightNumber = Number(height);
+  const sessionDurationNumber = Number(sessionDurationMin);
+  const trainingAgeNumber = trainingAgeMonths ? Number(trainingAgeMonths) : undefined;
   const bodyValid = ageNumber >= 10 && ageNumber <= 100
     && weightNumber >= 30 && weightNumber <= 300
     && heightNumber >= 100 && heightNumber <= 250;
+
+  const toList = (text: string) => text
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const saveProfile = () => {
     setProfile({
       name, age: Number(age), weight: Number(weight), height: Number(height),
       goal, trainingDays: days, sex, experienceLevel: experience,
       trainingFocus: focus,
+      sessionDurationMin: Number.isFinite(sessionDurationNumber) && sessionDurationNumber > 0 ? sessionDurationNumber : 60,
+      trainingLocation,
+      equipmentAccess: toList(equipmentText),
+      trainingAgeMonths: Number.isFinite(trainingAgeNumber || NaN) ? trainingAgeNumber : undefined,
+      preferredExercises: toList(preferredExercisesText),
+      dislikedExercises: toList(dislikedExercisesText),
+      limitations: toList(limitationsText),
       ...(focus === 'custom' && Object.keys(customSplit).length > 0 ? { customSplit } : {}),
     });
   };
@@ -359,8 +380,116 @@ export function Onboarding({ onBack }: OnboardingProps) {
               <button
                 className="btn-primary"
                 disabled={days.length < 1}
-                onClick={() => setStep('focus')}
+                onClick={() => setStep('personalization')}
               >
+                Continuar
+              </button>
+            </div>
+          )}
+
+          {/* Personalization */}
+          {step === 'personalization' && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="tune" className="text-primary-300" /> Personalização real </h1>
+                <p className="text-white/50">Esses dados ajudam a IA montar um plano mais preciso.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Tempo disponível por sessão (min)</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="20"
+                    max="180"
+                    value={sessionDurationMin}
+                    onChange={(e) => setSessionDurationMin(onlyInteger(e.target.value).slice(0, 3))}
+                    placeholder="60"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-2 block">Onde você treina?</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 'academia', label: 'Academia' },
+                      { value: 'casa', label: 'Casa' },
+                      { value: 'hibrido', label: 'Híbrido' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setTrainingLocation(option.value as TrainingLocation)}
+                        className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                          trainingLocation === option.value ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Equipamentos disponíveis (separe por vírgula)</label>
+                  <input
+                    type="text"
+                    value={equipmentText}
+                    onChange={(e) => setEquipmentText(e.target.value)}
+                    placeholder="halteres, banco, barra, elástico"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Há quantos meses você treina de forma consistente?</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="600"
+                    value={trainingAgeMonths}
+                    onChange={(e) => setTrainingAgeMonths(onlyInteger(e.target.value).slice(0, 3))}
+                    placeholder="Ex: 8"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Exercícios que você gosta (vírgula)</label>
+                  <input
+                    type="text"
+                    value={preferredExercisesText}
+                    onChange={(e) => setPreferredExercisesText(e.target.value)}
+                    placeholder="supino, remada, agachamento"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Exercícios que você não gosta (vírgula)</label>
+                  <input
+                    type="text"
+                    value={dislikedExercisesText}
+                    onChange={(e) => setDislikedExercisesText(e.target.value)}
+                    placeholder="afundo, burpee"
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-white/40 mb-1 block">Dores, lesões ou limitações (vírgula)</label>
+                  <textarea
+                    value={limitationsText}
+                    onChange={(e) => setLimitationsText(e.target.value)}
+                    placeholder="dor no ombro, lombar sensível"
+                    className="input-field min-h-20 resize-none"
+                  />
+                </div>
+              </div>
+
+              <button className="btn-primary" onClick={() => setStep('focus')}>
                 Continuar
               </button>
             </div>

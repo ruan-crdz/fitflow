@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
+import { useRecoveryStore } from '@/stores/useRecoveryStore';
 import { StarRating } from '@/components/ui/StarRating';
 import { AIPostWorkout } from '@/components/workout/AIPostWorkout';
 import { ShareCard } from '@/components/workout/ShareCard';
@@ -15,8 +16,13 @@ export function WorkoutComplete() {
   const navigate = useNavigate();
   const { activeSession, endSession } = useSessionStore();
   const addSession = useHistoryStore((s) => s.addSession);
+  const saveCheckin = useRecoveryStore((s) => s.saveCheckin);
   const [rating, setRating] = useState(0);
   const [duration] = useState(() => activeSession ? Date.now() - activeSession.startedAt : 0);
+  const [energy, setEnergy] = useState(4);
+  const [soreness, setSoreness] = useState(3);
+  const [stress, setStress] = useState(2);
+  const [sleepHours, setSleepHours] = useState(7);
 
   if (!activeSession) {
     navigate('/dashboard');
@@ -26,16 +32,30 @@ export function WorkoutComplete() {
   const workout = WORKOUT_MAP[activeSession.workoutType];
 
   const handleFinish = () => {
+    const today = getToday();
     addSession({
       id: crypto.randomUUID(),
       kind: 'structured',
       workoutType: activeSession.workoutType,
-      date: getToday(),
+      date: today,
       startedAt: activeSession.startedAt,
       completedAt: Date.now(),
       durationMs: duration,
       rating: rating || undefined,
+      recovery: {
+        energy,
+        soreness,
+        stress,
+        sleepHours,
+      },
       exercisesCompleted: activeSession.setsCompleted,
+    });
+    saveCheckin({
+      date: today,
+      energy,
+      soreness,
+      stress,
+      sleepHours,
     });
     endSession();
     confetti();
@@ -73,6 +93,14 @@ export function WorkoutComplete() {
           <p className="text-white/20 text-xs">(opcional)</p>
         </div>
 
+        <div className="card text-left space-y-3">
+          <h2 className="text-sm font-bold text-white/80">Check-in de recuperação</h2>
+          <MetricSlider label="Energia" value={energy} min={1} max={5} onChange={setEnergy} />
+          <MetricSlider label="Dor muscular" value={soreness} min={0} max={10} onChange={setSoreness} />
+          <MetricSlider label="Estresse" value={stress} min={1} max={5} onChange={setStress} />
+          <MetricSlider label="Sono (horas)" value={sleepHours} min={3} max={10} onChange={setSleepHours} />
+        </div>
+
         <AIPostWorkout
           workoutType={activeSession.workoutType}
           durationMs={duration}
@@ -94,5 +122,36 @@ export function WorkoutComplete() {
         </motion.button>
       </motion.div>
     </div>
+  );
+}
+
+function MetricSlider({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block space-y-1">
+      <div className="flex items-center justify-between text-xs text-white/60">
+        <span>{label}</span>
+        <span className="font-bold text-primary-300">{value}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-yellow-400"
+      />
+    </label>
   );
 }

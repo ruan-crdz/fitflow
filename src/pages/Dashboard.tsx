@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useHistoryStore } from '@/stores/useHistoryStore';
+import { useToastStore } from '@/stores/useToastStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { useWaterStore } from '@/stores/useWaterStore';
 import { MotivationalQuote } from '@/components/ui/MotivationalQuote';
@@ -23,7 +24,9 @@ import { useFoodStore } from '@/stores/useFoodStore';
 import { DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_WIDGETS, useDashboardStore } from '@/stores/useDashboardStore';
 import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import { useNotesStore } from '@/stores/useNotesStore';
+import { useRecoveryStore } from '@/stores/useRecoveryStore';
 import type { WorkoutType } from '@/types';
+import type { ActivityIntensity, ActivityLocation } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 type DashboardHistory = 'consistency' | 'load' | 'calories' | 'water' | 'bmi' | 'weight' | null;
@@ -45,6 +48,7 @@ export function Dashboard() {
   const healthDaily = useHealthIntegrationStore((s) => s.daily);
   const notes = useNotesStore((s) => s.notes);
   const activeSlots = useCustomWorkoutStore((s) => s.activeSlots);
+  const checkins = useRecoveryStore((s) => s.checkins);
   const widgets = useDashboardStore((s) => s.widgets);
   const toggleWidget = useDashboardStore((s) => s.toggleWidget);
   const resetWidgets = useDashboardStore((s) => s.resetWidgets);
@@ -52,6 +56,7 @@ export function Dashboard() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [editingDashboard, setEditingDashboard] = useState(false);
   const [historyView, setHistoryView] = useState<DashboardHistory>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
 
   const today = getToday();
   const todayFoodEntries = foodLogs[today] || [];
@@ -72,6 +77,7 @@ export function Dashboard() {
     syncedAt: 0,
   };
   const totalWorkouts = sessions.filter((s) => s.completedAt).length;
+  const structuredSessions = sessions.filter((s) => s.completedAt && s.workoutType);
   const todayCompleted = sessions.filter((s) => s.date === today && s.completedAt);
   const todayAlreadyDone = todayCompleted.length > 0;
 
@@ -89,6 +95,23 @@ export function Dashboard() {
 
   const todayWorkout = getTodayWorkoutType(profile.trainingDays);
   const isTodayTraining = isTrainingDay(profile.trainingDays);
+  const targetWeeklySessions = Math.max(3, profile.trainingDays.length);
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weeklyCompleted = sessions.filter((session) => session.completedAt && new Date(session.date) >= weekAgo).length;
+  const weeklyProgress = Math.min(weeklyCompleted / targetWeeklySessions, 1);
+  const nextWorkoutType = activeSlots[structuredSessions.length % Math.max(activeSlots.length, 1)] || 'A';
+  const todayCheckin = checkins[today];
+  const readinessScore = todayCheckin
+    ? Math.max(0, Math.min(100, Math.round(((todayCheckin.energy * 20) + ((10 - todayCheckin.soreness) * 6) + ((6 - todayCheckin.stress) * 8) + (todayCheckin.sleepHours * 5)) / 3)))
+    : null;
+  const readinessLabel = readinessScore === null
+    ? 'Sem check-in hoje'
+    : readinessScore >= 70
+      ? 'Alta: pode treinar forte'
+      : readinessScore >= 45
+        ? 'Média: mantenha volume'
+        : 'Baixa: reduza carga e foco em técnica';
 
   const calories = calculateTDEE(profile);
   const macros = calculateMacros(calories, profile.goal);
@@ -224,6 +247,12 @@ export function Dashboard() {
               </motion.button>
             ))}
           </div>
+          <button
+            onClick={() => setShowActivityModal(true)}
+            className="btn-secondary w-full py-3 text-sm"
+          >
+            + Registrar atividade avulsa
+          </button>
         </div>
       )}
 
@@ -239,6 +268,48 @@ export function Dashboard() {
           <p className="text-3xl font-bold text-primary-300">{streak}</p>
           <p className="text-xs text-white/40 mt-1">Semanas seguidas</p>
         </div>
+      </div>}
+
+      {isWidgetVisible('readiness') && <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="monitor_heart" className="text-primary-300" />
+            Prontidão de treino
+          </h2>
+          {readinessScore !== null && <span className="gym-pill">{readinessScore}/100</span>}
+        </div>
+        <p className="text-sm text-white/60">{readinessLabel}</p>
+        <div className="h-2 bg-dark-300 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-primary-500"
+            animate={{ width: `${readinessScore ?? 0}%` }}
+            transition={{ type: 'spring', stiffness: 90 }}
+          />
+        </div>
+        <p className="text-xs text-white/40">Atualizado no pós-treino com energia, dor muscular, estresse e sono.</p>
+      </div>}
+
+      {isWidgetVisible('weeklyGoal') && <div className="card space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-white/80 flex items-center gap-2">
+            <MaterialIcon name="event_repeat" className="text-primary-300" />
+            Meta semanal
+          </h2>
+          <span className="text-xs text-white/40">{weeklyCompleted}/{targetWeeklySessions} treinos</span>
+        </div>
+        <div className="h-2 bg-dark-300 rounded-full overflow-hidden">
+          <motion.div className="h-full bg-primary-500" animate={{ width: `${weeklyProgress * 100}%` }} />
+        </div>
+        <p className="text-xs text-white/45">
+          {weeklyCompleted >= targetWeeklySessions
+            ? 'Meta batida. Mantenha consistência e foque em progressão de carga.'
+            : `Faltam ${targetWeeklySessions - weeklyCompleted} treino(s) para bater a meta desta semana.`}
+        </p>
+        {!activeSession && !todayAlreadyDone && (
+          <button onClick={() => handleStartWorkout(nextWorkoutType)} className="btn-secondary text-sm">
+            Próximo treino recomendado: {nextWorkoutType}
+          </button>
+        )}
       </div>}
 
       {/* Streak Heatmap */}
@@ -428,6 +499,143 @@ export function Dashboard() {
         />
       )}
       {showWeightPrompt && <WeightPrompt onClose={() => setShowWeightPrompt(false)} />}
+      {showActivityModal && <FreeActivityModal onClose={() => setShowActivityModal(false)} />}
+    </div>
+  );
+}
+
+const LOCATION_LABELS: Record<ActivityLocation, string> = {
+  academia: 'Academia',
+  casa: 'Casa',
+  rua: 'Rua',
+  outro: 'Outro',
+};
+
+const INTENSITY_LABELS: Record<ActivityIntensity, string> = {
+  leve: 'Leve',
+  moderada: 'Moderada',
+  forte: 'Forte',
+};
+
+function FreeActivityModal({ onClose }: { onClose: () => void }) {
+  const addFreeSession = useHistoryStore((s) => s.addFreeSession);
+  const toast = useToastStore((s) => s.show);
+  const [activityName, setActivityName] = useState('Caminhada');
+  const [location, setLocation] = useState<ActivityLocation>('rua');
+  const [intensity, setIntensity] = useState<ActivityIntensity>('moderada');
+  const [date, setDate] = useState(getToday());
+  const [duration, setDuration] = useState('40');
+  const [distance, setDistance] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const durationMinutes = Number(duration);
+  const distanceKm = distance ? Number(distance.replace(',', '.')) : undefined;
+  const validDuration = Number.isFinite(durationMinutes) && durationMinutes > 0;
+  const validDistance = distanceKm === undefined || (Number.isFinite(distanceKm) && distanceKm > 0);
+  const canSave = activityName.trim().length > 0 && validDuration && validDistance;
+
+  const save = () => {
+    if (!canSave) return;
+    addFreeSession({
+      activityName,
+      activityLocation: location,
+      activityIntensity: intensity,
+      date,
+      durationMinutes,
+      distanceKm,
+      notes,
+    });
+    toast('Atividade registrada no histórico de consistência!', 'success');
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/70 flex items-end px-4 pb-4" onClick={onClose}>
+      <div className="w-full max-w-md mx-auto rounded-3xl border border-white/10 bg-[rgb(var(--color-bg-card-rgb))] p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Registrar atividade</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5 text-white/40">X</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1 col-span-2">
+            <span className="text-xs text-white/45">Tipo</span>
+            <input
+              value={activityName}
+              onChange={(e) => setActivityName(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+              placeholder="Ex: Caminhada"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-white/45">Data</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-white/45">Duração (min)</span>
+            <input
+              value={duration}
+              onChange={(e) => setDuration(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+              placeholder="40"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-white/45">Distância (km, opcional)</span>
+            <input
+              value={distance}
+              onChange={(e) => setDistance(e.target.value.replace(/[^\d.,]/g, ''))}
+              inputMode="decimal"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+              placeholder="5,2"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-white/45">Local</span>
+            <select
+              value={location}
+              onChange={(e) => setLocation(e.target.value as ActivityLocation)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+            >
+              {Object.entries(LOCATION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-white/45">Intensidade</span>
+            <select
+              value={intensity}
+              onChange={(e) => setIntensity(e.target.value as ActivityIntensity)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
+            >
+              {Object.entries(INTENSITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 col-span-2">
+            <span className="text-xs text-white/45">Observações (opcional)</span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none resize-none focus:border-primary-400"
+              placeholder="Ex: caminhada leve após almoço"
+            />
+          </label>
+        </div>
+
+        <button
+          onClick={save}
+          disabled={!canSave}
+          className="w-full py-3 rounded-xl bg-primary-500 text-black font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Salvar atividade
+        </button>
+      </div>
     </div>
   );
 }

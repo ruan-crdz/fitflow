@@ -119,6 +119,8 @@ interface ChatPreference {
   last_read_at?: string | null;
 }
 
+type SocialEntryState = 'loading' | 'unauthenticated' | 'profile_incomplete' | 'ready' | 'error';
+
 const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
   { key: 'show_consistency', label: 'Consistência' },
   { key: 'show_load_progression', label: 'Progressão de carga' },
@@ -128,6 +130,16 @@ const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
   { key: 'show_weight_progress', label: 'Evolução de peso' },
   { key: 'show_today_workout', label: 'Treino de hoje' },
 ];
+
+const visibilityFieldHelp: Partial<Record<keyof SocialProfile, string>> = {
+  show_consistency: 'Total de treinos concluídos exibido no perfil.',
+  show_load_progression: 'Mostra seu status de progressão de carga.',
+  show_daily_calories: 'Exibe calorias consumidas no dia.',
+  show_water: 'Exibe sua hidratação diária.',
+  show_bmi: 'Exibe valor de IMC atual.',
+  show_weight_progress: 'Exibe evolução de peso no período.',
+  show_today_workout: 'Exibe qual treino está planejado hoje.',
+};
 
 function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
@@ -202,8 +214,9 @@ export function Social() {
   const { previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
 
   const [session, setSession] = useState<Session | null>(null);
-  const [authReady, setAuthReady] = useState(false);
   const [socialReady, setSocialReady] = useState(false);
+  const [entryState, setEntryState] = useState<SocialEntryState>('loading');
+  const [entryError, setEntryError] = useState('');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -272,6 +285,8 @@ export function Social() {
   const messageLongPressRef = useRef<number | null>(null);
   const feedRefreshTimeoutRef = useRef<number | null>(null);
   const messageRefreshTimeoutRef = useRef<number | null>(null);
+  const postGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const postCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -418,6 +433,15 @@ export function Social() {
 
     return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
   }, [commentLikes, comments, currentUserId, incoming, likes, posts, profile]);
+
+  const getFriendActionLabel = (target: SocialProfile, relation: Friendship | null | undefined) => {
+    const isIncomingRequest = relation?.status === 'pending' && relation.addressee_id === currentUserId;
+    const isOutgoingRequest = relation?.status === 'pending' && relation.requester_id === currentUserId;
+    if (relation?.status === 'accepted') return 'Amigo';
+    if (isIncomingRequest) return 'Aceitar';
+    if (isOutgoingRequest) return 'Solicitado';
+    return target.is_private ? 'Solicitar' : 'Adicionar';
+  };
   const unreadNotifications = useMemo(() => {
     if (!notificationSeenAt) return notifications;
     const seenTime = new Date(notificationSeenAt).getTime();
@@ -543,16 +567,22 @@ export function Social() {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setAuthReady(true);
-      if (!data.session) setSocialReady(false);
+      if (!data.session) {
+        setSocialReady(false);
+        setEntryState('unauthenticated');
+      } else {
+        setEntryState('loading');
+      }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_, next) => {
       setSession(next);
-      setAuthReady(true);
       if (!next) {
         setSocialReady(false);
+        setEntryState('unauthenticated');
         setProfile(null);
         setProfiles({});
+      } else {
+        setEntryState('loading');
       }
     });
     return () => sub.subscription.unsubscribe();
@@ -563,9 +593,20 @@ export function Social() {
     const client = supabase;
     let cancelled = false;
     setSocialReady(false);
-    void refreshAll().finally(() => {
-      if (!cancelled) setSocialReady(true);
-    });
+    setEntryState('loading');
+    setEntryError('');
+    void refreshAll()
+      .then((hasProfile) => {
+        if (cancelled) return;
+        setSocialReady(true);
+        setEntryState(hasProfile ? 'ready' : 'profile_incomplete');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'Falha ao carregar Social';
+        setEntryError(ptSupabaseError(message));
+        setEntryState('error');
+      });
     const channel = client
       .channel(`social-${session.user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, queueFeedRefresh)
@@ -689,8 +730,13 @@ export function Social() {
 
   async function refreshAll() {
     setLoading(true);
-    await Promise.all([refreshProfile(), refreshFriends(), refreshFeed(), refreshShares(), refreshMessages(), refreshChatPreferences(), refreshRanking(), syncMyStats()]);
-    setLoading(false);
+    try {
+      const hasProfile = await refreshProfile();
+      await Promise.all([refreshFriends(), refreshFeed(), refreshShares(), refreshMessages(), refreshChatPreferences(), refreshRanking(), syncMyStats()]);
+      return hasProfile;
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadProfiles(ids: string[]) {
@@ -729,12 +775,13 @@ export function Social() {
   async function refreshProfile() {
     if (!supabase || !session) return;
     const { data } = await supabase.from('social_profiles').select('*').eq('id', session.user.id).maybeSingle();
-    if (!data) return;
+    if (!data) return false;
     const nextProfile = data as SocialProfile;
     setProfile(nextProfile);
     setProfiles((prev) => ({ ...prev, [nextProfile.id]: nextProfile }));
     setDisplayName(nextProfile.display_name || '');
     setUsername(nextProfile.username || '');
+    return true;
   }
 
   async function refreshFriends() {
@@ -883,6 +930,23 @@ export function Social() {
       setAvatarFile(null);
       setProfileEditMode(false);
       await Promise.all([refreshProfile(), syncMyStats()]);
+      setEntryState('ready');
+    }
+  }
+
+  async function retrySocialBootstrap() {
+    if (!session || !supabase) return;
+    setEntryState('loading');
+    setEntryError('');
+    setSocialReady(false);
+    try {
+      const hasProfile = await refreshAll();
+      setSocialReady(true);
+      setEntryState(hasProfile ? 'ready' : 'profile_incomplete');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao carregar Social';
+      setEntryError(ptSupabaseError(message));
+      setEntryState('error');
     }
   }
 
@@ -908,6 +972,23 @@ export function Social() {
       rows.push({ post_id: postId, image_url: data.publicUrl, position: index });
     }
     if (rows.length) await supabase.from('social_post_images').insert(rows);
+  }
+
+  function appendPostFiles(files: File[]) {
+    if (!files.length) return;
+    setPostFiles((prev) => {
+      const next = [...prev];
+      files.forEach((file) => {
+        if (next.length >= 6) return;
+        const exists = next.some((current) => (
+          current.name === file.name
+          && current.size === file.size
+          && current.lastModified === file.lastModified
+        ));
+        if (!exists) next.push(file);
+      });
+      return next;
+    });
   }
 
   async function createPost() {
@@ -1495,11 +1576,24 @@ export function Social() {
     );
   }
 
-  if (!authReady || (session && !socialReady)) {
+  if (entryState === 'loading' || (session && !socialReady)) {
     return <SocialLoading />;
   }
 
-  if (!session) {
+  if (entryState === 'error') {
+    return (
+      <div className="gym-page">
+        <h1 className="text-[26px] font-bold">Social</h1>
+        <div className="card space-y-3">
+          <h2 className="font-semibold">Não consegui carregar o Social</h2>
+          <p className="text-sm text-white/45">{entryError || 'Tente novamente em instantes.'}</p>
+          <button onClick={() => void retrySocialBootstrap()} className="btn-primary text-sm py-3">Tentar de novo</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (entryState === 'unauthenticated' || !session) {
     return (
       <div className="gym-page">
         <h1 className="text-[26px] font-bold">Social</h1>
@@ -1542,7 +1636,7 @@ export function Social() {
     );
   }
 
-  if (!profile) {
+  if (entryState === 'profile_incomplete' || !profile) {
     return (
       <>
         <div className="gym-page">
@@ -1862,7 +1956,6 @@ export function Social() {
 
   if (selectedProfile && viewProfileId) {
     const isMine = selectedProfile.id === currentUserId;
-    const viewedIncomingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.addressee_id === currentUserId;
     const viewedOutgoingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.requester_id === currentUserId;
     const canMessageViewedProfile = !isMine && (myFriendshipWithViewed?.status === 'accepted' || (profile?.is_private === false && selectedProfile.is_private === false));
     const canViewSelectedProfileContent = isMine || !selectedProfile.is_private || myFriendshipWithViewed?.status === 'accepted';
@@ -1902,7 +1995,7 @@ export function Social() {
                 disabled={myFriendshipWithViewed?.status === 'accepted' || viewedOutgoingRequest}
                 className="px-5 py-3 rounded-2xl bg-primary-500 text-white text-sm font-bold disabled:opacity-40"
               >
-                {myFriendshipWithViewed?.status === 'accepted' ? 'Amigo' : viewedIncomingRequest ? 'Aceitar' : viewedOutgoingRequest ? 'Solicitado' : selectedProfile.is_private ? 'Solicitar amizade' : 'Adicionar amigo'}
+                {getFriendActionLabel(selectedProfile, myFriendshipWithViewed)}
               </button>
               {canMessageViewedProfile && (
                 <button onClick={() => openChat(selectedProfile.id)} className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold">
@@ -1965,25 +2058,33 @@ export function Social() {
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome" />
             <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} className="input-field text-sm" placeholder="username" />
             <textarea value={profile.bio || ''} onChange={(e) => setProfile((p) => (p ? { ...p, bio: e.target.value } : p))} className="input-field text-sm min-h-20 resize-none" placeholder="Bio" />
-            <button
-              onClick={() => setProfile((p) => (p ? { ...p, is_private: !p.is_private } : p))}
-              className={`w-full rounded-2xl border p-3 text-sm font-bold ${profile.is_private ? 'bg-primary-500/10 border-primary-500/30 text-primary-200' : 'bg-white/5 border-white/10 text-white/65'}`}
-            >
-              {profile.is_private ? 'Perfil privado' : 'Perfil público'}
-            </button>
             <div className="rounded-2xl bg-white/5 border border-white/10 p-3 space-y-3">
-              <p className="text-xs font-black uppercase tracking-wide text-white/40">Exibir no perfil</p>
-            <div className="grid grid-cols-2 gap-2">
-              {visibilityFields.map((field) => (
-                <button
-                  key={field.key}
-                  onClick={() => savePrivacy({ [field.key]: !profile[field.key] } as Partial<SocialProfile>)}
-                  className={`rounded-xl border p-2 text-left text-xs ${profile[field.key] ? 'bg-primary-500/10 border-primary-500/30 text-primary-200' : 'bg-white/5 border-white/10 text-white/45'}`}
-                >
-                  {field.label}
-                </button>
-              ))}
+              <p className="text-xs font-black uppercase tracking-wide text-white/40">Privacidade da conta</p>
+              <button
+                onClick={() => void savePrivacy({ is_private: !profile.is_private })}
+                className={`w-full rounded-2xl border p-3 text-sm font-bold ${profile.is_private ? 'bg-primary-500/10 border-primary-500/30 text-primary-200' : 'bg-white/5 border-white/10 text-white/65'}`}
+              >
+                {profile.is_private ? 'Conta privada (aprovação necessária)' : 'Conta pública (amizade direta)'}
+              </button>
+              <p className="text-xs text-white/40">
+                Conta pública permite adicionar direto. Conta privada envia solicitação pendente para você aceitar/recusar.
+              </p>
             </div>
+
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-3 space-y-3">
+              <p className="text-xs font-black uppercase tracking-wide text-white/40">Métricas compartilhadas (granular)</p>
+              <div className="space-y-2">
+                {visibilityFields.map((field) => (
+                  <button
+                    key={field.key}
+                    onClick={() => void savePrivacy({ [field.key]: !profile[field.key] } as Partial<SocialProfile>)}
+                    className={`w-full rounded-xl border p-3 text-left ${profile[field.key] ? 'bg-primary-500/10 border-primary-500/30 text-primary-200' : 'bg-white/5 border-white/10 text-white/45'}`}
+                  >
+                    <p className="text-xs font-bold">{field.label}</p>
+                    <p className="text-[11px] mt-1 opacity-80">{visibilityFieldHelp[field.key] || 'Controle individual de visibilidade.'}</p>
+                  </button>
+                ))}
+              </div>
             </div>
             <button onClick={saveProfile} className="btn-primary text-sm py-3">Salvar perfil</button>
           </div>
@@ -2051,9 +2152,45 @@ export function Social() {
             <h1 className="gym-title mt-1">Social</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowPostModal(true)} className="w-10 h-10 rounded-full bg-white/5 text-white/70 flex items-center justify-center" aria-label="Criar publicação">
-              <MaterialIcon name="add_box" variant="outlined" />
+            <button
+              onClick={() => setViewProfileId(currentUserId)}
+              className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-2.5 py-1.5"
+              aria-label="Meu perfil"
+            >
+              <Avatar profile={profile} size="sm" />
+              <span className="text-[11px] font-bold text-white/70 max-w-[88px] truncate">{profile.display_name}</span>
             </button>
+            <button
+              onClick={() => setShowSignOutConfirm(true)}
+              className="h-10 px-3 rounded-full bg-white/5 border border-white/10 text-white/55 text-xs font-bold"
+              aria-label="Sair"
+            >
+              Sair
+            </button>
+          </div>
+        </div>
+
+        {!focusedPostId && socialMode === 'feed' && (
+          <div className="space-y-3">
+            <div className="relative">
+              <MaterialIcon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35 text-lg" />
+              <input
+                value={searchUsername}
+                onChange={(e) => setSearchUsername(e.target.value)}
+                className="input-field text-sm rounded-full pl-11"
+                placeholder="Pesquisar pessoas..."
+              />
+            </div>
+            <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+              <button onClick={() => setFeedMode('general')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
+              <button onClick={() => setFeedMode('friends')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-black tracking-tight">FEED</h2>
+          <div className="flex items-center gap-2">
             <button onClick={openNotifications} className="relative w-10 h-10 rounded-full bg-white/5 text-white/60 flex items-center justify-center" aria-label="Notificações">
               <MaterialIcon name="notifications" />
               {unreadNotifications.length > 0 && (
@@ -2070,13 +2207,6 @@ export function Social() {
             </button>
           </div>
         </div>
-        <button onClick={() => setViewProfileId(currentUserId)} className="flex w-full items-center gap-3 text-left rounded-3xl bg-white/5 border border-white/10 p-3 active:bg-white/10">
-          <Avatar profile={profile} size="sm" />
-          <div className="min-w-0">
-            <p className="text-base font-black truncate">{profile.display_name}</p>
-            <p className="text-xs text-white/35 truncate">@{profile.username}</p>
-          </div>
-        </button>
       </div>
 
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
@@ -2136,14 +2266,6 @@ export function Social() {
       ) : (
         <>
       <div className="space-y-2">
-        <div>
-          <input
-            value={searchUsername}
-            onChange={(e) => setSearchUsername(e.target.value)}
-            className="input-field text-sm rounded-full"
-            placeholder="Buscar pessoas"
-          />
-        </div>
         {searchLoading && (
           <div className="rounded-3xl bg-white/5 border border-white/10 p-3 text-sm text-white/45">
             Buscando perfis...
@@ -2158,7 +2280,6 @@ export function Social() {
           <div className="rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 overflow-hidden">
             {searchResults.map((result) => {
               const relation = friendships.find((f) => !f.deleted_at && [f.requester_id, f.addressee_id].includes(currentUserId) && [f.requester_id, f.addressee_id].includes(result.id));
-              const isIncomingRequest = relation?.status === 'pending' && relation.addressee_id === currentUserId;
               const isOutgoingRequest = relation?.status === 'pending' && relation.requester_id === currentUserId;
               return (
                 <div key={result.id} className="flex items-center justify-between gap-3 p-3 border-b border-white/5 last:border-b-0">
@@ -2174,7 +2295,7 @@ export function Social() {
                     disabled={relation?.status === 'accepted' || isOutgoingRequest}
                     className="px-3 py-2 rounded-full bg-primary-500 text-white text-xs font-bold disabled:opacity-40"
                   >
-                    {relation?.status === 'accepted' ? 'Amigo' : isIncomingRequest ? 'Aceitar' : isOutgoingRequest ? 'Solicitado' : result.is_private ? 'Solicitar' : 'Adicionar'}
+                    {getFriendActionLabel(result, relation)}
                   </button>
                 </div>
               );
@@ -2195,8 +2316,8 @@ export function Social() {
                   <span className="text-sm font-semibold">{requester?.display_name || 'Usuário'}</span>
                 </button>
                 <div className="flex gap-2">
-                  <button onClick={() => updateFriendship(item.id, 'blocked')} className="w-9 h-9 rounded-full bg-red-500/15 text-red-300 text-xs font-bold">X</button>
-                  <button onClick={() => updateFriendship(item.id, 'accepted')} className="w-9 h-9 rounded-full bg-green-500/15 text-green-300 text-xs font-bold">OK</button>
+                  <button onClick={() => updateFriendship(item.id, 'blocked')} className="px-3 py-2 rounded-full bg-red-500/15 text-red-300 text-xs font-bold">Recusar</button>
+                  <button onClick={() => updateFriendship(item.id, 'accepted')} className="px-3 py-2 rounded-full bg-green-500/15 text-green-300 text-xs font-bold">Aceitar</button>
                 </div>
               </div>
             );
@@ -2204,10 +2325,6 @@ export function Social() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
-        <button onClick={() => setFeedMode('general')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
-        <button onClick={() => setFeedMode('friends')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
-      </div>
         </>
       )}
 
@@ -2586,15 +2703,55 @@ export function Social() {
               </div>
             )}
             {!editingPostId && (
-              <label className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary-500/40 bg-primary-500/10 px-4 py-5 text-sm font-bold text-primary-200">
-                Escolher fotos
-                <input type="file" accept="image/*" multiple onChange={(e) => setPostFiles(Array.from(e.target.files || []).slice(0, 6))} className="hidden" />
-              </label>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
+                <p className="text-xs font-bold text-white/45 uppercase">Adicionar fotos</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => postGalleryInputRef.current?.click()}
+                    className="h-11 rounded-xl border border-primary-500/30 bg-primary-500/10 text-primary-200 text-sm font-bold"
+                  >
+                    Galeria
+                  </button>
+                  <button
+                    onClick={() => postCameraInputRef.current?.click()}
+                    className="h-11 rounded-xl border border-white/15 bg-white/5 text-white/75 text-sm font-bold"
+                  >
+                    Câmera
+                  </button>
+                </div>
+                <input
+                  ref={postGalleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => appendPostFiles(Array.from(e.target.files || []))}
+                  className="hidden"
+                />
+                <input
+                  ref={postCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => appendPostFiles(Array.from(e.target.files || []))}
+                  className="hidden"
+                />
+              </div>
             )}
             {postFiles.length > 0 && <p className="text-xs text-white/45">{postFiles.length} foto(s) selecionada(s)</p>}
             <button onClick={createPost} disabled={loading || (!postBody.trim() && postFiles.length === 0)} className="btn-primary text-sm py-3 disabled:opacity-40">{editingPostId ? 'Salvar alterações' : 'Publicar'}</button>
           </div>
         </div>
+      )}
+
+      {socialMode === 'feed' && !viewProfileId && (
+        <button
+          onClick={() => setShowPostModal(true)}
+          className="fixed left-1/2 -translate-x-1/2 bottom-[calc(86px+env(safe-area-inset-bottom))] z-[65] h-14 min-w-14 px-5 rounded-full bg-primary-500 text-white shadow-[0_18px_38px_rgba(var(--color-primary-rgb),0.35)] flex items-center justify-center gap-2"
+          aria-label="Nova publicação"
+        >
+          <MaterialIcon name="add" className="text-2xl" />
+          <span className="text-sm font-black">Nova publicação</span>
+        </button>
       )}
       {socialConfirmModals}
     </div>

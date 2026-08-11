@@ -16,6 +16,8 @@ export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 
 export type TrainingFocus = 'upper' | 'lower' | 'balanced' | 'custom';
 
+export type TrainingLocation = 'academia' | 'casa' | 'hibrido';
+
 export interface CustomSplit {
   [key: string]: string; // e.g. "A": "Peito e Tríceps", "B": "Costas e Bíceps"
 }
@@ -31,6 +33,13 @@ export interface Profile {
   experienceLevel?: ExperienceLevel;
   trainingFocus?: TrainingFocus;
   customSplit?: CustomSplit;
+  sessionDurationMin?: number;
+  trainingLocation?: TrainingLocation;
+  equipmentAccess?: string[];
+  trainingAgeMonths?: number;
+  preferredExercises?: string[];
+  dislikedExercises?: string[];
+  limitations?: string[];
 }
 
 export interface Exercise {
@@ -61,12 +70,19 @@ export interface WorkoutSession {
   activityName?: string;
   activityLocation?: ActivityLocation;
   activityIntensity?: ActivityIntensity;
+  activityDistanceKm?: number;
   notes?: string;
   date: string;
   startedAt: number;
   completedAt?: number;
   durationMs?: number;
   rating?: number;
+  recovery?: {
+    energy: number;
+    soreness: number;
+    stress: number;
+    sleepHours: number;
+  };
   exercisesCompleted: Record<string, number>;
 }
 
@@ -75,4 +91,5 @@ export interface ActiveSession {
   startedAt: number;
   currentExerciseIndex: number;
   setsCompleted: Record<string, number>;
+  exerciseStates: Record<string, 'pending' | 'in_progress' | 'completed' | 'skipped_temporarily'>;
 }

@@ -8,6 +8,7 @@ import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { askAI } from '@/utils/ai';
 import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { buildEvidenceContext, getEvidenceForQuery } from '@/utils/evidence';
 
 type Phase = 'token' | 'generating' | 'summary';
 
@@ -18,6 +19,74 @@ interface GeneratedWorkout {
   estimatedCalories?: number;
   exercises: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[];
 }
+
+const AI_SETUP_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['evaluation', 'chosenSplit', 'explanation', 'rotation', 'workouts'],
+  properties: {
+    evaluation: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['option', 'tier', 'reason'],
+        properties: {
+          option: { type: 'string' },
+          tier: { type: 'string', enum: ['recommended', 'suitable', 'acceptable', 'not_recommended'] },
+          reason: { type: 'string' },
+        },
+      },
+    },
+    chosenSplit: { type: 'string' },
+    explanation: { type: 'string' },
+    rotation: { type: 'string' },
+    workouts: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'focus', 'exercises'],
+        properties: {
+          type: { type: 'string' },
+          focus: { type: 'string' },
+          cardio: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type', 'durationMin', 'intensity'],
+            properties: {
+              type: { type: 'string' },
+              durationMin: { type: 'number' },
+              intensity: { type: 'string' },
+            },
+          },
+          exercises: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
+              properties: {
+                name: { type: 'string' },
+                sets: { type: 'number' },
+                repsMin: { type: 'number' },
+                repsMax: { type: 'number' },
+                muscleGroup: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    evidenceIds: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+};
 
 export function AISetup() {
   const navigate = useNavigate();
@@ -31,7 +100,6 @@ export function AISetup() {
   const [workouts, setWorkouts] = useState<GeneratedWorkout[]>([]);
 
   const trainingDays = profile.trainingDays.length || 3;
-  const sexLabel = profile.sex === 'male' ? 'homem' : 'mulher';
   const goalLabel = profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa muscular' : 'manter peso';
   const levelLabel = profile.experienceLevel === 'advanced' ? 'avançado' : profile.experienceLevel === 'intermediate' ? 'intermediário' : 'iniciante';
 
@@ -75,7 +143,7 @@ export function AISetup() {
       await delay(800);
       addMessage(`Vi que você treina ${trainingDays}x por semana e é ${levelLabel}. Deixa eu avaliar a melhor estratégia de divisão pra você...`);
       await delay(1200);
-      addMessage(`Seu objetivo é ${goalLabel}, e como ${sexLabel}, vou adaptar volume e seleção de exercícios pra sua fisiologia.`);
+      addMessage(`Seu objetivo é ${goalLabel}. Vou adaptar volume e seleção de exercícios ao seu contexto real de treino.`);
       await delay(1000);
       addMessage(`Avaliando opções de split (Full Body, Upper/Lower, ABC, ABCD, ABCDE)... `);
     }
@@ -92,6 +160,17 @@ export function AISetup() {
       : profile.trainingFocus === 'lower' ? 'foco em inferiores (mais volume de glúteos/quadríceps/posterior)'
       : profile.trainingFocus === 'custom' ? 'personalizado (ver divisão abaixo)'
       : 'equilibrado (volume igual para todos os grupos)';
+    const locationLabel = profile.trainingLocation === 'casa'
+      ? 'casa'
+      : profile.trainingLocation === 'hibrido'
+        ? 'híbrido (casa + academia)'
+        : 'academia';
+    const sessionDuration = profile.sessionDurationMin || 60;
+    const trainingAgeMonths = profile.trainingAgeMonths ?? 0;
+    const equipmentText = (profile.equipmentAccess || []).join(', ') || 'não informado';
+    const preferredText = (profile.preferredExercises || []).join(', ') || 'não informado';
+    const dislikedText = (profile.dislikedExercises || []).join(', ') || 'não informado';
+    const limitationsText = (profile.limitations || []).join(', ') || 'não informado';
 
     const customSplitInfo = profile.trainingFocus === 'custom' && profile.customSplit
       ? '\nDIVISÃO PERSONALIZADA PELO USUÁRIO:\n' + Object.entries(profile.customSplit).map(([k, v]) => `- Treino ${k}: ${v}`).join('\n')
@@ -100,12 +179,19 @@ export function AISetup() {
     const prompt = `Você é um preparador físico esportivo com pós-graduação em fisiologia do exercício.
 
 PERFIL DO ALUNO:
-- Sexo biológico: ${sexLabel}
+- Sexo biológico informado: ${profile.sex === 'male' ? 'masculino' : 'feminino'}
 - Idade: ${profile.age} anos
 - Peso: ${profile.weight}kg, Altura: ${profile.height}cm
 - Objetivo: ${goalLabel}
 - Dias disponíveis: ${trainingDays}x por semana
 - Nível: ${levelLabel}
+- Tempo disponível por sessão: ${sessionDuration} min
+- Local de treino: ${locationLabel}
+- Training age: ${trainingAgeMonths} meses
+- Equipamentos disponíveis: ${equipmentText}
+- Exercícios preferidos: ${preferredText}
+- Exercícios evitados: ${dislikedText}
+- Limitações/dor: ${limitationsText}
 - Preferência: ${focusLabel}
 ${customSplitInfo}
 
@@ -117,7 +203,7 @@ ${profile.sex === 'female' ? `- Mulher: considerar proporção de fibras tipo I 
 ${profile.sex === 'male' ? `- Homem: distribuição natural de massa favorece tronco superior. Equilibrar com volume adequado de membros inferiores. Se >40 anos, incluir mobilidade de ombro e cuidado com articulações.` : ''}
 
 SUA TAREFA — AVALIAÇÃO DE SPLIT:
-Antes de montar o treino, avalie TODAS estas opções de divisão e dê um score de 0-10 para cada uma considerando o perfil acima:
+Antes de montar o treino, avalie TODAS estas opções de divisão e classifique cada uma em: recommended, suitable, acceptable ou not_recommended considerando o perfil acima:
 
 1. Full Body (2-3 treinos distintos, rotaciona nos ${trainingDays} dias)
 2. Upper/Lower (2 treinos + possível Full Body no 5º dia)
@@ -125,7 +211,7 @@ Antes de montar o treino, avalie TODAS estas opções de divisão e dê um score
 4. ABCD (4 treinos, sobram dias para repetir se >4 dias)
 5. ABCDE (5 treinos distintos)
 
-CRITÉRIOS DE SCORING:
+CRITÉRIOS DE AVALIAÇÃO:
 - Recuperação adequada entre sessões do mesmo grupo muscular (48-72h)
 - Volume total semanal adequado ao nível (iniciante: 10-12 séries/grupo/semana; intermediário: 12-16; avançado: 16-20)
 - Frequência de estímulo por grupo muscular (2x/semana é ótimo para hipertrofia)
@@ -137,18 +223,13 @@ IMPORTANTE: O número de treinos distintos NÃO precisa ser igual ao número de 
 
 REGRAS DE MONTAGEM:
 1. Após escolher o split vencedor, monte os treinos
-2. Cada treino: 5-8 exercícios de musculação (menos para iniciante, mais para avançado)
+2. Use o menor número de exercícios necessário para cumprir volume semanal alvo, objetivo, tempo disponível por sessão e recuperação.
 3. Respeite a preferência do aluno: ${focusLabel}
-${profile.trainingFocus === 'custom' ? '4. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : `4. ${profile.sex === 'male' ? 'Para homem: priorize compostos pesados, volume adequado de peito/costas/ombros' : 'Para mulher: priorize glúteos/posterior, volume adequado de superior'}`}
+${profile.trainingFocus === 'custom' ? '4. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : '4. Priorize músculos e padrões de movimento com base em objetivo declarado, preferências, histórico, limitações e aderência. Nunca inferir preferência muscular por sexo biológico.'}
 5. Cada exercício DEVE vir da lista abaixo (nome exato)
 6. Explique a rotação semanal
-7. Cada treino DEVE incluir cardio ao final. Defina tipo (esteira/bike/elíptico) e duração (em minutos) baseado no perfil:
-   - Objetivo emagrecer: 20-30min cardio moderado
-   - Objetivo manter: 15-20min cardio leve
-   - Objetivo ganhar massa: 10-15min cardio leve (apenas aquecimento/saúde cardiovascular)
-   - >40 anos: preferir bike ou elíptico (menos impacto articular)
-   - <30 anos: qualquer modalidade
-8. Estime calorias queimadas por treino (musculação + cardio) baseado no peso do aluno (${profile.weight}kg)
+7. Cardio é opcional e deve ser distribuído pela semana conforme objetivo, recuperação, preferência, disponibilidade e possível interferência com musculação.
+8. Não retorne calorias exatas de treino como fato; se citar gasto, trate como estimativa ampla e com baixa precisão.
 
 Exercícios disponíveis (use nomes EXATOS):
 ${catalogCompact}
@@ -157,11 +238,11 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`):
 ${SCIENCE_GUARDRAILS}
 {
   "evaluation": [
-    {"option": "Full Body", "score": 8, "reason": "razão curta"},
-    {"option": "Upper/Lower", "score": 6, "reason": "razão curta"},
-    {"option": "ABC", "score": 9, "reason": "razão curta"},
-    {"option": "ABCD", "score": 5, "reason": "razão curta"},
-    {"option": "ABCDE", "score": 3, "reason": "razão curta"}
+    {"option": "Full Body", "tier": "recommended", "reason": "razão curta"},
+    {"option": "Upper/Lower", "tier": "suitable", "reason": "razão curta"},
+    {"option": "ABC", "tier": "recommended", "reason": "razão curta"},
+    {"option": "ABCD", "tier": "acceptable", "reason": "razão curta"},
+    {"option": "ABCDE", "tier": "not_recommended", "reason": "razão curta"}
   ],
   "chosenSplit": "ABC",
   "explanation": "Justificativa de por que este split venceu (2-3 frases)",
@@ -171,28 +252,44 @@ ${SCIENCE_GUARDRAILS}
       "type": "A",
       "focus": "foco do treino",
       "cardio": {"type": "Esteira", "durationMin": 20, "intensity": "moderado"},
-      "estimatedCalories": 350,
       "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]
     }
-  ]
+  ],
+  "evidenceIds": ["SRC-ACSM-RT-2026"]
 }`;
 
     try {
-      const response = await askAI(key, profile, prompt, true);
+      const evidence = getEvidenceForQuery(`prescrição de treino ${profile.goal} ${trainingDays} dias por semana`);
+      if (evidence.length === 0) {
+        addMessage('Não encontrei evidência suficiente para montar um plano científico com segurança agora.');
+        setHasError(true);
+        return;
+      }
+      const groundedPrompt = `${prompt}\n\n${buildEvidenceContext(evidence)}\n\nUse APENAS sourceIds do EVIDENCE_CONTEXT no campo evidenceIds.`;
+      const response = await askAI(key, profile, groundedPrompt, {
+        schemaName: 'ai_setup_plan',
+        jsonSchema: AI_SETUP_SCHEMA,
+      });
       const parsed = JSON.parse(response);
       if (parsed.workouts?.length > 0) {
         setWorkouts(parsed.workouts);
 
           // Show evaluation scores
           if (parsed.evaluation?.length) {
-            const winner = parsed.evaluation.reduce((a: { score: number }, b: { score: number }) => a.score > b.score ? a : b);
-            const scoreBoard = parsed.evaluation
-              .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
-              .map((e: { option: string; score: number }) => `${e.option}: ${e.score}/10`)
+            const tierRank: Record<string, number> = {
+              recommended: 4,
+              suitable: 3,
+              acceptable: 2,
+              not_recommended: 1,
+            };
+            const sortedEval = [...parsed.evaluation].sort((a: { tier?: string }, b: { tier?: string }) => (tierRank[b.tier || 'acceptable'] || 0) - (tierRank[a.tier || 'acceptable'] || 0));
+            const winner = sortedEval[0];
+            const scoreBoard = sortedEval
+              .map((e: { option: string; tier?: string }) => `${e.option}: ${e.tier || 'acceptable'}`)
               .join(' • ');
       addMessage(`Avaliação: ${scoreBoard}`);
             await delay(600);
-            addMessage(`Vencedor: ${parsed.chosenSplit || winner.option}`);
+            addMessage(`Vencedor: ${parsed.chosenSplit || winner?.option || 'divisão sugerida'}`);
             await delay(400);
           }
 

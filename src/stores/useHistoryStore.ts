@@ -8,6 +8,7 @@ interface FreeSessionInput {
   activityIntensity: ActivityIntensity;
   date: string;
   durationMinutes: number;
+  distanceKm?: number;
   notes?: string;
 }
 
@@ -36,6 +37,7 @@ export const useHistoryStore = create<HistoryState>()(
             activityName: activity.activityName.trim(),
             activityLocation: activity.activityLocation,
             activityIntensity: activity.activityIntensity,
+            activityDistanceKm: activity.distanceKm,
             notes: activity.notes?.trim() || undefined,
             date: activity.date,
             startedAt: completedAt - durationMs,

@@ -14,7 +14,13 @@ import { calculateWaterIntake } from '@/utils/water';
 import { syncNativeHealth } from '@/utils/healthIntegration';
 import { getToday } from '@/utils/date';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
-import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
+import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingLocation } from '@/types';
+
+const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
+  academia: 'Academia',
+  casa: 'Casa',
+  hibrido: 'Híbrido',
+};
 
 export function Profile() {
   const navigate = useNavigate();
@@ -66,6 +72,13 @@ export function Profile() {
   const [goal, setGoal] = useState<Goal>(profile?.goal || 'lose');
   const [experience, setExperience] = useState<ExperienceLevel>(profile?.experienceLevel || 'beginner');
   const [days, setDays] = useState<WeekDay[]>(profile?.trainingDays || []);
+  const [sessionDurationMin, setSessionDurationMin] = useState(String(profile?.sessionDurationMin || 60));
+  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>(profile?.trainingLocation || 'academia');
+  const [trainingAgeMonths, setTrainingAgeMonths] = useState(String(profile?.trainingAgeMonths ?? ''));
+  const [equipmentAccess, setEquipmentAccess] = useState((profile?.equipmentAccess || []).join(', '));
+  const [preferredExercises, setPreferredExercises] = useState((profile?.preferredExercises || []).join(', '));
+  const [dislikedExercises, setDislikedExercises] = useState((profile?.dislikedExercises || []).join(', '));
+  const [limitations, setLimitations] = useState((profile?.limitations || []).join(', '));
 
   if (!profile) return null;
 
@@ -80,6 +93,11 @@ export function Profile() {
     );
   };
 
+  const toList = (value: string) => value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
   const handleSave = () => {
     updateProfile({
       name,
@@ -90,6 +108,13 @@ export function Profile() {
       goal,
       experienceLevel: experience,
       trainingDays: days,
+      sessionDurationMin: Number(sessionDurationMin) || 60,
+      trainingLocation,
+      trainingAgeMonths: trainingAgeMonths ? Number(trainingAgeMonths) : undefined,
+      equipmentAccess: toList(equipmentAccess),
+      preferredExercises: toList(preferredExercises),
+      dislikedExercises: toList(dislikedExercises),
+      limitations: toList(limitations),
     });
     setEditing(false);
   };
@@ -247,6 +272,64 @@ export function Profile() {
               ))}
             </div>
           </div>
+
+          <div className="card space-y-3">
+            <h2 className="font-semibold text-white/80">Contexto de treino</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-white/40 mb-1 block">Tempo por sessão (min)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="20"
+                  max="180"
+                  value={sessionDurationMin}
+                  onChange={(e) => setSessionDurationMin(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-white/40 mb-1 block">Local</label>
+                <select
+                  value={trainingLocation}
+                  onChange={(e) => setTrainingLocation(e.target.value as TrainingLocation)}
+                  className="input-field"
+                >
+                  <option value="academia">Academia</option>
+                  <option value="casa">Casa</option>
+                  <option value="hibrido">Híbrido</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-white/40 mb-1 block">Training age (meses consistentes)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="600"
+                  value={trainingAgeMonths}
+                  onChange={(e) => setTrainingAgeMonths(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  className="input-field"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-white/40 mb-1 block">Equipamentos (vírgula)</label>
+                <input value={equipmentAccess} onChange={(e) => setEquipmentAccess(e.target.value)} className="input-field" placeholder="halteres, barra, banco" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-white/40 mb-1 block">Exercícios preferidos (vírgula)</label>
+                <input value={preferredExercises} onChange={(e) => setPreferredExercises(e.target.value)} className="input-field" placeholder="supino, remada" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-white/40 mb-1 block">Exercícios que não gosta (vírgula)</label>
+                <input value={dislikedExercises} onChange={(e) => setDislikedExercises(e.target.value)} className="input-field" placeholder="afundo, burpee" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-white/40 mb-1 block">Limitações / dores (vírgula)</label>
+                <textarea value={limitations} onChange={(e) => setLimitations(e.target.value)} className="input-field min-h-20 resize-none" placeholder="ombro, joelho, lombar" />
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -289,6 +372,19 @@ export function Profile() {
                 </span>
               ))}
             </div>
+          </div>
+
+          <div className="card space-y-3">
+            <h2 className="font-semibold text-white/80">Contexto de treino</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <Stat label="Tempo por sessão" value={`${profile.sessionDurationMin || 60} min`} />
+              <Stat label="Local" value={TRAINING_LOCATION_LABELS[profile.trainingLocation || 'academia']} />
+              <Stat label="Training age" value={`${profile.trainingAgeMonths || 0} meses`} />
+            </div>
+            <p className="text-xs text-white/45">Equipamentos: {(profile.equipmentAccess || []).join(', ') || 'Não informado'}</p>
+            <p className="text-xs text-white/45">Preferidos: {(profile.preferredExercises || []).join(', ') || 'Não informado'}</p>
+            <p className="text-xs text-white/45">Evita: {(profile.dislikedExercises || []).join(', ') || 'Não informado'}</p>
+            <p className="text-xs text-white/45">Limitações: {(profile.limitations || []).join(', ') || 'Não informado'}</p>
           </div>
 
           {/* Cycle Phase */}

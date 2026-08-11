@@ -10,11 +10,33 @@ import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
+import { buildEvidenceContext, getEvidenceByIds, getEvidenceForQuery } from '@/utils/evidence';
 
 interface Message {
   role: 'ai' | 'user' | 'system';
   content: string;
   options?: string[];
+}
+
+interface ReevalExerciseSuggestion {
+  name: string;
+  sets: number;
+  repsMin: number;
+  repsMax: number;
+  muscleGroup: string;
+}
+
+interface ReevalActionPayload {
+  recommendation: string;
+  newSplit?: string;
+  removeDays?: string[];
+  exercises?: Record<string, ReevalExerciseSuggestion[]>;
+  evidenceIds?: string[];
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return 'Falha desconhecida';
 }
 
 export function AIReeval() {
@@ -53,8 +75,17 @@ export function AIReeval() {
       const exs = getExercises(type);
       return `Treino ${type}: ${exs.map((e) => e.name).join(', ')} (${exs.length} exercícios, ${exs.reduce((a, e) => a + e.sets, 0)} séries)`;
     }).join('\n');
+    const locationLabel = profile.trainingLocation === 'casa'
+      ? 'Casa'
+      : profile.trainingLocation === 'hibrido'
+        ? 'Híbrido'
+        : 'Academia';
+    const equipmentText = (profile.equipmentAccess || []).join(', ') || 'não informado';
+    const preferredText = (profile.preferredExercises || []).join(', ') || 'não informado';
+    const dislikedText = (profile.dislikedExercises || []).join(', ') || 'não informado';
+    const limitationsText = (profile.limitations || []).join(', ') || 'não informado';
 
-    return `Você é um psicólogo esportivo e personal trainer de elite. Seu papel é conduzir uma REAVALIAÇÃO profunda do programa de treino do aluno.
+    return `Você é um assistente de reavaliação de treino baseado em evidências. Seu papel é conduzir uma reavaliação profunda e responsável do programa de treino do aluno.
 
 O aluno se chama ${profile.name}. Use o nome dele naturalmente na conversa.
 
@@ -66,6 +97,13 @@ PERFIL DO ALUNO:
 - Nível: ${profile.experienceLevel || 'intermediário'}
 - Objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manutenção'}
 - Dias de treino/semana: ${profile.trainingDays.length}
+- Tempo por sessão: ${profile.sessionDurationMin || 60} min
+- Local de treino: ${locationLabel}
+- Training age: ${profile.trainingAgeMonths || 0} meses
+- Equipamentos: ${equipmentText}
+- Preferidos: ${preferredText}
+- Evita: ${dislikedText}
+- Limitações: ${limitationsText}
 - Total de treinos realizados: ${totalWorkouts}
 - Avaliação média dos treinos: ${avgRating}/5
 - Treinos ativos: ${activeSlots.join(', ')} (${activeSlots.length} divisões)
@@ -77,15 +115,9 @@ COMO CONDUZIR A CONVERSA:
 1. Seja empático, caloroso e profissional. Aja como alguém que realmente se importa.
 2. Faça UMA pergunta por vez. Espere a resposta antes de prosseguir.
 3. Investigue: disposição, recuperação, dores, motivação, objetivos mudaram?, quer mais desafio? quer algo mais leve?
-4. Após 3-5 trocas, dê sua avaliação profissional com recomendações concretas.
-5. Se recomendar mudanças, no final envie um bloco JSON com o formato:
-
-[REEVAL_RESULT:{"recommendation":"texto resumo","newSplit":"ABC ou ABCD ou ABCDE","removeDays":["D","E"],"exercises":{"A":[...],"B":[...],"C":[...]}}]
-
-CAMPOS DO JSON:
-- "newSplit": a nova divisão recomendada (ex: "ABC", "ABCD", "ABCDE")
-- "removeDays": array de dias a REMOVER (ex: ["D","E"] se reduzir de ABCDE pra ABC). Omita se não remover nada.
-- "exercises": objeto com os treinos novos. Inclua TODOS os dias do newSplit. Cada dia é um array de exercícios com {name, sets, repsMin, repsMax, muscleGroup}.
+4. Faça apenas as perguntas necessárias para completar os dados críticos: aderência, recuperação, dor, desempenho, preferência e objetivo.
+5. Assim que houver dados suficientes, dê sua avaliação com recomendações concretas.
+6. Se recomendar mudanças no app, chame a função apply_reevaluation_plan com payload estruturado.
 
 REGRAS DE INTELIGÊNCIA:
 - Iniciante com <20 treinos: NÃO recomende 5x. Sugira melhorias na execução.
@@ -102,36 +134,128 @@ ${EXERCISE_CATALOG.map((e) => `${e.name} (${e.muscleGroup})`).join(', ')}
 
 Comece cumprimentando ${profile.name} pelo nome e fazendo sua primeira pergunta investigativa.
 NUNCA use placeholders como [nome], [seu nome] etc. Use o nome real: ${profile.name}.
-Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.`;
+Responda em texto natural no chat. Use a função apenas quando decidir aplicar alterações de treino.`;
   };
 
-  const callAI = async (conversationMessages: { role: string; content: string }[]) => {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const callAI = async (conversationMessages: { role: string; content: string }[]): Promise<{ reply: string; action: ReevalActionPayload | null }> => {
+    const latestUser = [...conversationMessages].reverse().find((m) => m.role === 'user')?.content || '';
+    const evidence = getEvidenceForQuery(`reavaliacao treino ${latestUser}`);
+    const evidenceContext = evidence.length ? `\n\n${buildEvidenceContext(evidence)}\nUse apenas sourceIds desse contexto quando recomendar mudanças.` : '';
+    const groundedMessages = conversationMessages.map((message, index) => (
+      index === 0 && message.role === 'system'
+        ? { ...message, content: `${message.content}${evidenceContext}` }
+        : message
+    ));
+
+    const requestBody = {
+      messages: groundedMessages,
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'apply_reevaluation_plan',
+            description: 'Aplica ajustes de divisão e exercícios quando a reavaliação estiver concluída.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['recommendation', 'evidenceIds'],
+              properties: {
+                recommendation: { type: 'string' },
+                newSplit: { type: 'string', enum: ['ABC', 'ABCD', 'ABCDE'] },
+                evidenceIds: {
+                  type: 'array',
+                  minItems: 1,
+                  items: { type: 'string' },
+                },
+                removeDays: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
+                },
+                exercises: {
+                  type: 'object',
+                  additionalProperties: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
+                      properties: {
+                        name: { type: 'string' },
+                        sets: { type: 'number' },
+                        repsMin: { type: 'number' },
+                        repsMax: { type: 'number' },
+                        muscleGroup: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      tool_choice: 'auto',
+      max_tokens: 800,
+      temperature: 0.8,
+    };
+
+    const callModel = async (model: 'gpt-4o-mini' | 'gpt-4o') => fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: conversationMessages,
-        max_tokens: 800,
-        temperature: 0.8,
-      }),
+      body: JSON.stringify({ model, ...requestBody }),
     });
-    if (!response.ok) throw new Error('Erro na API');
+
+    let response = await callModel('gpt-4o-mini');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err?.error?.message || `Erro ${response.status}`;
+      if (response.status === 404 || response.status === 429 || msg.toLowerCase().includes('model')) {
+        response = await callModel('gpt-4o');
+      } else {
+        throw new Error(msg);
+      }
+    }
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Erro ${response.status}`);
+    }
+
     const data = await response.json();
-    return data.choices[0].message.content as string;
+    const choice = data.choices[0];
+    const content = (choice?.message?.content || '').trim();
+    const toolCalls = choice?.message?.tool_calls as Array<{ function?: { name?: string; arguments?: string } }> | undefined;
+
+    let action: ReevalActionPayload | null = null;
+    if (toolCalls?.length) {
+      const call = toolCalls.find((toolCall) => toolCall.function?.name === 'apply_reevaluation_plan');
+      if (call?.function?.arguments) {
+        try {
+          action = JSON.parse(call.function.arguments) as ReevalActionPayload;
+        } catch {
+          action = null;
+        }
+      }
+    }
+
+    return {
+      reply: content,
+      action,
+    };
   };
 
   const startConversation = async () => {
     setLoading(true);
     try {
       const systemMsg = buildSystemPrompt();
-      const reply = await callAI([{ role: 'system', content: systemMsg }, { role: 'user', content: 'Oi, quero fazer uma reavaliação do meu treino.' }]);
+      const { reply } = await callAI([{ role: 'system', content: systemMsg }, { role: 'user', content: 'Oi, quero fazer uma reavaliação do meu treino.' }]);
       setMessages([{ role: 'ai', content: reply }]);
-    } catch {
-      setMessages([{ role: 'ai', content: 'Desculpa, tive um problema de conexão. Tenta de novo?' }]);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setMessages([{ role: 'ai', content: `Desculpa, não consegui iniciar agora. Detalhe: ${message}` }]);
     }
     setLoading(false);
   };
@@ -152,30 +276,30 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
         ...newMessages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content })),
       ];
 
-      const reply = await callAI(apiMessages);
+      const { reply, action } = await callAI(apiMessages);
 
-      // Check if AI provided final recommendation
-      const reevalMatch = reply.match(/\[REEVAL_RESULT:([\s\S]*?)\]/);
-      if (reevalMatch) {
-        const cleanReply = reply.replace(/\[REEVAL_RESULT:[\s\S]*?\]/, '').trim();
-        setMessages([...newMessages, { role: 'ai', content: cleanReply }]);
-
-        try {
-          const result = JSON.parse(reevalMatch[1]);
-          await applyRecommendation(result);
-        } catch { /* parse error, just show message */ }
+      if (action) {
+        const finalReply = reply || action.recommendation || 'Reavaliação concluída. Apliquei as alterações sugeridas.';
+        setMessages([...newMessages, { role: 'ai', content: finalReply }]);
+        await applyRecommendation(action);
         setPhase('done');
       } else {
         setMessages([...newMessages, { role: 'ai', content: reply }]);
       }
-    } catch {
-      setMessages([...newMessages, { role: 'ai', content: 'Erro de conexão. Pode repetir?' }]);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setMessages([...newMessages, { role: 'ai', content: `Falhou ao responder agora. Detalhe: ${message}` }]);
     }
     setLoading(false);
   };
 
-  const applyRecommendation = async (result: { removeDays?: string[]; newSplit?: string; exercises?: Record<string, { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[]> }) => {
+  const applyRecommendation = async (result: ReevalActionPayload) => {
     const toast = useToastStore.getState().show;
+    const validEvidence = getEvidenceByIds(result.evidenceIds || []);
+    if ((result.evidenceIds || []).length > 0 && validEvidence.length === 0) {
+      toast('Não encontrei evidência válida para aplicar essa reavaliação com segurança.', 'error');
+      return;
+    }
 
     if (result.exercises) {
       const neededTypes = Object.keys(result.exercises).filter((t) => ['A', 'B', 'C', 'D', 'E'].includes(t)) as WorkoutType[];
@@ -249,7 +373,7 @@ Responda APENAS texto puro (sem markdown, sem JSON) até a recomendação final.
             </div>
             <div>
               <h1 className="font-bold text-sm">Reavaliação IA</h1>
-              <p className="text-[10px] text-white/30">Psicólogo esportivo virtual</p>
+              <p className="text-[10px] text-white/30">Reavaliação baseada em dados</p>
             </div>
           </div>
           <button onClick={() => navigate('/plans')} className="text-white/40 text-sm px-3 py-1"><MaterialIcon name="close" /></button>
