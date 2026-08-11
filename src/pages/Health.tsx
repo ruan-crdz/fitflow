@@ -14,6 +14,7 @@ import { calculateWaterIntake } from '@/utils/water';
 import { getToday } from '@/utils/date';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { addMacros, findFoodInTable, macrosForFood, toGrams, type MacroTotals } from '@/utils/nutrition';
+import { CAMERA_ITEMS_SCHEMA, UNKNOWN_MAPPING_SCHEMA } from '@/constants/aiSchemas';
 
 type IngredientUnit = 'g' | 'un' | 'colher_sopa' | 'colher_cha' | 'ml' | 'copo' | 'xicara';
 
@@ -57,51 +58,6 @@ const UNIT_LABEL: Record<IngredientUnit, string> = {
   ml: 'ml',
   copo: 'copo(s)',
   xicara: 'xícara(s)',
-};
-
-const UNKNOWN_MAPPING_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['mappings'],
-  properties: {
-    mappings: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['originalName', 'mappedFood', 'grams', 'confidence', 'note'],
-        properties: {
-          originalName: { type: 'string' },
-          mappedFood: { type: 'string' },
-          grams: { type: 'number' },
-          confidence: { type: 'number' },
-          note: { type: ['string', 'null'] },
-        },
-      },
-    },
-  },
-};
-
-const CAMERA_ITEMS_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['items'],
-  properties: {
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['name', 'amount', 'unit', 'confidence'],
-        properties: {
-          name: { type: 'string' },
-          amount: { type: ['number', 'null'] },
-          unit: { type: ['string', 'null'], enum: ['g', 'un', 'colher_sopa', 'colher_cha', 'ml', 'copo', 'xicara', null] },
-          confidence: { type: 'number' },
-        },
-      },
-    },
-  },
 };
 
 export function Health() {

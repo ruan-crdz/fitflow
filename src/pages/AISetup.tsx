@@ -9,6 +9,7 @@ import { askAI } from '@/utils/ai';
 import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { buildEvidenceContext, getEvidenceForQuery } from '@/utils/evidence';
+import { AI_SETUP_SCHEMA } from '@/constants/aiSchemas';
 
 type Phase = 'token' | 'generating' | 'summary';
 
@@ -19,74 +20,6 @@ interface GeneratedWorkout {
   estimatedCalories?: number;
   exercises: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[];
 }
-
-const AI_SETUP_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['evaluation', 'chosenSplit', 'explanation', 'rotation', 'workouts'],
-  properties: {
-    evaluation: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['option', 'tier', 'reason'],
-        properties: {
-          option: { type: 'string' },
-          tier: { type: 'string', enum: ['recommended', 'suitable', 'acceptable', 'not_recommended'] },
-          reason: { type: 'string' },
-        },
-      },
-    },
-    chosenSplit: { type: 'string' },
-    explanation: { type: 'string' },
-    rotation: { type: 'string' },
-    workouts: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['type', 'focus', 'exercises'],
-        properties: {
-          type: { type: 'string' },
-          focus: { type: 'string' },
-          cardio: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['type', 'durationMin', 'intensity'],
-            properties: {
-              type: { type: 'string' },
-              durationMin: { type: 'number' },
-              intensity: { type: 'string' },
-            },
-          },
-          exercises: {
-            type: 'array',
-            minItems: 1,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
-              properties: {
-                name: { type: 'string' },
-                sets: { type: 'number' },
-                repsMin: { type: 'number' },
-                repsMax: { type: 'number' },
-                muscleGroup: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-    evidenceIds: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-  },
-};
 
 export function AISetup() {
   const navigate = useNavigate();

@@ -11,6 +11,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { askAI } from '@/utils/ai';
 import type { Exercise, WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { WORKOUT_BUILDER_SCHEMA, WORKOUT_SWAP_SCHEMA } from '@/constants/aiSchemas';
 
 interface CatalogItem {
   name: string;
@@ -46,42 +47,6 @@ interface EditBaseline {
   slots: WorkoutType[];
   workouts: Record<WorkoutType, CustomExercise[] | null>;
 }
-
-const WORKOUT_BUILDER_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['action'],
-  properties: {
-    action: { type: 'string', enum: ['no_change', 'add', 'swap'] },
-    name: { type: 'string' },
-    muscleGroup: { type: 'string' },
-    reason: { type: 'string' },
-    swaps: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['currentName', 'name', 'muscleGroup', 'reason'],
-        properties: {
-          currentName: { type: 'string' },
-          name: { type: 'string' },
-          muscleGroup: { type: 'string' },
-          reason: { type: 'string' },
-        },
-      },
-    },
-  },
-};
-
-const WORKOUT_SWAP_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['name', 'reason'],
-  properties: {
-    name: { type: 'string' },
-    reason: { type: 'string' },
-  },
-};
 
 export function WorkoutPlans() {
   const navigate = useNavigate();

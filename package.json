@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist",
-    "ai:evals": "node scripts/ai-evals.mjs"
+    "ai:evals": "node scripts/ai-evals.mjs",
+    "test:unit": "vitest run",
+    "test:ai": "vitest run tests/ai-schemas.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
@@ -30,6 +32,7 @@
     "sharp": "^0.35.3",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
     "vite": "^6.0.3",
     "vite-plugin-pwa": "^0.21.1"
   }
