@@ -232,6 +232,7 @@ export function Social() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
   const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -278,6 +279,9 @@ export function Social() {
   const incoming = friendships.filter((f) => f.status === 'pending' && f.addressee_id === currentUserId && !f.deleted_at);
   const selectedProfile = viewProfileId ? profiles[viewProfileId] : profile;
   const feedPosts = posts.filter((post) => !post.deleted_at && (feedMode === 'general' || post.user_id === currentUserId || acceptedFriendIds.includes(post.user_id)));
+  const visibleFeedPosts = focusedPostId
+    ? posts.filter((post) => post.id === focusedPostId && !post.deleted_at)
+    : feedPosts;
   const inboxShares = shares.filter((s) => s.receiver_id === currentUserId);
   const conversations = useMemo(() => conversationPeerIds
     .map((friendId) => {
@@ -426,6 +430,19 @@ export function Social() {
     );
   }, [foodLogs]);
   const waterGlasses = waterLogs[todayKey()] || 0;
+
+  function openFocusedPost(postId: string) {
+    setFocusedPostId(postId);
+    setSocialMode('feed');
+    setShowNotifications(false);
+    setShowConversations(false);
+    setViewProfileId(null);
+    setProfileListMode(null);
+    setProfileEditMode(false);
+    setSearchUsername('');
+    setSearchResults([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   useEffect(() => () => {
     postPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
@@ -1555,7 +1572,11 @@ export function Social() {
                   )}
                 </div>
                 {relatedPost ? (
-                  <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0">
+                  <button
+                    onClick={() => openFocusedPost(relatedPost.id)}
+                    className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0 active:scale-95 transition-transform"
+                    aria-label="Abrir publicaÃ§Ã£o"
+                  >
                     {relatedImage ? (
                       <img src={relatedImage.image_url} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -1563,7 +1584,7 @@ export function Social() {
                         <p className="text-[9px] leading-tight text-white/45 line-clamp-3 break-words">{relatedPost.body || 'Publicação'}</p>
                       </div>
                     )}
-                  </div>
+                  </button>
                 ) : (
                   <MaterialIcon name={icon} variant={notification.type === 'like' || notification.type === 'comment_like' ? 'filled' : 'outlined'} className="text-xl text-primary-300" />
                 )}
@@ -1800,7 +1821,7 @@ export function Social() {
           {profileGridPosts.map((post) => {
             const postImages = images.filter((img) => img.post_id === post.id);
             return (
-              <button key={post.id} className="aspect-square rounded-lg bg-white/5 border border-white/5 overflow-hidden text-left active:opacity-80">
+              <button key={post.id} onClick={() => openFocusedPost(post.id)} className="aspect-square rounded-lg bg-white/5 border border-white/5 overflow-hidden text-left active:opacity-80">
                 {postImages[0] ? (
                   <img src={postImages[0].image_url} alt="" className="w-full h-full object-cover bg-dark-200" />
                 ) : (
@@ -1849,8 +1870,8 @@ export function Social() {
       </div>
 
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
-        <button onClick={() => setSocialMode('ranking')} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
-        <button onClick={() => setSocialMode('feed')} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
+        <button onClick={() => { setFocusedPostId(null); setSocialMode('ranking'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
+        <button onClick={() => { setFocusedPostId(null); setSocialMode('feed'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
       </div>
 
       {socialMode === 'ranking' && (
@@ -1889,6 +1910,20 @@ export function Social() {
       )}
 
       {socialMode === 'feed' && (
+        <>
+      {focusedPostId ? (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setFocusedPostId(null)}
+            className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl"
+            aria-label="Voltar para o feed"
+          >
+            &lt;
+          </button>
+          <h2 className="text-xl font-black">PublicaÃ§Ã£o</h2>
+          <div className="w-11" />
+        </div>
+      ) : (
         <>
       <div className="space-y-2">
         <div>
@@ -1963,6 +1998,8 @@ export function Social() {
         <button onClick={() => setFeedMode('general')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
         <button onClick={() => setFeedMode('friends')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
       </div>
+        </>
+      )}
 
       {inboxShares.length > 0 && (
         <div className="card space-y-3">
@@ -1988,7 +2025,7 @@ export function Social() {
             </button>
           </div>
         )}
-        {feedPosts.map((post) => {
+        {visibleFeedPosts.map((post) => {
           const author = profiles[post.user_id];
           const postImages = images.filter((img) => img.post_id === post.id);
           const postLikes = likes.filter((like) => like.post_id === post.id);
@@ -2134,7 +2171,7 @@ export function Social() {
             </div>
           );
         })}
-        {feedPosts.length === 0 && <p className="card text-sm text-white/35">Nenhuma postagem ainda.</p>}
+        {visibleFeedPosts.length === 0 && <p className="card text-sm text-white/35">{focusedPostId ? 'PublicaÃ§Ã£o nÃ£o encontrada.' : 'Nenhuma postagem ainda.'}</p>}
       </div>
         </>
       )}
