@@ -59,6 +59,7 @@ export function Health() {
   const [mealResult, setMealResult] = useState<{ name: string; description: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraAbortRef = useRef<AbortController | null>(null);
   const { shortcuts, recents, addShortcut, addRecent, removeShortcut } = useMealStore();
 
   const calories = calculateTDEE(profile);
@@ -205,19 +206,35 @@ Responda JSON: {"name":"nome curto do prato","calories":número,"protein":gramas
     setMealLoading(false);
   };
 
-  const handleCameraCapture = async (file: File) => {
+  const handleCameraCapture = async (file: File, userHint = '') => {
     if (!apiKey) {
       useToastStore.getState().show('Configure sua chave IA no Perfil primeiro', 'error');
       return;
     }
+    cameraAbortRef.current?.abort();
+    const controller = new AbortController();
+    cameraAbortRef.current = controller;
+    let restartedWithHint = false;
+    const hintTimeout = window.setTimeout(() => {
+      if (userHint || controller.signal.aborted) return;
+      const hint = window.prompt('A IA está demorando. Descreva rapidinho a comida/bebida para ajudar na identificação:');
+      if (!hint?.trim()) return;
+      restartedWithHint = true;
+      controller.abort();
+      void handleCameraCapture(file, hint.trim());
+    }, 8000);
     setCameraLoading(true);
     const toast = useToastStore.getState().show;
 
     try {
       const base64 = await compressAndEncode(file);
+      const extraHint = userHint
+        ? `\n\nDESCRIÇÃO DO USUÁRIO PARA AJUDAR NA ANÁLISE:\n${userHint}\nUse essa descrição como contexto, mas ainda valide pela foto.`
+        : '';
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -248,7 +265,7 @@ Exemplos:
 - Cerveja Brahma 350ml: ~150kcal, P:1g, C:11g, G:0g
 - Prato com arroz+feijão+carne: ~550kcal, P:35g, C:60g, G:15g
 
-RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}`,
+RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"carbs":gramas,"fat":gramas}${extraHint}`,
                 },
                 {
                   type: 'image_url',
@@ -269,13 +286,14 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         if (response.status === 404 || msg.includes('model')) {
           const fallback = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
+            signal: controller.signal,
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
             body: JSON.stringify({
               model: 'gpt-4o-mini',
               messages: [
                 { role: 'system', content: 'Você é um nutricionista. Responda em JSON válido.' },
                 { role: 'user', content: [
-                  { type: 'text', text: 'Identifique este alimento/produto e estime calorias e macros da porção visível. JSON: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0}' },
+                  { type: 'text', text: `Identifique este alimento/produto e estime calorias e macros da porção visível. JSON: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0}${extraHint}` },
                   { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' } },
                 ] },
               ],
@@ -324,10 +342,13 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         toast('Não consegui identificar. Tente outra foto.', 'error');
       }
     } catch (err) {
+      if (restartedWithHint || controller.signal.aborted) return;
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       toast(`Falha: ${msg.slice(0, 60)}`, 'error');
     } finally {
-      setCameraLoading(false);
+      window.clearTimeout(hintTimeout);
+      if (!restartedWithHint) setCameraLoading(false);
+      if (cameraAbortRef.current === controller) cameraAbortRef.current = null;
     }
   };
 
