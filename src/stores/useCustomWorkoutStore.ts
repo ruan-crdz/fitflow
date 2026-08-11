@@ -262,7 +262,7 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
         const prev = get().customWorkouts || EMPTY_WORKOUTS;
         const nextSlots = currentSlots.includes(finalTarget) ? currentSlots : [...currentSlots, finalTarget];
         set({
-          activeSlots: nextSlots,
+          activeSlots: [...nextSlots],
           customWorkouts: {
             ...prev,
             [finalTarget]: sanitizeExercises(workout.exercises, `imp_${finalTarget}`),
@@ -287,7 +287,7 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
         const importedEveryWorkout = slots.length > 0 && slots.every((type) => (nextWorkouts[type]?.length || 0) > 0);
         if (!importedEveryWorkout) return false;
 
-        set({ activeSlots: slots, customWorkouts: nextWorkouts });
+        set({ activeSlots: [...slots], customWorkouts: { ...nextWorkouts } });
         return true;
       },
 

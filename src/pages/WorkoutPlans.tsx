@@ -199,6 +199,14 @@ export function WorkoutPlans() {
       toast('Você já chegou ao limite de 5 treinos.', 'error');
       return;
     }
+    const fresh = useCustomWorkoutStore.getState();
+    useCustomWorkoutStore.setState({
+      activeSlots: [...fresh.activeSlots],
+      customWorkouts: cloneWorkouts(fresh.customWorkouts || EMPTY_CUSTOM_WORKOUTS),
+    });
+    setDraftSlots([...fresh.activeSlots]);
+    setEditing(false);
+    setEditBaseline(null);
     setSelected(importedType);
     toast(`Treino importado em ${importedType}!`, 'success');
     closeImportModal();
@@ -207,7 +215,15 @@ export function WorkoutPlans() {
   const handleImportAll = () => {
     if (!importPreview?.workouts.length) return;
     if (importAllWorkouts(importPreview.workouts)) {
-      setSelected('A');
+      const fresh = useCustomWorkoutStore.getState();
+      useCustomWorkoutStore.setState({
+        activeSlots: [...fresh.activeSlots],
+        customWorkouts: cloneWorkouts(fresh.customWorkouts || EMPTY_CUSTOM_WORKOUTS),
+      });
+      setDraftSlots([...fresh.activeSlots]);
+      setEditing(false);
+      setEditBaseline(null);
+      setSelected(fresh.activeSlots[0] || 'A');
       toast('Todos os treinos foram importados!', 'success');
       closeImportModal();
     }
