@@ -109,19 +109,19 @@ export function Dashboard() {
   };
 
   return (
-    <div className="px-5 pt-14 pb-6 space-y-5">
+    <div className="gym-page">
       {/* Header - cleaner, bigger touch target */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-white/30 text-xs font-medium tracking-wide uppercase">
+          <p className="gym-kicker">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}
           </p>
-          <h1 className="text-[26px] font-bold mt-0.5 leading-tight">{profile.name} <MaterialIcon name={profile.sex === 'male' ? 'fitness_center' : 'favorite'} className="inline-flex text-primary-300 text-[24px]" /></h1>
+          <h1 className="gym-title mt-1">{profile.name} <MaterialIcon name={profile.sex === 'male' ? 'fitness_center' : 'favorite'} className="inline-flex text-primary-300 text-[24px]" /></h1>
         </div>
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => navigate('/profile')}
-          className="w-11 h-11 rounded-full bg-primary-500/15 border border-primary-500/20 flex items-center justify-center"
+          className="gym-icon-tile"
         >
           <MaterialIcon name="star" className="text-primary-300" />
         </motion.button>
@@ -142,11 +142,11 @@ export function Dashboard() {
           animate={{ scale: 1, opacity: 1 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleResumeWorkout}
-          className="w-full p-5 rounded-2xl bg-gradient-to-r from-primary-600 to-primary-500 text-left shadow-lg shadow-primary-500/20"
+          className="w-full p-4 rounded-xl bg-primary-500 text-black text-left shadow-[0_16px_42px_rgba(var(--color-primary-rgb),0.22)]"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white/70">Treino em andamento</p>
+              <p className="text-sm text-black/60 font-bold">Treino em andamento</p>
               <p className="text-xl font-bold mt-1">
                 Continuar {WORKOUT_MAP[activeSession.workoutType].label}
               </p>
@@ -166,7 +166,7 @@ export function Dashboard() {
           {isTodayTraining && !todayAlreadyDone ? (
             <>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-primary-500/20 flex items-center justify-center text-2xl"><MaterialIcon name="fitness_center" className="text-primary-300" /></div>
+                <div className="gym-icon-tile w-14 h-14"><MaterialIcon name="fitness_center" className="text-primary-300" /></div>
                 <div className="flex-1">
                   <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold">Treino de hoje</p>
                   <p className="text-lg font-bold mt-0.5">
@@ -406,7 +406,7 @@ export function Dashboard() {
           onClick={() => setEditingDashboard((value) => !value)}
           className={`px-5 py-3 rounded-full text-sm font-semibold border transition-colors ${
             editingDashboard
-              ? 'bg-primary-500 text-white border-primary-400'
+              ? 'bg-primary-500 text-black border-primary-400'
               : 'bg-dark-100 text-white/70 border-white/10'
           }`}
         >

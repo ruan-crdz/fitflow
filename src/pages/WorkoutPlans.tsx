@@ -612,9 +612,12 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
   });
 
   return (
-    <div className="px-5 pt-14 pb-6">
+    <div className="gym-page">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-[26px] font-bold">Seus Treinos</h1>
+        <div>
+          <p className="gym-kicker">Rotina semanal</p>
+          <h1 className="gym-title mt-1">Seus Treinos</h1>
+        </div>
         <div className="flex items-center gap-2">
         {editing && (
           <motion.button
@@ -629,7 +632,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           whileTap={{ scale: 0.9 }}
           onClick={editing ? saveEditMode : enterEditMode}
           className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
-            editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
+            editing ? 'bg-primary-500 text-black shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
           }`}
         >
           <MaterialIcon name={editing ? 'check' : 'edit'} className="text-base" /> {editing ? 'Salvar' : 'Editar'}
@@ -682,7 +685,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                 whileTap={{ scale: 0.92 }}
                 onClick={() => setSelected(type)}
                 className={`w-full h-12 rounded-xl font-semibold transition-all ${
-                  selected === type ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
+                  selected === type ? 'bg-primary-500 text-black shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
                 }`}
               >
                 {editing ? (

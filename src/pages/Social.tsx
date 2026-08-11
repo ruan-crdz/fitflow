@@ -165,7 +165,7 @@ function formatSocialDate(value: string) {
 
 function SocialLoading() {
   return (
-    <div className="px-5 pt-14 pb-6 space-y-4">
+    <div className="gym-page">
       <h1 className="text-[26px] font-bold">Social</h1>
       <div className="card space-y-4">
         <div className="h-5 w-36 rounded-full bg-white/10 animate-pulse" />
@@ -1485,7 +1485,7 @@ export function Social() {
 
   if (!isSupabaseConfigured || !supabase) {
     return (
-      <div className="px-5 pt-14 pb-6 space-y-4">
+      <div className="gym-page">
         <h1 className="text-[26px] font-bold">Social</h1>
         <div className="card space-y-3">
           <h2 className="font-semibold">Conecte o Supabase</h2>
@@ -1501,7 +1501,7 @@ export function Social() {
 
   if (!session) {
     return (
-      <div className="px-5 pt-14 pb-6 space-y-4">
+      <div className="gym-page">
         <h1 className="text-[26px] font-bold">Social</h1>
         <div className="card space-y-4">
           <div className="grid grid-cols-2 gap-2">
@@ -1545,7 +1545,7 @@ export function Social() {
   if (!profile) {
     return (
       <>
-        <div className="px-5 pt-14 pb-6 space-y-4">
+        <div className="gym-page">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-[26px] font-bold">Social</h1>
@@ -1877,7 +1877,7 @@ export function Social() {
     const profileGridPosts = profilePostMode === 'mine' ? ownProfilePosts : taggedProfilePosts;
     return (
       <>
-      <div className="px-5 pt-14 pb-6 space-y-5">
+      <div className="gym-page">
         <div className="flex items-center justify-between">
           <button onClick={() => setViewProfileId(null)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <h1 className="text-lg font-bold">@{selectedProfile.username}</h1>
@@ -2043,10 +2043,13 @@ export function Social() {
   }
 
   return (
-    <div className="px-5 pt-14 pb-28 space-y-5">
+    <div className="gym-page pb-28">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-[26px] font-black leading-none">Social</h1>
+          <div>
+            <p className="gym-kicker">Comunidade</p>
+            <h1 className="gym-title mt-1">Social</h1>
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowPostModal(true)} className="w-10 h-10 rounded-full bg-white/5 text-white/70 flex items-center justify-center" aria-label="Criar publicação">
               <MaterialIcon name="add_box" variant="outlined" />

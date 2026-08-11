@@ -111,13 +111,16 @@ export function Profile() {
   };
 
   return (
-    <div className="px-5 pt-14 pb-6 space-y-5">
+    <div className="gym-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-[26px] font-bold">Perfil</h1>
+        <div>
+          <p className="gym-kicker">Conta e preferências</p>
+          <h1 className="gym-title mt-1">Perfil</h1>
+        </div>
         <button
           onClick={() => (editing ? handleSave() : setEditing(true))}
           className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-            editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
+            editing ? 'bg-primary-500 text-black shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
           }`}
         >
           {editing ? 'Salvar' : 'Editar'}
@@ -138,10 +141,10 @@ export function Profile() {
           <div>
             <label className="text-sm text-white/40 mb-2 block">Sexo biológico</label>
             <div className="flex gap-2">
-              <button onClick={() => setSex('female')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'female' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
+              <button onClick={() => setSex('female')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'female' ? 'bg-primary-500 text-black' : 'bg-dark-200 text-white/50'}`}>
                 <MaterialIcon name="female" className="text-primary-300" /> Feminino
               </button>
-              <button onClick={() => setSex('male')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'male' ? 'bg-primary-500 text-white' : 'bg-dark-200 text-white/50'}`}>
+              <button onClick={() => setSex('male')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'male' ? 'bg-primary-500 text-black' : 'bg-dark-200 text-white/50'}`}>
                 <MaterialIcon name="male" className="text-primary-300" /> Masculino
               </button>
             </div>

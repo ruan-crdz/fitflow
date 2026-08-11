@@ -353,10 +353,15 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
   };
 
   return (
-    <div className="px-5 pt-14 pb-6 space-y-5">
+    <div className="gym-page">
       <div className="flex items-center justify-between">
-        <h1 className="text-[26px] font-bold">Saúde</h1>
-        <MaterialIcon name="health_and_safety" className="text-2xl text-primary-300" />
+        <div>
+          <p className="gym-kicker">Nutrição e saúde</p>
+          <h1 className="gym-title mt-1">Saúde</h1>
+        </div>
+        <div className="gym-icon-tile">
+          <MaterialIcon name="health_and_safety" className="text-2xl text-primary-300" />
+        </div>
       </div>
 
       {/* Calorie Progress */}
@@ -440,7 +445,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                 whileTap={{ scale: 0.85 }}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={cameraLoading}
-                className="px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/20 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
+                className="px-3 py-2 rounded-xl bg-primary-500/15 border border-primary-500/25 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
               >
                 <MaterialIcon name="photo_camera" /> {cameraLoading ? 'Analisando...' : 'Foto IA'}
               </motion.button>
