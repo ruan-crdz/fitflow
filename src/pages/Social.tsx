@@ -112,6 +112,18 @@ const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
   { key: 'show_today_workout', label: 'Treino de hoje' },
 ];
 
+function ptSupabaseError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes('media_type') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
+    return 'Seu Supabase ainda está com o schema antigo. Rode supabase/social-feed-upgrade.sql no SQL Editor.';
+  }
+  if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme esse usuário.';
+  if (lower.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
+  if (lower.includes('row-level security')) return 'Permissão bloqueada pela segurança do Supabase. Rode o SQL de upgrade.';
+  if (lower.includes('duplicate') || lower.includes('already exists')) return 'Isso já existe.';
+  return message || 'Não consegui concluir agora. Tente novamente.';
+}
+
 function normalizeUsername(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 }
@@ -191,6 +203,7 @@ export function Social() {
   const [loading, setLoading] = useState(false);
 
   const [postBody, setPostBody] = useState('');
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [postFiles, setPostFiles] = useState<File[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
@@ -466,9 +479,12 @@ export function Social() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { username: cleanUsername, display_name: displayName.trim() || cleanUsername } },
+        options: {
+          emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+          data: { username: cleanUsername, display_name: displayName.trim() || cleanUsername },
+        },
       });
-      if (error) toast(error.message, 'error');
+      if (error) toast(ptSupabaseError(error.message), 'error');
       else if (!data.session) toast('Conta criada! Confirme seu e-mail para entrar.', 'success');
       else toast('Conta criada!', 'success');
     } else {
@@ -483,7 +499,7 @@ export function Social() {
         loginEmail = data as string;
       }
       const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
-      if (error) toast(error.message, 'error');
+      if (error) toast(ptSupabaseError(error.message), 'error');
       else toast('Login feito!', 'success');
     }
     setLoading(false);
@@ -495,7 +511,7 @@ export function Social() {
     const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('social-posts').upload(path, avatarFile, { upsert: true });
     if (error) {
-      toast(error.message, 'error');
+      toast(ptSupabaseError(error.message), 'error');
       return profile?.avatar_url || null;
     }
     const { data } = supabase.storage.from('social-posts').getPublicUrl(path);
@@ -522,7 +538,7 @@ export function Social() {
       show_today_workout: profile?.show_today_workout ?? true,
     };
     const { error } = await supabase.from('social_profiles').upsert(payload);
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       toast('Perfil salvo!', 'success');
       setAvatarFile(null);
@@ -534,7 +550,7 @@ export function Social() {
     if (!supabase || !session || !profile) return;
     setProfile({ ...profile, ...next });
     const { error } = await supabase.from('social_profiles').update(next).eq('id', session.user.id);
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
   }
 
   async function uploadImages(postId: string) {
@@ -545,7 +561,7 @@ export function Social() {
       const path = `${session.user.id}/${postId}/${index}-${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from('social-posts').upload(path, file, { upsert: true });
       if (error) {
-        toast(error.message, 'error');
+        toast(ptSupabaseError(error.message), 'error');
         continue;
       }
       const { data } = supabase.storage.from('social-posts').getPublicUrl(path);
@@ -557,11 +573,29 @@ export function Social() {
   async function createPost() {
     if (!supabase || !session || (!postBody.trim() && postFiles.length === 0)) return;
     setLoading(true);
+    if (editingPostId) {
+      const { error } = await supabase
+        .from('social_posts')
+        .update({ body: postBody.trim() || null })
+        .eq('id', editingPostId)
+        .eq('user_id', session.user.id);
+      if (error) toast(ptSupabaseError(error.message), 'error');
+      else {
+        setPostBody('');
+        setPostFiles([]);
+        setEditingPostId(null);
+        setShowPostModal(false);
+        toast('Post atualizado!', 'success');
+        await refreshFeed();
+      }
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase.from('social_posts').insert({
       user_id: session.user.id,
       body: postBody.trim() || null,
     }).select('id').single();
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       await uploadImages(data.id);
       setPostBody('');
@@ -571,6 +605,23 @@ export function Social() {
       await refreshFeed();
     }
     setLoading(false);
+  }
+
+  function startEditPost(post: Post) {
+    setEditingPostId(post.id);
+    setPostBody(post.body || '');
+    setPostFiles([]);
+    setShowPostModal(true);
+  }
+
+  async function deletePost(postId: string) {
+    if (!supabase || !session) return;
+    const { error } = await supabase.from('social_posts').delete().eq('id', postId).eq('user_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      toast('Post excluído.', 'success');
+      await refreshFeed();
+    }
   }
 
   async function toggleLike(postId: string) {
@@ -604,12 +655,16 @@ export function Social() {
 
   async function addComment(postId: string) {
     if (!supabase || !session || !commentText[postId]?.trim()) return;
+    if (commentText[postId].trim().length > 240) {
+      toast('Comentário muito grande. Use até 240 caracteres.', 'error');
+      return;
+    }
     const { error } = await supabase.from('social_post_comments').insert({
       post_id: postId,
       user_id: session.user.id,
       body: commentText[postId].trim(),
     });
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setCommentText((prev) => ({ ...prev, [postId]: '' }));
       await refreshFeed();
@@ -687,8 +742,18 @@ export function Social() {
   async function updateFriendship(id: string, status: 'accepted' | 'blocked') {
     if (!supabase) return;
     const { error } = await supabase.from('friendships').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else await refreshFriends();
+  }
+
+  async function removeFriendship(id: string) {
+    if (!supabase) return;
+    const { error } = await supabase.from('friendships').delete().eq('id', id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      toast('Amizade removida.', 'success');
+      await refreshFriends();
+    }
   }
 
   function openChat(peerId: string) {
@@ -709,7 +774,7 @@ export function Social() {
     const path = `${session.user.id}/dm-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('social-posts').upload(path, messageFile, { upsert: true, contentType: messageFile.type });
     if (error) {
-      toast(error.message, 'error');
+      toast(ptSupabaseError(error.message), 'error');
       return { media_url: null, media_type: null };
     }
     const { data } = supabase.storage.from('social-posts').getPublicUrl(path);
@@ -733,7 +798,7 @@ export function Social() {
       media_url: media.media_url,
       media_type: media.media_type,
     });
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setMessageText('');
       setMessageFile(null);
@@ -754,7 +819,7 @@ export function Social() {
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('social_chat_preferences').upsert(payload);
-    if (error) toast(error.message, 'error');
+    if (error) toast(ptSupabaseError(error.message), 'error');
     else await refreshChatPreferences();
   }
 
@@ -887,7 +952,7 @@ export function Social() {
   if (chatPeerId) {
     const chatPeer = profiles[chatPeerId];
     return (
-      <div className="min-h-[100dvh] flex flex-col px-5 pt-14 pb-28">
+      <div className="min-h-[100dvh] flex flex-col px-5 pt-14 pb-48">
         <div className="flex items-center gap-3 pb-4 border-b border-white/5">
           <button onClick={() => { setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <button onClick={() => { setChatPeerId(null); setViewProfileId(chatPeerId); }} className="flex items-center gap-3 text-left min-w-0">
@@ -911,7 +976,7 @@ export function Social() {
                   {message.media_url && message.media_type === 'video' && (
                     <video src={message.media_url} controls className="mb-2 max-h-72 rounded-xl" />
                   )}
-                  {message.body && <p>{message.body}</p>}
+                  {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
                 </div>
               </div>
             );
@@ -923,7 +988,7 @@ export function Social() {
           )}
         </div>
 
-        <div className="fixed left-0 right-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
+        <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-3 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
           <div className="max-w-md mx-auto space-y-2">
             {messagePreview && (
               <div className="relative w-24">
@@ -1036,7 +1101,7 @@ export function Social() {
           {avatarFile && <p className="text-xs text-primary-300">Foto nova selecionada. Salve o perfil.</p>}
           <div>
             <h2 className="text-2xl font-black">{selectedProfile.display_name}</h2>
-            <p className="text-xs text-white/35">{selectedProfile.is_private ? 'Perfil privado' : 'Perfil publico'}</p>
+            <p className="text-xs text-white/35">{selectedProfile.is_private ? 'Perfil privado' : 'Perfil público'}</p>
             {selectedProfile.bio && <p className="text-sm text-white/60 mt-2 max-w-xs">{selectedProfile.bio}</p>}
           </div>
           {!isMine && (
@@ -1051,6 +1116,11 @@ export function Social() {
               {myFriendshipWithViewed?.status === 'accepted' && (
                 <button onClick={() => openChat(selectedProfile.id)} className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-bold">
                   Mensagem
+                </button>
+              )}
+              {myFriendshipWithViewed?.status === 'accepted' && (
+                <button onClick={() => removeFriendship(myFriendshipWithViewed.id)} className="px-5 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm font-bold">
+                  Deixar de seguir
                 </button>
               )}
             </div>
@@ -1075,7 +1145,7 @@ export function Social() {
               onClick={() => setProfile((p) => (p ? { ...p, is_private: !p.is_private } : p))}
               className={`w-full rounded-2xl border p-3 text-sm font-bold ${profile.is_private ? 'bg-primary-500/10 border-primary-500/30 text-primary-200' : 'bg-white/5 border-white/10 text-white/65'}`}
             >
-              {profile.is_private ? 'Perfil privado' : 'Perfil publico'}
+              {profile.is_private ? 'Perfil privado' : 'Perfil público'}
             </button>
             <div className="grid grid-cols-2 gap-2">
               {visibilityFields.map((field) => (
@@ -1091,6 +1161,22 @@ export function Social() {
             <button onClick={saveProfile} className="btn-primary text-sm py-3">Salvar perfil</button>
           </div>
         )}
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-black uppercase tracking-wide text-white/45">Posts</h2>
+          {posts.filter((post) => post.user_id === selectedProfile.id).map((post) => {
+            const postImages = images.filter((img) => img.post_id === post.id);
+            return (
+              <div key={post.id} className="rounded-3xl bg-white/5 border border-white/10 overflow-hidden text-left">
+                {postImages[0] && <img src={postImages[0].image_url} alt="" className="w-full h-64 object-cover bg-dark-200" />}
+                {post.body && <p className="p-4 text-sm text-white/75 whitespace-pre-wrap break-words">{post.body}</p>}
+              </div>
+            );
+          })}
+          {posts.filter((post) => post.user_id === selectedProfile.id).length === 0 && (
+            <p className="rounded-2xl bg-white/5 border border-white/10 p-4 text-sm text-white/35">Nenhum post ainda.</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -1253,7 +1339,17 @@ export function Social() {
                   <p className="text-[10px] text-white/35">@{author?.username}</p>
                 </div>
               </button>
-              {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-line">{post.body}</p>}
+              {post.user_id === currentUserId && (
+                <div className="flex gap-1">
+                  <button onClick={() => startEditPost(post)} className="w-9 h-9 rounded-full bg-white/5 text-white/50 flex items-center justify-center" aria-label="Editar post">
+                    <MaterialIcon name="edit" className="text-base" />
+                  </button>
+                  <button onClick={() => deletePost(post.id)} className="w-9 h-9 rounded-full bg-red-500/10 text-red-300 flex items-center justify-center" aria-label="Excluir post">
+                    <MaterialIcon name="delete" className="text-base" />
+                  </button>
+                </div>
+              )}
+              {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap break-words">{post.body}</p>}
               {postImages.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
                   {postImages.map((img) => <img key={img.id} src={img.image_url} alt="" className="h-56 min-w-[75%] rounded-xl object-cover bg-dark-200" />)}
@@ -1268,17 +1364,17 @@ export function Social() {
                   <MaterialIcon name="fitness_center" variant={liked ? 'filled' : 'outlined'} className={liked ? 'text-lg leading-none transition-all scale-110 text-primary-300' : 'text-lg leading-none transition-all text-white/35'} />
                   <span>{postLikes.length}</span>
                 </button>
-                <span className="text-xs text-white/35">{postComments.length} comentario(s)</span>
+                <span className="text-xs text-white/35">{postComments.length} comentário(s)</span>
               </div>
               <div className="space-y-2">
                 {postComments.slice(-3).map((comment) => (
-                  <p key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60">
+                  <p key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60 whitespace-pre-wrap break-words">
                     <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button> {comment.body}
                   </p>
                 ))}
                 <div className="flex gap-2">
-                  <input value={commentText[post.id] || ''} onChange={(e) => setCommentText((prev) => ({ ...prev, [post.id]: e.target.value }))} className="input-field text-sm" placeholder="Comentar..." />
-                  <button onClick={() => addComment(post.id)} className="px-4 rounded-xl bg-primary-500 text-white font-bold">-&gt;</button>
+                  <input value={commentText[post.id] || ''} onChange={(e) => setCommentText((prev) => ({ ...prev, [post.id]: e.target.value.slice(0, 240) }))} maxLength={240} className="input-field text-sm" placeholder="Comentar..." />
+                  <button onClick={() => addComment(post.id)} className="w-12 rounded-xl bg-primary-500 text-white font-bold flex items-center justify-center" aria-label="Enviar comentário"><MaterialIcon name="send" /></button>
                 </div>
               </div>
             </div>
@@ -1302,20 +1398,15 @@ export function Social() {
         className="fixed right-6 bottom-[calc(96px+env(safe-area-inset-bottom))] z-40 w-14 h-14 rounded-full bg-[rgb(var(--color-bg-card-rgb))] text-white border border-white/15 shadow-[0_12px_35px_rgba(0,0,0,0.45)] flex items-center justify-center"
         aria-label="Mensagens"
       >
-        <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 11.5a8.4 8.4 0 0 1-8.6 8.5 9.6 9.6 0 0 1-3.7-.7L3 21l1.6-5a8.2 8.2 0 0 1-.9-3.8A8.4 8.4 0 0 1 12.3 4 8.4 8.4 0 0 1 21 11.5Z" />
-          <path d="M8 12h.01" />
-          <path d="M12 12h.01" />
-          <path d="M16 12h.01" />
-        </svg>
+        <MaterialIcon name="chat_bubble" className="text-2xl text-primary-300" variant="outlined" />
       </button>
 
       {showPostModal && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70">
           <div className="w-full max-w-md rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black">Nova postagem</h2>
-              <button onClick={() => setShowPostModal(false)} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
+              <h2 className="text-lg font-black">{editingPostId ? 'Editar postagem' : 'Nova postagem'}</h2>
+              <button onClick={() => { setShowPostModal(false); setEditingPostId(null); setPostBody(''); setPostFiles([]); }} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
             </div>
             <textarea value={postBody} onChange={(e) => setPostBody(e.target.value)} className="input-field text-sm min-h-28 resize-none" placeholder="Escreva alguma coisa..." />
             {postPreviews.length > 0 && (
@@ -1333,12 +1424,14 @@ export function Social() {
                 ))}
               </div>
             )}
-            <label className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary-500/40 bg-primary-500/10 px-4 py-5 text-sm font-bold text-primary-200">
-              Escolher fotos
-              <input type="file" accept="image/*" multiple onChange={(e) => setPostFiles(Array.from(e.target.files || []).slice(0, 6))} className="hidden" />
-            </label>
+            {!editingPostId && (
+              <label className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary-500/40 bg-primary-500/10 px-4 py-5 text-sm font-bold text-primary-200">
+                Escolher fotos
+                <input type="file" accept="image/*" multiple onChange={(e) => setPostFiles(Array.from(e.target.files || []).slice(0, 6))} className="hidden" />
+              </label>
+            )}
             {postFiles.length > 0 && <p className="text-xs text-white/45">{postFiles.length} foto(s) selecionada(s)</p>}
-            <button onClick={createPost} disabled={loading || (!postBody.trim() && postFiles.length === 0)} className="btn-primary text-sm py-3 disabled:opacity-40">Publicar</button>
+            <button onClick={createPost} disabled={loading || (!postBody.trim() && postFiles.length === 0)} className="btn-primary text-sm py-3 disabled:opacity-40">{editingPostId ? 'Salvar alterações' : 'Publicar'}</button>
           </div>
         </div>
       )}

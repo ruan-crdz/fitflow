@@ -47,6 +47,7 @@ export function WeightPrompt({ onClose }: WeightPromptProps) {
           <div className="flex items-center justify-center gap-3">
             <input
               type="number"
+              inputMode="decimal"
               step="0.1"
               min="30"
               max="300"

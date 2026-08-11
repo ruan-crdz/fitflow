@@ -13,6 +13,7 @@ import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/uti
 import { calculateWaterIntake } from '@/utils/water';
 import { syncNativeHealth } from '@/utils/healthIntegration';
 import { getToday } from '@/utils/date';
+import { clearGymPilotLocalData } from '@/utils/resetAppData';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel } from '@/types';
 
 export function Profile() {
@@ -150,6 +151,9 @@ export function Profile() {
               <label className="text-sm text-white/40 mb-1 block">Idade</label>
               <input
                 type="number"
+                inputMode="numeric"
+                min="10"
+                max="100"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
                 className="input-field"
@@ -159,6 +163,9 @@ export function Profile() {
               <label className="text-sm text-white/40 mb-1 block">Peso (kg)</label>
               <input
                 type="number"
+                inputMode="decimal"
+                min="30"
+                max="300"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
                 className="input-field"
@@ -169,6 +176,9 @@ export function Profile() {
               <label className="text-sm text-white/40 mb-1 block">Altura (cm)</label>
               <input
                 type="number"
+                inputMode="numeric"
+                min="100"
+                max="250"
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
                 className="input-field"
@@ -445,6 +455,7 @@ export function Profile() {
               <input
                 type="number"
                 inputMode="numeric"
+                min="0"
                 value={manualSteps}
                 onChange={(e) => setManualSteps(e.target.value)}
                 placeholder="Passos"
@@ -453,6 +464,7 @@ export function Profile() {
               <input
                 type="number"
                 inputMode="numeric"
+                min="0"
                 value={manualCalories}
                 onChange={(e) => setManualCalories(e.target.value)}
                 placeholder="kcal ativas"
@@ -590,7 +602,10 @@ export function Profile() {
                     Cancelar
                   </button>
                   <button
-                    onClick={() => { localStorage.clear(); window.location.href = '/fitflow/'; }}
+                    onClick={() => {
+                      clearGymPilotLocalData();
+                      window.location.href = '/fitflow/';
+                    }}
                     className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 text-sm font-bold"
                   >
                     Excluir tudo

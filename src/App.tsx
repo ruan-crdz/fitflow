@@ -19,11 +19,17 @@ import { AISetup } from '@/pages/AISetup';
 import { AIReeval } from '@/pages/AIReeval';
 import { Health } from '@/pages/Health';
 import { Social } from '@/pages/Social';
+import { clearGymPilotLocalData } from '@/utils/resetAppData';
 
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
   const [showSplash, setShowSplash] = useState(true);
   const [startOnboarding, setStartOnboarding] = useState(false);
+
+  const startFreshOnboarding = () => {
+    clearGymPilotLocalData();
+    setStartOnboarding(true);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1800);
@@ -47,7 +53,7 @@ export function App() {
           <Routes>
             <Route
               path="*"
-              element={startOnboarding ? <Onboarding onBack={() => setStartOnboarding(false)} /> : <BackupRestore onNewUser={() => setStartOnboarding(true)} />}
+              element={startOnboarding ? <Onboarding onBack={() => setStartOnboarding(false)} /> : <BackupRestore onNewUser={startFreshOnboarding} />}
             />
           </Routes>
         </HashRouter>

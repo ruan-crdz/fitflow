@@ -1,6 +1,6 @@
 import { getToday } from '@/utils/date';
 
-const BACKUP_KEYS = [
+export const BACKUP_KEYS = [
   'fitflow-profile',
   'fitflow-custom-workouts',
   'fitflow-history',
@@ -15,6 +15,8 @@ const BACKUP_KEYS = [
   'fitflow-dashboard',
   'fitflow-health-integration',
   'fitflow-theme',
+  'fitflow-ai-config',
+  'fitflow-accessibility',
 ];
 
 interface BackupPayload {

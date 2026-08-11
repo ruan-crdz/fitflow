@@ -262,7 +262,7 @@ export function Dashboard() {
           </div>
           <div className="relative h-4 bg-dark-300 rounded-full overflow-hidden">
             <motion.div
-              className={`h-full rounded-full ${progressCalories >= 1 ? 'bg-red-500' : 'bg-gradient-to-r from-green-500 to-emerald-400'}`}
+              className={`h-full rounded-full ${progressCalories >= 1 ? 'bg-red-500' : 'bg-primary-500'}`}
               initial={{ width: 0 }}
               animate={{ width: `${progressCalories * 100}%` }}
               transition={{ type: 'spring', stiffness: 80 }}
@@ -270,15 +270,15 @@ export function Dashboard() {
           </div>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <p className="text-lg font-bold text-emerald-400">{totals.calories}</p>
+              <p className={`text-lg font-bold ${progressCalories >= 1 ? 'text-red-400' : 'text-primary-300'}`}>{totals.calories}</p>
               <p className="text-[10px] text-white/40">Consumidas</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-orange-400">{burned}</p>
+              <p className="text-lg font-bold text-primary-300">{burned}</p>
               <p className="text-[10px] text-white/40">Queimadas</p>
             </div>
             <div>
-              <p className={`text-lg font-bold ${remaining > 0 ? 'text-blue-400' : 'text-red-400'}`}>{remaining}</p>
+              <p className={`text-lg font-bold ${remaining > 0 ? 'text-primary-300' : 'text-red-400'}`}>{remaining}</p>
               <p className="text-[10px] text-white/40">{remaining > 0 ? 'Restantes' : 'Excedido'}</p>
             </div>
           </div>
@@ -300,21 +300,21 @@ export function Dashboard() {
             <p className="text-xs text-white/40">kcal/dia</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-blue-400">{water}L</p>
+            <p className="text-2xl font-bold text-primary-300">{water}L</p>
             <p className="text-xs text-white/40">meta de água</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
           <div className="text-center">
-            <p className="text-lg font-semibold text-red-400">{macros.protein}g</p>
+            <p className="text-lg font-semibold text-primary-300">{macros.protein}g</p>
             <p className="text-[10px] text-white/30">Proteína</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-yellow-400">{macros.carbs}g</p>
+            <p className="text-lg font-semibold text-primary-300">{macros.carbs}g</p>
             <p className="text-[10px] text-white/30">Carboidratos</p>
           </div>
           <div className="text-center">
-            <p className="text-lg font-semibold text-green-400">{macros.fat}g</p>
+            <p className="text-lg font-semibold text-primary-300">{macros.fat}g</p>
             <p className="text-[10px] text-white/30">Gorduras</p>
           </div>
         </div>
@@ -621,7 +621,7 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
       </div>
       <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+          className="h-full rounded-full bg-primary-500"
           initial={{ width: 0 }}
           animate={{ width: `${progress * 100}%` }}
           transition={{ type: 'spring', stiffness: 100 }}
@@ -649,13 +649,13 @@ function WaterTracker({ glasses, goal, onAdd, onRemove, showConfetti, onConfetti
         <motion.button
           whileTap={{ scale: 0.85 }}
           onClick={onAdd}
-          className="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-xl"
+          className="w-12 h-12 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center text-primary-300 font-bold text-xl"
         >
           +
         </motion.button>
       </div>
       {glasses >= goal && (
- <p className="text-center text-xs text-green-400 font-medium"> Meta atingida! Parabéns!</p>
+ <p className="text-center text-xs text-primary-300 font-medium"> Meta atingida! Parabéns!</p>
       )}
     </div>
   );

@@ -52,7 +52,7 @@ export function WaterTracker({
       </div>
       <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+          className="h-full rounded-full bg-primary-500"
           initial={{ width: 0 }}
           animate={{ width: `${progress * 100}%` }}
           transition={{ type: 'spring', stiffness: 100 }}
@@ -71,7 +71,7 @@ export function WaterTracker({
           {Array.from({ length: safeGoal }).map((_, i) => (
             <motion.div
               key={i}
-              animate={{ scale: i < glasses ? 1.2 : 1, backgroundColor: i < glasses ? 'rgb(96 165 250)' : 'rgb(var(--color-bg-rgb))' }}
+              animate={{ scale: i < glasses ? 1.2 : 1, backgroundColor: i < glasses ? 'rgb(var(--color-primary-rgb))' : 'rgb(var(--color-bg-rgb))' }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               className={`w-2.5 h-2.5 rounded-full border border-white/10 ${i < glasses ? '' : 'bg-dark-300'}`}
             />
@@ -80,13 +80,13 @@ export function WaterTracker({
         <motion.button
           whileTap={{ scale: 0.85 }}
           onClick={onAdd}
-          className="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-xl"
+          className="w-12 h-12 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center text-primary-300 font-bold text-xl"
         >
           +
         </motion.button>
       </div>
       {glasses >= safeGoal && (
- <p className="text-center text-xs text-green-400 font-medium"> Meta atingida! Parabéns!</p>
+ <p className="text-center text-xs text-primary-300 font-medium"> Meta atingida! Parabéns!</p>
       )}
     </div>
   );

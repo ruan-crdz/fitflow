@@ -101,7 +101,7 @@ export function BackupRestore({ onNewUser }: BackupRestoreProps) {
           <div>
             <h1 className="text-3xl font-bold">Bem-vindo ao GymPilot</h1>
             <p className="text-white/50 text-sm mt-2 leading-relaxed">
-              Antes de começar, me fala se você já usava o app ou se esta entrando pela primeira vez.
+              Antes de começar, me fala se você já usava o app ou se está entrando pela primeira vez.
             </p>
           </div>
         </div>

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCustomWorkoutStore, type WorkoutImportItem, type WorkoutImportPreview } from '@/stores/useCustomWorkoutStore';
+import { useCustomWorkoutStore, type CustomExercise, type WorkoutImportItem, type WorkoutImportPreview } from '@/stores/useCustomWorkoutStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useToastStore } from '@/stores/useToastStore';
@@ -37,6 +37,14 @@ interface SwapSuggestion {
   currentName: string;
   suggestion: CatalogItem;
   reason: string;
+}
+
+const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
+const EMPTY_CUSTOM_WORKOUTS: Record<WorkoutType, CustomExercise[] | null> = { A: null, B: null, C: null, D: null, E: null };
+
+interface EditBaseline {
+  slots: WorkoutType[];
+  workouts: Record<WorkoutType, CustomExercise[] | null>;
 }
 
 export function WorkoutPlans() {
@@ -77,15 +85,61 @@ export function WorkoutPlans() {
   const [activeCardioPreset, setActiveCardioPreset] = useState('Moderado');
   const [cardioBlocks, setCardioBlocks] = useState<CardioBlock[]>([{ minutes: '20', intensity: 'Moderado' }]);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  const [draftSlots, setDraftSlots] = useState<WorkoutType[]>([]);
+  const [editBaseline, setEditBaseline] = useState<EditBaseline | null>(null);
 
-  const { setExercises, reorderExercises, reorderSlots, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, exportWorkout, exportAll, previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
+  const { setExercises, reorderExercises, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, applySlotOrder, exportWorkout, exportAll, previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
   const customWorkouts = useCustomWorkoutStore((s) => s.customWorkouts);
   const apiKey = useAIStore((s) => s.apiKey);
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
   const toast = useToastStore((s) => s.show);
 
-  const activeTypes = activeSlots;
+  const activeTypes = editing ? draftSlots : activeSlots;
+
+  useEffect(() => {
+    if (!editing) setDraftSlots(activeSlots);
+  }, [activeSlots, editing]);
+
+  const cloneWorkouts = (workouts: Record<WorkoutType, CustomExercise[] | null>) =>
+    Object.fromEntries(
+      WORKOUT_TYPES.map((type) => [
+        type,
+        workouts[type]?.map((exercise) => ({ ...exercise })) || null,
+      ]),
+    ) as Record<WorkoutType, CustomExercise[] | null>;
+
+  const hasDraftSlotChanges = draftSlots.join('|') !== activeSlots.join('|');
+
+  const enterEditMode = () => {
+    setDraftSlots(activeSlots);
+    setEditBaseline({
+      slots: [...activeSlots],
+      workouts: cloneWorkouts(customWorkouts || EMPTY_CUSTOM_WORKOUTS),
+    });
+    setEditing(true);
+  };
+
+  const saveEditMode = () => {
+    const nextSelectedIndex = draftSlots.indexOf(selected);
+    if (hasDraftSlotChanges) {
+      applySlotOrder(draftSlots);
+      setSelected(WORKOUT_TYPES[nextSelectedIndex] || 'A');
+    }
+    setEditing(false);
+    setEditBaseline(null);
+  };
+
+  const resetEditChanges = () => {
+    if (!editBaseline) return;
+    useCustomWorkoutStore.setState({
+      activeSlots: [...editBaseline.slots],
+      customWorkouts: cloneWorkouts(editBaseline.workouts),
+    });
+    setDraftSlots([...editBaseline.slots]);
+    if (!editBaseline.slots.includes(selected)) setSelected(editBaseline.slots[0] || 'A');
+    toast('Alterações redefinidas', 'info');
+  };
 
   const getVisibleExercises = (type: WorkoutType): Exercise[] => {
     const custom = customWorkouts?.[type];
@@ -221,9 +275,12 @@ export function WorkoutPlans() {
   const handleMoveSlot = (index: number, direction: -1 | 1) => {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= activeTypes.length) return;
-    reorderSlots(index, targetIndex);
-    setSelected((['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[targetIndex]);
-    toast('Ordem dos treinos atualizada', 'success');
+    const next = [...draftSlots];
+    const [moved] = next.splice(index, 1);
+    if (!moved) return;
+    next.splice(targetIndex, 0, moved);
+    setDraftSlots(next);
+    setSelected(moved);
   };
 
   const handleDelete = (id: string) => setDeleteTarget(id);
@@ -542,15 +599,26 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
     <div className="px-5 pt-14 pb-6">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-[26px] font-bold">Seus Treinos</h1>
+        <div className="flex items-center gap-2">
+        {editing && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={resetEditChanges}
+            className="px-3 py-2 rounded-xl text-sm font-semibold bg-white/5 text-white/55 border border-white/10 flex items-center gap-1.5"
+          >
+            <MaterialIcon name="restart_alt" className="text-base" /> Redefinir
+          </motion.button>
+        )}
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={() => setEditing(!editing)}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+          onClick={editing ? saveEditMode : enterEditMode}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
             editing ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' : 'bg-white/5 text-white/60 border border-white/10'
           }`}
         >
- {editing ? ' Salvar' : '️ Editar'}
+          <MaterialIcon name={editing ? 'check' : 'edit'} className="text-base" /> {editing ? 'Salvar' : 'Editar'}
         </motion.button>
+        </div>
       </div>
 
       {/* Action toolbar */}
@@ -583,14 +651,14 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
       {/* Tabs + Add Day */}
       {editing && (
         <p className="mb-2 text-[11px] text-white/35">
-          Ao mover, o treino assume a nova letra da posição: 1º vira A, 2º vira B, 3º vira C.
+          Enquanto edita, a ordem mostra os nomes atuais. Ao salvar, 1º vira A, 2º vira B, 3º vira C.
         </p>
       )}
       <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
         {activeTypes.map((type, index) => {
-          const positionType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index];
-          const previousType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index - 1];
-          const nextType = (['A', 'B', 'C', 'D', 'E'] as WorkoutType[])[index + 1];
+          const positionType = WORKOUT_TYPES[index];
+          const previousType = WORKOUT_TYPES[index - 1];
+          const nextType = WORKOUT_TYPES[index + 1];
 
           return (
             <div key={type} className={`${editing ? 'min-w-[126px]' : 'flex-1 min-w-[52px]'}`}>
@@ -603,8 +671,9 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               >
                 {editing ? (
                   <span className="flex flex-col items-center leading-tight">
-                    <span className="text-[10px] font-semibold opacity-60">{index + 1}º na ordem</span>
-                    <span className="text-base">Treino {positionType}</span>
+                    <span className="text-[10px] font-semibold opacity-60">{index + 1}º lugar</span>
+                    <span className="text-base">Treino {type}</span>
+                    <span className="text-[10px] opacity-50">vira {positionType} ao salvar</span>
                   </span>
                 ) : (
                   type
@@ -641,6 +710,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             onClick={() => {
               const slot = addSlot();
               if (slot) {
+                if (editing) setDraftSlots((slots) => [...slots, slot]);
                 toast(`Treino ${slot} adicionado!`, 'success');
                 setSelected(slot);
               }
@@ -737,7 +807,13 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                   <p className="text-white/30 text-xs">{formatExerciseConfig(exercise)} - {exercise.muscleGroup}</p>
                 </div>
                 {editing && (
- <button onClick={(event) => { event.stopPropagation(); handleDelete(exercise.id); }} className="text-red-400/60 text-lg px-1">️</button>
+                  <button
+                    onClick={(event) => { event.stopPropagation(); handleDelete(exercise.id); }}
+                    className="w-10 h-10 rounded-xl bg-red-500/10 text-red-300 flex items-center justify-center"
+                    aria-label={`Remover ${exercise.name}`}
+                  >
+                    <MaterialIcon name="delete" className="text-lg" />
+                  </button>
                 )}
               </div>
 
@@ -798,7 +874,9 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           >
             <div className="flex items-center justify-between px-5 pt-12 pb-4">
               <h2 className="text-lg font-bold">{manualSwapTargetId ? 'Escolha o substituto' : 'Catálogo de Exercícios'}</h2>
- <button onClick={() => { setShowCatalog(false); setCatalogFilter(''); setCatalogSearch(''); setManualSwapTargetId(null); }} className="text-white/40 text-xl"></button>
+ <button onClick={() => { setShowCatalog(false); setCatalogFilter(''); setCatalogSearch(''); setManualSwapTargetId(null); }} className="w-10 h-10 rounded-full bg-white/5 text-white/55 flex items-center justify-center" aria-label="Cancelar">
+                <MaterialIcon name="close" className="text-xl" />
+              </button>
             </div>
 
             <div className="px-5 pb-3">
@@ -914,6 +992,8 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                       <input
                         type="number"
                         inputMode="numeric"
+                        min="1"
+                        max="240"
                         value={block.minutes}
                         onChange={(e) => {
                           const next = [...cardioBlocks];
@@ -1003,6 +1083,8 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                           <input
                             type="number"
                             inputMode="numeric"
+                            min="1"
+                            max="50"
                             value={row.reps}
                             onChange={(e) => {
                               const next = [...setRows];
@@ -1031,6 +1113,9 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                         <p className="text-[10px] text-white/35 mb-1">Séries</p>
                         <input
                           type="number"
+                          inputMode="numeric"
+                          min="1"
+                          max="20"
                           value={setRows.length}
                           onChange={(e) => setSetRows(Array.from({ length: Math.max(1, Number(e.target.value) || 1) }, () => ({ reps: simpleRepsMax })))}
                           className="input-field text-sm text-center"
@@ -1038,11 +1123,11 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
                       </div>
                       <div>
                         <p className="text-[10px] text-white/35 mb-1">Rep min</p>
-                        <input type="number" value={simpleRepsMin} onChange={(e) => setSimpleRepsMin(Math.max(1, Number(e.target.value) || 1))} className="input-field text-sm text-center" />
+                        <input type="number" inputMode="numeric" min="1" max="50" value={simpleRepsMin} onChange={(e) => setSimpleRepsMin(Math.max(1, Number(e.target.value) || 1))} className="input-field text-sm text-center" />
                       </div>
                       <div>
                         <p className="text-[10px] text-white/35 mb-1">Rep max</p>
-                        <input type="number" value={simpleRepsMax} onChange={(e) => setSimpleRepsMax(Math.max(1, Number(e.target.value) || 1))} className="input-field text-sm text-center" />
+                        <input type="number" inputMode="numeric" min="1" max="50" value={simpleRepsMax} onChange={(e) => setSimpleRepsMax(Math.max(1, Number(e.target.value) || 1))} className="input-field text-sm text-center" />
                       </div>
                     </div>
                   )}
@@ -1236,6 +1321,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
           if (removeTarget) {
             const remaining = activeTypes.filter((t) => t !== removeTarget);
             removeSlot(removeTarget);
+            if (editing) setDraftSlots((slots) => slots.filter((type) => type !== removeTarget));
             toast(`Treino ${removeTarget} removido`, 'info');
             if (selected === removeTarget) setSelected(remaining[0] || 'A');
           }

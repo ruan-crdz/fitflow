@@ -33,6 +33,20 @@ export function Onboarding({ onBack }: OnboardingProps) {
     );
   };
 
+  const onlyInteger = (value: string) => value.replace(/\D/g, '');
+  const onlyDecimal = (value: string) => {
+    const clean = value.replace(/[^\d.,]/g, '').replace(',', '.');
+    const [whole, decimal = ''] = clean.split('.');
+    return decimal ? `${whole}.${decimal.slice(0, 1)}` : whole;
+  };
+
+  const ageNumber = Number(age);
+  const weightNumber = Number(weight);
+  const heightNumber = Number(height);
+  const bodyValid = ageNumber >= 10 && ageNumber <= 100
+    && weightNumber >= 30 && weightNumber <= 300
+    && heightNumber >= 100 && heightNumber <= 250;
+
   const saveProfile = () => {
     setProfile({
       name, age: Number(age), weight: Number(weight), height: Number(height),
@@ -217,18 +231,46 @@ export function Onboarding({ onBack }: OnboardingProps) {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm text-white/40 mb-1 block">Idade</label>
-                  <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="25" className="input-field" />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="10"
+                    max="100"
+                    value={age}
+                    onChange={(e) => setAge(onlyInteger(e.target.value).slice(0, 3))}
+                    placeholder="25"
+                    className="input-field"
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-white/40 mb-1 block">Peso (kg)</label>
-                  <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="70" className="input-field" step="0.1" />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="30"
+                    max="300"
+                    value={weight}
+                    onChange={(e) => setWeight(onlyDecimal(e.target.value).slice(0, 5))}
+                    placeholder="70"
+                    className="input-field"
+                    step="0.1"
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-white/40 mb-1 block">Altura (cm)</label>
-                  <input type="number" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="170" className="input-field" />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="100"
+                    max="250"
+                    value={height}
+                    onChange={(e) => setHeight(onlyInteger(e.target.value).slice(0, 3))}
+                    placeholder="170"
+                    className="input-field"
+                  />
                 </div>
               </div>
-              <button className="btn-primary" disabled={!age || !weight || !height} onClick={() => setStep('goal')}>
+              <button className="btn-primary" disabled={!bodyValid} onClick={() => setStep('goal')}>
                 Continuar
               </button>
             </div>

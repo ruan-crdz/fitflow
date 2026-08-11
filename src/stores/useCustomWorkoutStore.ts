@@ -34,6 +34,7 @@ interface CustomWorkoutState {
   setExercises: (type: WorkoutType, exercises: CustomExercise[]) => void;
   reorderExercises: (type: WorkoutType, fromIndex: number, toIndex: number) => void;
   reorderSlots: (fromIndex: number, toIndex: number) => void;
+  applySlotOrder: (orderedSlots: WorkoutType[]) => void;
   resetWorkout: (type: WorkoutType) => void;
   swapExercise: (type: WorkoutType, oldId: string, newExercise: CustomExercise) => void;
   addSlot: () => WorkoutType | null;
@@ -137,6 +138,22 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
           const nextSlots = orderedOldSlots.map((_, index) => WORKOUT_TYPES[index]);
 
           orderedOldSlots.forEach((oldType, index) => {
+            const newType = WORKOUT_TYPES[index];
+            const source = prev[oldType] || cloneDefaultWorkout(oldType);
+            nextWorkouts[newType] = source ? source.map((e) => ({ ...e })) : null;
+          });
+
+          return { activeSlots: nextSlots, customWorkouts: nextWorkouts };
+        }),
+
+      applySlotOrder: (orderedSlots) =>
+        set((state) => {
+          if (orderedSlots.length === 0) return state;
+          const prev = state.customWorkouts || EMPTY_WORKOUTS;
+          const nextWorkouts: Record<WorkoutType, CustomExercise[] | null> = { ...EMPTY_WORKOUTS };
+          const nextSlots = orderedSlots.map((_, index) => WORKOUT_TYPES[index]);
+
+          orderedSlots.forEach((oldType, index) => {
             const newType = WORKOUT_TYPES[index];
             const source = prev[oldType] || cloneDefaultWorkout(oldType);
             nextWorkouts[newType] = source ? source.map((e) => ({ ...e })) : null;

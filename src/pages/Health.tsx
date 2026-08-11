@@ -59,7 +59,7 @@ export function Health() {
   const [mealResult, setMealResult] = useState<{ name: string; description: string; calories: number; protein: number; carbs: number; fat: number } | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { shortcuts, recents, addShortcut, addRecent } = useMealStore();
+  const { shortcuts, recents, addShortcut, addRecent, removeShortcut } = useMealStore();
 
   const calories = calculateTDEE(profile);
   const macros = calculateMacros(calories, profile.goal);
@@ -350,7 +350,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
         <div className="relative h-4 bg-dark-300 rounded-full overflow-hidden">
           <motion.div
-            className={`h-full rounded-full ${progressCalories >= 1 ? 'bg-red-500' : 'bg-gradient-to-r from-green-500 to-emerald-400'}`}
+            className={`h-full rounded-full ${progressCalories >= 1 ? 'bg-red-500' : 'bg-primary-500'}`}
             initial={{ width: 0 }}
             animate={{ width: `${progressCalories * 100}%` }}
             transition={{ type: 'spring', stiffness: 80 }}
@@ -359,24 +359,24 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
 
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
-            <p className="text-lg font-bold text-emerald-400">{totals.calories}</p>
+            <p className={`text-lg font-bold ${progressCalories >= 1 ? 'text-red-400' : 'text-primary-300'}`}>{totals.calories}</p>
             <p className="text-[10px] text-white/40">Consumidas</p>
           </div>
           <div>
-            <p className="text-lg font-bold text-orange-400">{burned}</p>
+            <p className="text-lg font-bold text-primary-300">{burned}</p>
             <p className="text-[10px] text-white/40">Queimadas</p>
           </div>
           <div>
-            <p className={`text-lg font-bold ${remaining > 0 ? 'text-blue-400' : 'text-red-400'}`}>{remaining}</p>
+            <p className={`text-lg font-bold ${remaining > 0 ? 'text-primary-300' : 'text-red-400'}`}>{remaining}</p>
             <p className="text-[10px] text-white/40">{remaining > 0 ? 'Restantes' : 'Excedido'}</p>
           </div>
         </div>
 
         {/* Macro bars */}
         <div className="space-y-2 pt-2 border-t border-white/5">
-          <MacroBar label="Proteína" current={totals.protein} goal={macros.protein} color="bg-red-400" />
-          <MacroBar label="Carboidratos" current={totals.carbs} goal={macros.carbs} color="bg-yellow-400" />
-          <MacroBar label="Gorduras" current={totals.fat} goal={macros.fat} color="bg-green-400" />
+          <MacroBar label="Proteína" current={totals.protein} goal={macros.protein} color="bg-primary-500" />
+          <MacroBar label="Carboidratos" current={totals.carbs} goal={macros.carbs} color="bg-primary-500" />
+          <MacroBar label="Gorduras" current={totals.fat} goal={macros.fat} color="bg-primary-500" />
         </div>
       </div>
 
@@ -392,17 +392,17 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
         </div>
         <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+            className="h-full rounded-full bg-primary-500"
             animate={{ width: `${Math.min(waterGlasses / waterGoal, 1) * 100}%` }}
             transition={{ type: 'spring', stiffness: 100 }}
           />
         </div>
         <div className="flex items-center justify-between">
           <button onClick={removeGlass} disabled={waterGlasses <= 0} className="w-9 h-9 rounded-full bg-dark-300 flex items-center justify-center text-white/50 disabled:opacity-30">−</button>
-          <p className="text-sm text-white/60">{waterGlasses} / {waterGoal} copos</p>
-          <button onClick={addGlass} className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">+</button>
+          <p className="text-sm text-primary-300 font-semibold">{waterGlasses} / {waterGoal} copos</p>
+          <button onClick={addGlass} className="w-9 h-9 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-300 font-bold">+</button>
         </div>
-        {waterGlasses >= waterGoal && <p className="text-center text-xs text-green-400">Meta atingida!</p>}
+        {waterGlasses >= waterGoal && <p className="text-center text-xs text-primary-300">Meta atingida!</p>}
       </div>
       )}
 
@@ -520,19 +520,19 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                     <p className="text-xs text-white/30 text-center">{mealResult.description}</p>
                     <div className="grid grid-cols-4 gap-2 text-center pt-3 border-t border-white/5">
                       <div>
-                        <p className="text-xl font-bold text-orange-400">{mealResult.calories}</p>
+                        <p className="text-xl font-bold text-primary-300">{mealResult.calories}</p>
                         <p className="text-[9px] text-white/30">kcal</p>
                       </div>
                       <div>
-                        <p className="text-xl font-bold text-red-400">{mealResult.protein}g</p>
+                        <p className="text-xl font-bold text-primary-300">{mealResult.protein}g</p>
                         <p className="text-[9px] text-white/30">proteína</p>
                       </div>
                       <div>
-                        <p className="text-xl font-bold text-yellow-400">{mealResult.carbs}g</p>
+                        <p className="text-xl font-bold text-primary-300">{mealResult.carbs}g</p>
                         <p className="text-[9px] text-white/30">carbs</p>
                       </div>
                       <div>
-                        <p className="text-xl font-bold text-green-400">{mealResult.fat}g</p>
+                        <p className="text-xl font-bold text-primary-300">{mealResult.fat}g</p>
                         <p className="text-[9px] text-white/30">gordura</p>
                       </div>
                     </div>
@@ -554,14 +554,22 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                       <p className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">⭐ Atalhos</p>
                       <div className="flex flex-wrap gap-2">
                         {shortcuts.map((meal) => (
-                          <motion.button
-                            key={meal.id}
-                            whileTap={{ scale: 0.92 }}
-                            onClick={() => handleQuickAdd(meal)}
-                            className="px-3 py-2 rounded-xl bg-primary-500/10 border border-primary-500/20 text-xs text-primary-300 font-medium"
-                          >
-                            {meal.name} <span className="text-white/30">({meal.calories}kcal)</span>
-                          </motion.button>
+                          <div key={meal.id} className="flex items-center rounded-xl bg-primary-500/10 border border-primary-500/20 overflow-hidden">
+                            <motion.button
+                              whileTap={{ scale: 0.92 }}
+                              onClick={() => handleQuickAdd(meal)}
+                              className="px-3 py-2 text-xs text-primary-300 font-medium"
+                            >
+                              {meal.name} <span className="text-white/30">({meal.calories}kcal)</span>
+                            </motion.button>
+                            <button
+                              onClick={() => removeShortcut(meal.id)}
+                              className="self-stretch px-2 border-l border-primary-500/20 text-primary-300 flex items-center"
+                              aria-label={`Remover ${meal.name} dos atalhos`}
+                            >
+                              <MaterialIcon name="close" className="text-sm" />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -606,6 +614,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                         <input
                           type="number"
                           inputMode="numeric"
+                          min="0"
                           value={ing.amount}
                           onChange={(e) => {
                             const next = [...ingredients];
@@ -633,6 +642,7 @@ RESPONDA JSON: {"name":"descrição curta","calories":número,"protein":gramas,"
                         <input
                           type="number"
                           inputMode="numeric"
+                          min="0"
                           value={ing.calories || ''}
                           onChange={(e) => {
                             const next = [...ingredients];
@@ -771,10 +781,10 @@ function GroupedEntry({ group, onAdd, onRemove }: { group: EntryGroup; onAdd: (e
             P:{group.totalProtein}g • C:{group.totalCarbs}g • G:{group.totalFat}g
           </p>
         </div>
-        <p className="text-sm font-bold text-orange-400 shrink-0">{group.totalCalories}</p>
+        <p className="text-sm font-bold text-primary-300 shrink-0">{group.totalCalories}</p>
         <div className="flex items-center gap-1 shrink-0 ml-1">
           <button onClick={handleRemoveOne} className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 text-xs font-bold active:scale-90 transition-transform">−</button>
-          <button onClick={handleAdd} className="w-7 h-7 rounded-full bg-green-500/10 flex items-center justify-center text-green-400 text-xs font-bold active:scale-90 transition-transform">+</button>
+          <button onClick={handleAdd} className="w-7 h-7 rounded-full bg-primary-500/10 flex items-center justify-center text-primary-300 text-xs font-bold active:scale-90 transition-transform">+</button>
         </div>
       </motion.div>
     </motion.div>
