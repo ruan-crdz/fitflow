@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
@@ -263,6 +263,8 @@ export function Social() {
   const [editingMessageText, setEditingMessageText] = useState('');
   const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const messageLongPressRef = useRef<number | null>(null);
 
   const currentUserId = session?.user.id || '';
   const acceptedFriendIds = useMemo(() => friendships
@@ -310,6 +312,7 @@ export function Social() {
       || (message.sender_id === chatPeerId && message.receiver_id === currentUserId)
     )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
       .filter((message) => !message.deleted_at)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     : [];
   const rankingRows = rankingStats
     .filter((stats) => rankingMode === 'general' || stats.user_id === currentUserId || acceptedFriendIds.includes(stats.user_id))
@@ -547,6 +550,13 @@ export function Social() {
     if (!chatPeerId || !socialReady) return;
     markChatRead(chatPeerId);
   }, [chatPeerId, socialReady, messages.length]);
+
+  useEffect(() => {
+    if (!chatPeerId) return;
+    requestAnimationFrame(() => {
+      chatEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+    });
+  }, [chatPeerId, chatMessages.length]);
 
   useEffect(() => {
     const term = searchUsername.trim();
@@ -1245,6 +1255,21 @@ export function Social() {
     else await refreshMessages();
   }
 
+  function startMessageLongPress(messageId: string, enabled: boolean) {
+    if (!enabled) return;
+    if (messageLongPressRef.current) window.clearTimeout(messageLongPressRef.current);
+    messageLongPressRef.current = window.setTimeout(() => {
+      setMessageMenuOpenId(messageId);
+      messageLongPressRef.current = null;
+    }, 450);
+  }
+
+  function cancelMessageLongPress() {
+    if (!messageLongPressRef.current) return;
+    window.clearTimeout(messageLongPressRef.current);
+    messageLongPressRef.current = null;
+  }
+
   function markChatRead(peerId: string) {
     void updateChatPreference(peerId, { last_read_at: new Date().toISOString() }, false);
   }
@@ -1444,7 +1469,18 @@ export function Social() {
             const mine = message.sender_id === currentUserId;
             return (
               <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                <div className={`relative max-w-[78%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}>
+                <div
+                  onPointerDown={() => startMessageLongPress(message.id, mine && editingMessageId !== message.id)}
+                  onPointerUp={cancelMessageLongPress}
+                  onPointerLeave={cancelMessageLongPress}
+                  onPointerCancel={cancelMessageLongPress}
+                  onContextMenu={(event) => {
+                    if (!mine || editingMessageId === message.id) return;
+                    event.preventDefault();
+                    setMessageMenuOpenId(message.id);
+                  }}
+                  className={`relative max-w-[78%] select-none rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}
+                >
                   {message.media_url && message.media_type === 'image' && (
                     <img src={message.media_url} alt="" className="mb-2 max-h-72 rounded-xl object-cover" />
                   )}
@@ -1468,17 +1504,17 @@ export function Social() {
                   {message.edited_at && editingMessageId !== message.id && (
                     <p className={`mt-1 text-[10px] ${mine ? 'text-white/55' : 'text-white/30'}`}>editado</p>
                   )}
-                  {mine && editingMessageId !== message.id && (
-                    <div className="mt-1 flex justify-end" data-social-menu>
+                  {mine && editingMessageId !== message.id && messageMenuOpenId === message.id && (
+                    <div className="absolute right-full top-1/2 z-[90] mr-2 w-40 -translate-y-1/2" data-social-menu>
                       <button
                         onClick={() => setMessageMenuOpenId((id) => (id === message.id ? null : message.id))}
-                        className="w-7 h-7 rounded-full bg-white/10 text-white/65 flex items-center justify-center"
+                        className="hidden"
                         aria-label="Opções da mensagem"
                       >
                         <MaterialIcon name="more_horiz" className="text-base" />
                       </button>
                       {messageMenuOpenId === message.id && (
-                        <div className="absolute right-0 bottom-8 z-[90] w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                        <div className="w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
                           {message.body && (
                             <button
                               onClick={() => {
@@ -1512,6 +1548,7 @@ export function Social() {
               Comece a conversa com {chatPeer?.display_name || 'esse amigo'}.
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
         <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-2 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
