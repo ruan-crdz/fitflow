@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
+import { useHistoryStore } from '@/stores/useHistoryStore';
+import { useWaterStore } from '@/stores/useWaterStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useAIConfigStore, AI_PERSONALITIES, type AIPersonality } from '@/stores/useAIConfigStore';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
@@ -16,6 +18,8 @@ import { syncNativeHealth } from '@/utils/healthIntegration';
 import { getToday } from '@/utils/date';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
 import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
+import { buildShortcutUrl, buildTrainingCalendarIcs, downloadTextFile } from '@/utils/webIntegrations';
+import { useToastStore } from '@/stores/useToastStore';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingLocation } from '@/types';
 
 const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
@@ -27,6 +31,9 @@ const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
 export function Profile() {
   const navigate = useNavigate();
   const { profile, updateProfile } = useProfileStore();
+  const sessions = useHistoryStore((s) => s.sessions);
+  const waterLogs = useWaterStore((s) => s.logs);
+  const showToast = useToastStore((s) => s.show);
   const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
   const { assistantName, personality, setAssistantName, setPersonality, resetAIConfig } = useAIConfigStore();
   const { themeId, setTheme } = useThemeStore();
@@ -65,6 +72,9 @@ export function Profile() {
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [manualSteps, setManualSteps] = useState(String(healthSummary.steps || ''));
   const [manualCalories, setManualCalories] = useState(String(healthSummary.activeCalories || ''));
+
+  const todayWater = waterLogs[today] || 0;
+  const completedWorkouts = sessions.filter((session) => session.completedAt).length;
 
   const [name, setName] = useState(profile?.name || '');
   const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'undisclosed');
@@ -129,6 +139,48 @@ export function Profile() {
       setHealthError(err instanceof Error ? err.message : 'Integração indisponível.');
     } finally {
       setHealthSyncing(false);
+    }
+  };
+
+  const copyShortcut = async (type: 'water' | 'start' | 'weight') => {
+    try {
+      const url = type === 'water'
+        ? buildShortcutUrl('add_water', { amount: 1 })
+        : type === 'start'
+          ? buildShortcutUrl('start_workout')
+          : buildShortcutUrl('log_weight', { value: Number(profile.weight).toFixed(1) });
+      await navigator.clipboard.writeText(url);
+      showToast('Atalho copiado. Cole no app Atalhos do iPhone.', 'success');
+    } catch {
+      showToast('Não consegui copiar. Tente novamente.', 'error');
+    }
+  };
+
+  const exportTrainingCalendar = () => {
+    const ics = buildTrainingCalendarIcs(profile, 8);
+    if (!ics) {
+      showToast('Defina seus dias de treino primeiro.', 'error');
+      return;
+    }
+    downloadTextFile('fitflow-treinos.ics', ics);
+    showToast('Calendário de treino baixado.', 'success');
+  };
+
+  const shareProgress = async () => {
+    const text = `${profile.name} no FitFlow: ${completedWorkouts} treinos concluídos, ${todayWater} copo(s) de água hoje.`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Meu progresso no FitFlow', text });
+        return;
+      } catch {
+        // segue para fallback
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Resumo copiado para compartilhar.', 'success');
+    } catch {
+      showToast('Não consegui compartilhar agora.', 'error');
     }
   };
 
@@ -588,6 +640,36 @@ export function Profile() {
                 </button>
               )}
             </div>
+          </div>
+
+          <div className="card space-y-3 border border-primary-500/20">
+            <h2 className="font-semibold text-white/80 flex items-center gap-2">
+              <MaterialIcon name="link" className="text-primary-300" />
+              Integrações web (iPhone)
+            </h2>
+            <p className="text-xs text-white/45">
+              Funciona sem app nativo: use o app Atalhos da Apple, calendário e compartilhamento do iPhone.
+            </p>
+
+            <div className="grid grid-cols-1 gap-2">
+              <button onClick={() => void copyShortcut('water')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
+                Copiar atalho: +1 copo d'água
+              </button>
+              <button onClick={() => void copyShortcut('start')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
+                Copiar atalho: iniciar treino de hoje
+              </button>
+              <button onClick={() => void copyShortcut('weight')} className="py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-left px-3">
+                Copiar atalho: registrar peso atual
+              </button>
+            </div>
+
+            <button onClick={exportTrainingCalendar} className="w-full py-3 rounded-xl bg-primary-500 text-white text-sm font-semibold">
+              Baixar calendário de treinos (.ics)
+            </button>
+
+            <button onClick={() => void shareProgress()} className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-semibold">
+              Compartilhar progresso
+            </button>
           </div>
 
           {/* AI Section */}
