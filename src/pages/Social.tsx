@@ -52,6 +52,7 @@ interface Post {
   id: string;
   user_id: string;
   body: string | null;
+  comments_enabled?: boolean;
   created_at: string;
 }
 
@@ -73,6 +74,11 @@ interface Comment {
   user_id: string;
   body: string;
   created_at: string;
+}
+
+interface CommentLike {
+  comment_id: string;
+  user_id: string;
 }
 
 interface WorkoutShare {
@@ -114,7 +120,7 @@ const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
 
 function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
-  if (lower.includes('media_type') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
+  if (lower.includes('media_type') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache')) {
     return 'Seu Supabase ainda está com o schema antigo. Rode supabase/social-feed-upgrade.sql no SQL Editor.';
   }
   if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado. Desative a confirmação no Supabase ou confirme esse usuário.';
@@ -189,6 +195,7 @@ export function Social() {
   const [images, setImages] = useState<PostImage[]>([]);
   const [likes, setLikes] = useState<Like[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentLikes, setCommentLikes] = useState<CommentLike[]>([]);
   const [shares, setShares] = useState<WorkoutShare[]>([]);
   const [messages, setMessages] = useState<SocialMessage[]>([]);
   const [chatPreferences, setChatPreferences] = useState<Record<string, ChatPreference>>({});
@@ -207,6 +214,8 @@ export function Social() {
   const [postMenuOpenId, setPostMenuOpenId] = useState<string | null>(null);
   const [postFiles, setPostFiles] = useState<File[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
   const [searchUsername, setSearchUsername] = useState('');
   const [searchResults, setSearchResults] = useState<SocialProfile[]>([]);
@@ -315,6 +324,7 @@ export function Social() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, () => void refreshFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, () => void refreshFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, () => void refreshFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, () => void refreshFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, () => void refreshMessages())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, () => void refreshChatPreferences())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void refreshFriends())
@@ -435,11 +445,12 @@ export function Social() {
 
   async function refreshFeed() {
     if (!supabase) return;
-    const [{ data: postData }, { data: imageData }, { data: likeData }, { data: commentData }] = await Promise.all([
+    const [{ data: postData }, { data: imageData }, { data: likeData }, { data: commentData }, { data: commentLikeData }] = await Promise.all([
       supabase.from('social_posts').select('*').order('created_at', { ascending: false }).limit(100),
       supabase.from('social_post_images').select('*').order('position', { ascending: true }),
       supabase.from('social_post_likes').select('*'),
       supabase.from('social_post_comments').select('*').order('created_at', { ascending: true }),
+      supabase.from('social_post_comment_likes').select('*'),
     ]);
     const postList = (postData || []) as Post[];
     const commentList = (commentData || []) as Comment[];
@@ -447,6 +458,7 @@ export function Social() {
     setImages((imageData || []) as PostImage[]);
     setLikes((likeData || []) as Like[]);
     setComments(commentList);
+    setCommentLikes((commentLikeData || []) as CommentLike[]);
     await loadProfiles([...postList.map((p) => p.user_id), ...commentList.map((c) => c.user_id)]);
   }
 
@@ -674,6 +686,11 @@ export function Social() {
 
   async function addComment(postId: string) {
     if (!supabase || !session || !commentText[postId]?.trim()) return;
+    const post = posts.find((item) => item.id === postId);
+    if (post?.comments_enabled === false) {
+      toast('Comentários desativados nessa postagem.', 'info');
+      return;
+    }
     if (commentText[postId].trim().length > 240) {
       toast('Comentário muito grande. Use até 240 caracteres.', 'error');
       return;
@@ -686,6 +703,72 @@ export function Social() {
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setCommentText((prev) => ({ ...prev, [postId]: '' }));
+      await refreshFeed();
+    }
+  }
+
+  async function updateComment(commentId: string) {
+    if (!supabase || !session || !editingCommentText.trim()) return;
+    if (editingCommentText.trim().length > 240) {
+      toast('Comentário muito grande. Use até 240 caracteres.', 'error');
+      return;
+    }
+    const { error } = await supabase
+      .from('social_post_comments')
+      .update({ body: editingCommentText.trim() })
+      .eq('id', commentId)
+      .eq('user_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      setEditingCommentId(null);
+      setEditingCommentText('');
+      await refreshFeed();
+    }
+  }
+
+  async function deleteComment(comment: Comment) {
+    if (!supabase || !session) return;
+    const post = posts.find((item) => item.id === comment.post_id);
+    const canDelete = comment.user_id === session.user.id || post?.user_id === session.user.id;
+    if (!canDelete) return;
+    const { error } = await supabase.from('social_post_comments').delete().eq('id', comment.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else await refreshFeed();
+  }
+
+  async function toggleCommentLike(commentId: string) {
+    if (!supabase || !session) return;
+    const liked = commentLikes.some((like) => like.comment_id === commentId && like.user_id === session.user.id);
+    const optimisticLike = { comment_id: commentId, user_id: session.user.id };
+    setCommentLikes((prev) => (
+      liked
+        ? prev.filter((like) => !(like.comment_id === commentId && like.user_id === session.user.id))
+        : [...prev, optimisticLike]
+    ));
+    const { error } = liked
+      ? await supabase.from('social_post_comment_likes').delete().eq('comment_id', commentId).eq('user_id', session.user.id)
+      : await supabase.from('social_post_comment_likes').insert(optimisticLike);
+    if (error) {
+      setCommentLikes((prev) => (
+        liked
+          ? [...prev, optimisticLike]
+          : prev.filter((like) => !(like.comment_id === commentId && like.user_id === session.user.id))
+      ));
+      toast(ptSupabaseError(error.message), 'error');
+    }
+  }
+
+  async function togglePostComments(post: Post) {
+    if (!supabase || !session || post.user_id !== session.user.id) return;
+    const next = post.comments_enabled === false;
+    const { error } = await supabase
+      .from('social_posts')
+      .update({ comments_enabled: next })
+      .eq('id', post.id)
+      .eq('user_id', session.user.id);
+    if (error) toast(ptSupabaseError(error.message), 'error');
+    else {
+      toast(next ? 'Comentários ativados.' : 'Comentários desativados.', 'success');
       await refreshFeed();
     }
   }
@@ -1364,13 +1447,20 @@ export function Social() {
                       <MaterialIcon name="more_horiz" className="text-xl" />
                     </button>
                     {postMenuOpenId === post.id && (
-                      <div className="absolute right-0 top-11 z-20 w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                      <div className="absolute right-0 top-11 z-20 w-56 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
                         <button
                           onClick={() => { setPostMenuOpenId(null); startEditPost(post); }}
                           className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
                         >
                           <MaterialIcon name="edit" className="text-base text-primary-300" />
                           Editar
+                        </button>
+                        <button
+                          onClick={() => { setPostMenuOpenId(null); void togglePostComments(post); }}
+                          className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 border-t border-white/5 active:bg-white/5"
+                        >
+                          <MaterialIcon name={post.comments_enabled === false ? 'forum' : 'comments_disabled'} className="text-base text-primary-300" />
+                          {post.comments_enabled === false ? 'Ativar comentários' : 'Desativar comentários'}
                         </button>
                         <button
                           onClick={() => { setPostMenuOpenId(null); void deletePost(post.id); }}
@@ -1402,15 +1492,70 @@ export function Social() {
                 <span className="text-xs text-white/35">{postComments.length} comentário(s)</span>
               </div>
               <div className="space-y-2">
-                {postComments.slice(-3).map((comment) => (
-                  <p key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60 whitespace-pre-wrap break-words">
-                    <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button> {comment.body}
-                  </p>
-                ))}
-                <div className="flex gap-2">
-                  <input value={commentText[post.id] || ''} onChange={(e) => setCommentText((prev) => ({ ...prev, [post.id]: e.target.value.slice(0, 240) }))} maxLength={240} className="input-field text-sm" placeholder="Comentar..." />
-                  <button onClick={() => addComment(post.id)} className="w-12 rounded-xl bg-primary-500 text-white font-bold flex items-center justify-center" aria-label="Enviar comentário"><MaterialIcon name="send" /></button>
-                </div>
+                {postComments.length > 0 && (
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-2 rounded-2xl">
+                    {postComments.map((comment) => {
+                      const ownComment = comment.user_id === currentUserId;
+                      const canDeleteComment = ownComment || post.user_id === currentUserId;
+                      const likesForComment = commentLikes.filter((like) => like.comment_id === comment.id);
+                      const likedComment = likesForComment.some((like) => like.user_id === currentUserId);
+
+                      return (
+                        <div key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60 space-y-2">
+                          {editingCommentId === comment.id ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingCommentText}
+                                onChange={(e) => setEditingCommentText(e.target.value.slice(0, 240))}
+                                maxLength={240}
+                                className="input-field text-xs min-h-20 resize-none"
+                              />
+                              <div className="flex gap-2">
+                                <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="flex-1 py-2 rounded-xl bg-white/5 text-white/45 font-semibold">Cancelar</button>
+                                <button onClick={() => updateComment(comment.id)} className="flex-1 py-2 rounded-xl bg-primary-500 text-white font-bold">Salvar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="whitespace-pre-wrap break-words">
+                                <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button> {comment.body}
+                              </p>
+                              <div className="flex items-center justify-between gap-2">
+                                <button onClick={() => toggleCommentLike(comment.id)} className={`flex items-center gap-1 text-[11px] font-bold ${likedComment ? 'text-primary-300' : 'text-white/35'}`}>
+                                  <MaterialIcon name="fitness_center" variant={likedComment ? 'filled' : 'outlined'} className="text-base" />
+                                  {likesForComment.length}
+                                </button>
+                                <div className="flex items-center gap-2">
+                                  {ownComment && (
+                                    <button
+                                      onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.body); }}
+                                      className="text-[11px] text-white/35 font-semibold"
+                                    >
+                                      Editar
+                                    </button>
+                                  )}
+                                  {canDeleteComment && (
+                                    <button onClick={() => deleteComment(comment)} className="text-[11px] text-red-300 font-semibold">
+                                      Apagar
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {post.comments_enabled === false ? (
+                  <p className="rounded-xl bg-white/5 px-3 py-3 text-center text-xs text-white/35">Comentários desativados.</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <input value={commentText[post.id] || ''} onChange={(e) => setCommentText((prev) => ({ ...prev, [post.id]: e.target.value.slice(0, 240) }))} maxLength={240} className="input-field text-sm" placeholder="Comentar..." />
+                    <button onClick={() => addComment(post.id)} className="w-12 rounded-xl bg-primary-500 text-white font-bold flex items-center justify-center" aria-label="Enviar comentário"><MaterialIcon name="send" /></button>
+                  </div>
+                )}
               </div>
             </div>
           );

@@ -202,8 +202,12 @@ create table if not exists public.social_posts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.social_profiles(id) on delete cascade,
   body text check (char_length(coalesce(body, '')) <= 2000),
+  comments_enabled boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+alter table public.social_posts
+  add column if not exists comments_enabled boolean not null default true;
 
 create table if not exists public.social_post_images (
   id uuid primary key default gen_random_uuid(),
@@ -227,10 +231,18 @@ create table if not exists public.social_post_comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.social_post_comment_likes (
+  comment_id uuid not null references public.social_post_comments(id) on delete cascade,
+  user_id uuid not null references public.social_profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (comment_id, user_id)
+);
+
 alter table public.social_posts enable row level security;
 alter table public.social_post_images enable row level security;
 alter table public.social_post_likes enable row level security;
 alter table public.social_post_comments enable row level security;
+alter table public.social_post_comment_likes enable row level security;
 
 drop policy if exists "posts are public readable" on public.social_posts;
 drop policy if exists "users create own posts" on public.social_posts;
@@ -243,7 +255,12 @@ drop policy if exists "users like as themselves" on public.social_post_likes;
 drop policy if exists "users remove own likes" on public.social_post_likes;
 drop policy if exists "comments public readable" on public.social_post_comments;
 drop policy if exists "users comment as themselves" on public.social_post_comments;
+drop policy if exists "users update own comments" on public.social_post_comments;
 drop policy if exists "users delete own comments" on public.social_post_comments;
+drop policy if exists "users delete own or received comments" on public.social_post_comments;
+drop policy if exists "comment likes public readable" on public.social_post_comment_likes;
+drop policy if exists "users like comments as themselves" on public.social_post_comment_likes;
+drop policy if exists "users remove own comment likes" on public.social_post_comment_likes;
 
 create policy "posts are public readable"
   on public.social_posts for select
@@ -299,12 +316,55 @@ create policy "comments public readable"
 create policy "users comment as themselves"
   on public.social_post_comments for insert
   to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.social_posts p
+      where p.id = post_id
+        and p.comments_enabled = true
+    )
+  );
+
+create policy "users update own comments"
+  on public.social_post_comments for update
+  to authenticated
+  using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create policy "users delete own comments"
+create policy "users delete own or received comments"
   on public.social_post_comments for delete
   to authenticated
+  using (
+    auth.uid() = user_id
+    or exists (
+      select 1
+      from public.social_posts p
+      where p.id = post_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+create policy "comment likes public readable"
+  on public.social_post_comment_likes for select
+  to authenticated
+  using (true);
+
+create policy "users like comments as themselves"
+  on public.social_post_comment_likes for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "users remove own comment likes"
+  on public.social_post_comment_likes for delete
+  to authenticated
   using (auth.uid() = user_id);
+
+create index if not exists social_post_comments_post_idx
+  on public.social_post_comments (post_id, created_at asc);
+
+create index if not exists social_post_comment_likes_comment_idx
+  on public.social_post_comment_likes (comment_id, created_at desc);
 
 insert into storage.buckets (id, name, public)
 values ('social-posts', 'social-posts', true)
