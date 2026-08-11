@@ -482,6 +482,14 @@ export function Social() {
     });
   }
 
+  function getScrollSnapshot() {
+    const page = document.scrollingElement || document.documentElement;
+    return {
+      top: page.scrollTop,
+      height: page.scrollHeight,
+    };
+  }
+
   useEffect(() => () => {
     postPreviews.forEach((preview) => URL.revokeObjectURL(preview.url));
   }, [postPreviews]);
@@ -539,10 +547,10 @@ export function Social() {
     });
     const channel = client
       .channel(`social-${session.user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, () => void refreshFeed())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, () => void refreshFeed())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, () => void refreshFeed())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, () => void refreshFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_posts' }, () => void refreshFeed(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_likes' }, () => void refreshFeed(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, () => void refreshFeed(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, () => void refreshFeed(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, () => void refreshMessages())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, () => void refreshChatPreferences())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void refreshFriends())
@@ -557,7 +565,7 @@ export function Social() {
   useEffect(() => {
     if (!session || !supabase || !socialReady) return;
     const interval = window.setInterval(() => {
-      void refreshFeed();
+      void refreshFeed(true);
       void refreshRanking();
     }, 5000);
     return () => window.clearInterval(interval);
@@ -691,8 +699,9 @@ export function Social() {
     await loadProfiles(list.flatMap((f) => [f.requester_id, f.addressee_id]));
   }
 
-  async function refreshFeed() {
+  async function refreshFeed(preserveScroll = false) {
     if (!supabase) return;
+    const scrollSnapshot = preserveScroll ? getScrollSnapshot() : null;
     const [{ data: postData }, { data: imageData }, { data: likeData }, { data: commentData }, { data: commentLikeData }] = await Promise.all([
       supabase.from('social_posts').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(100),
       supabase.from('social_post_images').select('*').order('position', { ascending: true }),
@@ -712,6 +721,7 @@ export function Social() {
       ...(likeData || []).map((like: Like) => like.user_id),
       ...commentList.map((c) => c.user_id),
     ]);
+    if (scrollSnapshot) restoreScrollAfterContentGrowth(scrollSnapshot.top, scrollSnapshot.height);
   }
 
   async function refreshShares() {
@@ -870,7 +880,7 @@ export function Social() {
         setEditingPostId(null);
         setShowPostModal(false);
         toast('Publicação atualizada!', 'success');
-        await refreshFeed();
+        await refreshFeed(true);
       }
       setLoading(false);
       return;
@@ -886,7 +896,7 @@ export function Social() {
       setPostFiles([]);
       setShowPostModal(false);
       toast('Publicação publicada!', 'success');
-      await refreshFeed();
+      await refreshFeed(true);
     }
     setLoading(false);
   }
@@ -906,7 +916,7 @@ export function Social() {
     else {
       setDeletedPostUndo(post);
       toast('Publicação excluída.', 'success');
-      await refreshFeed();
+      await refreshFeed(true);
     }
   }
 
@@ -921,7 +931,7 @@ export function Social() {
     else {
       setDeletedPostUndo(null);
       toast('Publicação restaurada.', 'success');
-      await refreshFeed();
+      await refreshFeed(true);
     }
   }
 
@@ -956,9 +966,6 @@ export function Social() {
 
   async function addComment(postId: string) {
     if (!supabase || !session || !commentText[postId]?.trim()) return;
-    const page = document.scrollingElement || document.documentElement;
-    const scrollTopBefore = page.scrollTop;
-    const scrollHeightBefore = page.scrollHeight;
     const post = posts.find((item) => item.id === postId);
     if (post?.comments_enabled === false) {
       toast('Comentários desativados nessa publicação.', 'info');
@@ -976,8 +983,7 @@ export function Social() {
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       setCommentText((prev) => ({ ...prev, [postId]: '' }));
-      await refreshFeed();
-      restoreScrollAfterContentGrowth(scrollTopBefore, scrollHeightBefore);
+      await refreshFeed(true);
     }
   }
 
@@ -996,7 +1002,7 @@ export function Social() {
     else {
       setEditingCommentId(null);
       setEditingCommentText('');
-      await refreshFeed();
+      await refreshFeed(true);
     }
   }
 
@@ -1007,7 +1013,7 @@ export function Social() {
     if (!canDelete) return;
     const { error } = await supabase.from('social_post_comments').update({ deleted_at: new Date().toISOString() }).eq('id', comment.id);
     if (error) toast(ptSupabaseError(error.message), 'error');
-    else await refreshFeed();
+    else await refreshFeed(true);
   }
 
   async function toggleCommentLike(commentId: string) {
@@ -1043,7 +1049,7 @@ export function Social() {
     if (error) toast(ptSupabaseError(error.message), 'error');
     else {
       toast(next ? 'Comentários ativados.' : 'Comentários desativados.', 'success');
-      await refreshFeed();
+      await refreshFeed(true);
     }
   }
 
