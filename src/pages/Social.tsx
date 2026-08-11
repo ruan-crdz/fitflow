@@ -235,6 +235,7 @@ export function Social() {
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+  const [commentMenuOpenId, setCommentMenuOpenId] = useState<string | null>(null);
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
   const [searchUsername, setSearchUsername] = useState('');
   const [searchResults, setSearchResults] = useState<SocialProfile[]>([]);
@@ -320,6 +321,17 @@ export function Social() {
   useEffect(() => () => {
     if (messagePreview) URL.revokeObjectURL(messagePreview.url);
   }, [messagePreview]);
+
+  useEffect(() => {
+    function closeOpenMenus(event: PointerEvent) {
+      if ((event.target as HTMLElement | null)?.closest('[data-social-menu]')) return;
+      setPostMenuOpenId(null);
+      setChatMenuOpenId(null);
+      setCommentMenuOpenId(null);
+    }
+    window.addEventListener('pointerdown', closeOpenMenus);
+    return () => window.removeEventListener('pointerdown', closeOpenMenus);
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -1312,7 +1324,7 @@ export function Social() {
                   </span>
                 )}
               </button>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2" data-social-menu>
                 <button onClick={() => setChatMenuOpenId((id) => (id === conversation.friendId ? null : conversation.friendId))} className="w-9 h-9 rounded-full bg-white/5 text-white/45 flex items-center justify-center" aria-label="Opções da conversa">
                   <MaterialIcon name="more_horiz" className="text-xl" />
                 </button>
@@ -1647,7 +1659,7 @@ export function Social() {
                   </div>
                 </button>
                 {post.user_id === currentUserId && (
-                  <div className="relative">
+                  <div className="relative" data-social-menu>
                     <button
                       onClick={() => setPostMenuOpenId((id) => (id === post.id ? null : post.id))}
                       className="w-9 h-9 rounded-full bg-white/5 text-white/50 flex items-center justify-center"
@@ -1739,21 +1751,41 @@ export function Social() {
                                   <MaterialIcon name="fitness_center" variant={likedComment ? 'filled' : 'outlined'} className="text-base" />
                                   {likesForComment.length}
                                 </button>
-                                <div className="flex items-center gap-2">
-                                  {ownComment && (
+                                {canDeleteComment && (
+                                  <div className="relative" data-social-menu>
                                     <button
-                                      onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.body); }}
-                                      className="text-[11px] text-white/35 font-semibold"
+                                      onClick={() => setCommentMenuOpenId((id) => (id === comment.id ? null : comment.id))}
+                                      className="w-8 h-8 rounded-full bg-white/5 text-white/40 flex items-center justify-center"
+                                      aria-label="Opções do comentário"
                                     >
-                                      Editar
+                                      <MaterialIcon name="more_horiz" className="text-lg" />
                                     </button>
-                                  )}
-                                  {canDeleteComment && (
-                                    <button onClick={() => deleteComment(comment)} className="text-[11px] text-red-300 font-semibold">
-                                      Apagar
-                                    </button>
-                                  )}
-                                </div>
+                                    {commentMenuOpenId === comment.id && (
+                                      <div className="absolute right-0 top-9 z-20 w-44 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
+                                        {ownComment && (
+                                          <button
+                                            onClick={() => {
+                                              setCommentMenuOpenId(null);
+                                              setEditingCommentId(comment.id);
+                                              setEditingCommentText(comment.body);
+                                            }}
+                                            className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
+                                          >
+                                            <MaterialIcon name="edit" className="text-base text-primary-300" />
+                                            Editar
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => { setCommentMenuOpenId(null); void deleteComment(comment); }}
+                                          className={`w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 active:bg-red-500/10 ${ownComment ? 'border-t border-white/5' : ''}`}
+                                        >
+                                          <MaterialIcon name="delete" className="text-base" />
+                                          Apagar
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </>
                           )}
