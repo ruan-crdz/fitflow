@@ -253,6 +253,7 @@ export function Social() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentMenuOpenId, setCommentMenuOpenId] = useState<string | null>(null);
+  const [activeCommentsPostId, setActiveCommentsPostId] = useState<string | null>(null);
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
   const [searchUsername, setSearchUsername] = useState('');
   const [searchResults, setSearchResults] = useState<SocialProfile[]>([]);
@@ -1392,6 +1393,8 @@ export function Social() {
   const activeCommentPost = activeCommentMenu ? posts.find((post) => post.id === activeCommentMenu.post_id) : null;
   const activeCommentOwn = activeCommentMenu?.user_id === currentUserId;
   const activeCommentCanDelete = Boolean(activeCommentMenu && (activeCommentOwn || activeCommentPost?.user_id === currentUserId));
+  const activeCommentsPost = activeCommentsPostId ? posts.find((post) => post.id === activeCommentsPostId) : null;
+  const activeComments = activeCommentsPostId ? comments.filter((comment) => comment.post_id === activeCommentsPostId) : [];
 
   function insertMention(username: string) {
     if (mentionMatch) {
@@ -1400,6 +1403,13 @@ export function Social() {
       setPostBody((body) => `${body}${body.endsWith(' ') || !body ? '' : ' '}@${username} `);
     }
     setMentionSearch('');
+  }
+
+  function openComments(postId: string) {
+    setActiveCommentsPostId(postId);
+    setCommentMenuOpenId(null);
+    setEditingCommentId(null);
+    setEditingCommentText('');
   }
 
   const socialConfirmModals = (
@@ -1811,14 +1821,15 @@ export function Social() {
     const viewedIncomingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.addressee_id === currentUserId;
     const viewedOutgoingRequest = myFriendshipWithViewed?.status === 'pending' && myFriendshipWithViewed.requester_id === currentUserId;
     const canMessageViewedProfile = !isMine && (myFriendshipWithViewed?.status === 'accepted' || (profile?.is_private === false && selectedProfile.is_private === false));
+    const canViewSelectedProfileContent = isMine || !selectedProfile.is_private || myFriendshipWithViewed?.status === 'accepted';
     const profileFollowers = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.addressee_id === selectedProfile.id && !friendship.deleted_at);
     const profileFollowing = friendships.filter((friendship) => friendship.status === 'accepted' && friendship.requester_id === selectedProfile.id && !friendship.deleted_at);
     const profileList = (profileListMode === 'followers' ? profileFollowers : profileFollowing)
       .map((friendship) => profiles[profileListMode === 'followers' ? friendship.requester_id : friendship.addressee_id])
       .filter(Boolean);
     const selectedMentionPattern = new RegExp(`(^|\\s)@${selectedProfile.username}(?=\\s|$|[.,!?])`, 'i');
-    const ownProfilePosts = posts.filter((post) => post.user_id === selectedProfile.id);
-    const taggedProfilePosts = posts.filter((post) => post.user_id !== selectedProfile.id && Boolean(post.body && selectedMentionPattern.test(post.body)));
+    const ownProfilePosts = canViewSelectedProfileContent ? posts.filter((post) => post.user_id === selectedProfile.id) : [];
+    const taggedProfilePosts = canViewSelectedProfileContent ? posts.filter((post) => post.user_id !== selectedProfile.id && Boolean(post.body && selectedMentionPattern.test(post.body))) : [];
     const profileGridPosts = profilePostMode === 'mine' ? ownProfilePosts : taggedProfilePosts;
     return (
       <>
@@ -1934,6 +1945,7 @@ export function Social() {
           </div>
         )}
 
+        {canViewSelectedProfileContent ? (
         <div className="space-y-3">
           <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
             <button
@@ -1973,6 +1985,13 @@ export function Social() {
             </p>
           )}
         </div>
+        ) : (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 text-center space-y-3">
+            <MaterialIcon name="lock" className="text-4xl text-primary-300" />
+            <h2 className="text-lg font-black">Perfil privado</h2>
+            <p className="text-sm text-white/45">Siga este perfil para ver publicações, marcações e detalhes compartilhados.</p>
+          </div>
+        )}
       </div>
       {socialConfirmModals}
       </>
@@ -1985,6 +2004,9 @@ export function Social() {
         <div className="flex items-center justify-between">
           <h1 className="text-[26px] font-black leading-none">Social</h1>
           <div className="flex items-center gap-2">
+            <button onClick={() => setShowPostModal(true)} className="w-10 h-10 rounded-full bg-white/5 text-white/70 flex items-center justify-center" aria-label="Criar publicação">
+              <MaterialIcon name="add_box" variant="outlined" />
+            </button>
             <button onClick={openNotifications} className="relative w-10 h-10 rounded-full bg-white/5 text-white/60 flex items-center justify-center" aria-label="Notificações">
               <MaterialIcon name="notifications" />
               {unreadNotifications.length > 0 && (
@@ -1993,7 +2015,12 @@ export function Social() {
                 </span>
               )}
             </button>
-            <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+            <button onClick={() => setShowConversations(true)} className="relative w-10 h-10 rounded-full bg-white/5 text-white/70 flex items-center justify-center" aria-label="Mensagens">
+              <MaterialIcon name="chat_bubble" variant="outlined" />
+              {conversations.some((conversation) => conversation.unreadCount > 0) && (
+                <span className="absolute -right-1 -top-1 h-3 min-w-3 rounded-full bg-red-500" />
+              )}
+            </button>
           </div>
         </div>
         <button onClick={() => setViewProfileId(currentUserId)} className="flex w-full items-center gap-3 text-left rounded-3xl bg-white/5 border border-white/10 p-3 active:bg-white/10">
@@ -2168,7 +2195,11 @@ export function Social() {
           const liked = postLikes.some((like) => like.user_id === currentUserId);
           const postComments = comments.filter((comment) => comment.post_id === post.id);
           return (
-            <div key={post.id} className="card space-y-3">
+            <article
+              key={post.id}
+              onDoubleClick={() => { if (!liked) void toggleLike(post.id); }}
+              className="-mx-5 border-y border-white/10 bg-[rgb(var(--color-bg-rgb))] px-5 py-4 space-y-3"
+            >
               <div className="relative flex items-start justify-between gap-3">
                 <button onClick={() => setViewProfileId(post.user_id)} className="flex items-center gap-2 text-left min-w-0">
                   <Avatar profile={author} size="sm" />
@@ -2217,32 +2248,50 @@ export function Social() {
               </div>
               {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap break-words">{post.body}</p>}
               {postImages.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                  {postImages.map((img) => <img key={img.id} src={img.image_url} alt="" className="h-56 min-w-[75%] rounded-xl object-cover bg-dark-200" />)}
+                <div className="-mx-5 flex snap-x snap-mandatory overflow-x-auto no-scrollbar">
+                  {postImages.map((img) => (
+                    <img
+                      key={img.id}
+                      src={img.image_url}
+                      alt=""
+                      className="h-[420px] min-w-full snap-center object-cover bg-dark-200"
+                    />
+                  ))}
                 </div>
               )}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
                 <button
                   onClick={() => toggleLike(post.id)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${liked ? 'bg-primary-500/15 text-primary-300 border border-primary-500/25' : 'bg-white/5 text-white/50 border border-white/5'}`}
+                  className={`h-10 min-w-10 rounded-full text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${liked ? 'text-primary-300' : 'text-white/70'}`}
                   aria-label={liked ? 'Remover curtida' : 'Curtir'}
                 >
-                  <MaterialIcon name="fitness_center" variant={liked ? 'filled' : 'outlined'} className={liked ? 'text-lg leading-none transition-all scale-110 text-primary-300' : 'text-lg leading-none transition-all text-white/35'} />
-                  <span>{postLikes.length}</span>
+                  <MaterialIcon name="fitness_center" variant={liked ? 'filled' : 'outlined'} className={liked ? 'text-2xl leading-none transition-all scale-110 text-primary-300' : 'text-2xl leading-none transition-all text-white/70'} />
                 </button>
-                <span className="text-xs text-white/35">{postComments.length} comentário(s)</span>
+                <button
+                  onClick={() => openComments(post.id)}
+                  className="h-10 w-10 rounded-full text-white/70 flex items-center justify-center"
+                  aria-label="Abrir comentários"
+                >
+                  <MaterialIcon name="chat_bubble" variant="outlined" className="text-2xl" />
+                </button>
+                </div>
+                <button onClick={() => openFocusedPost(post.id)} className="h-10 w-10 rounded-full text-white/45 flex items-center justify-center" aria-label="Abrir publicação">
+                  <MaterialIcon name="open_in_full" variant="outlined" className="text-xl" />
+                </button>
               </div>
+              {postLikes.length > 0 && <p className="text-sm font-black text-white">{postLikes.length} curtida{postLikes.length === 1 ? '' : 's'}</p>}
               <div className="space-y-2">
                 {postComments.length > 0 && (
-                  <div className="max-h-56 overflow-y-auto pr-1 space-y-2 rounded-2xl">
-                    {postComments.map((comment) => {
+                  <div className="space-y-1">
+                    {postComments.slice(0, 2).map((comment) => {
                       const ownComment = comment.user_id === currentUserId;
                       const canDeleteComment = ownComment || post.user_id === currentUserId;
                       const likesForComment = commentLikes.filter((like) => like.comment_id === comment.id);
                       const likedComment = likesForComment.some((like) => like.user_id === currentUserId);
 
                       return (
-                        <div key={comment.id} className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60">
+                        <div key={comment.id} className="text-xs text-white/65">
                           <div className="flex items-start gap-2">
                             <button onClick={() => setViewProfileId(comment.user_id)} className="shrink-0">
                               <Avatar profile={profiles[comment.user_id]} size="sm" />
@@ -2295,16 +2344,18 @@ export function Social() {
                     })}
                   </div>
                 )}
+                {postComments.length > 2 && (
+                  <button onClick={() => openComments(post.id)} className="text-xs text-white/35">
+                    Ver todos os {postComments.length} comentários
+                  </button>
+                )}
                 {post.comments_enabled === false ? (
                   <p className="rounded-xl bg-white/5 px-3 py-3 text-center text-xs text-white/35">Comentários desativados.</p>
                 ) : (
-                  <div className="flex gap-2">
-                    <input value={commentText[post.id] || ''} onChange={(e) => setCommentText((prev) => ({ ...prev, [post.id]: e.target.value.slice(0, 240) }))} maxLength={240} className="input-field text-sm" placeholder="Comentar..." />
-                    <button onClick={() => addComment(post.id)} className="w-12 rounded-xl bg-primary-500 text-white font-bold flex items-center justify-center" aria-label="Enviar comentário"><MaterialIcon name="send" /></button>
-                  </div>
+                  <button onClick={() => openComments(post.id)} className="text-xs text-white/35">Adicionar comentário...</button>
                 )}
               </div>
-            </div>
+            </article>
           );
         })}
         {visibleFeedPosts.length === 0 && <p className="card text-sm text-white/35">{focusedPostId ? 'Publicação não encontrada.' : 'Nenhuma publicação ainda.'}</p>}
@@ -2312,28 +2363,108 @@ export function Social() {
         </>
       )}
 
-      <button
-        onClick={() => setShowPostModal(true)}
-        className="fixed left-1/2 -translate-x-1/2 bottom-[calc(92px+env(safe-area-inset-bottom))] z-40 w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] border border-white/15 flex items-center justify-center"
-        aria-label="Criar publicação"
-      >
-        <MaterialIcon name="add" className="text-3xl" />
-      </button>
+      {activeCommentsPost && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55" onClick={() => setActiveCommentsPostId(null)}>
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md max-h-[82dvh] rounded-t-[30px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl flex flex-col overflow-hidden"
+          >
+            <div className="px-5 pt-3 pb-4 border-b border-white/10">
+              <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/20" />
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-black">Comentários</h2>
+                <button onClick={() => setActiveCommentsPostId(null)} className="w-9 h-9 rounded-full bg-white/5 text-white/50">X</button>
+              </div>
+            </div>
 
-      <button
-        onClick={() => setShowConversations(true)}
-        className="fixed right-6 bottom-[calc(96px+env(safe-area-inset-bottom))] z-40 w-14 h-14 rounded-full bg-[rgb(var(--color-bg-card-rgb))] text-white border border-white/15 shadow-[0_12px_35px_rgba(0,0,0,0.45)] flex items-center justify-center"
-        aria-label="Mensagens"
-      >
-        <MaterialIcon name="chat_bubble" className="text-2xl text-primary-300" variant="outlined" />
-      </button>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+              {activeComments.map((comment) => {
+                const ownComment = comment.user_id === currentUserId;
+                const canDeleteComment = ownComment || activeCommentsPost.user_id === currentUserId;
+                const likesForComment = commentLikes.filter((like) => like.comment_id === comment.id);
+                const likedComment = likesForComment.some((like) => like.user_id === currentUserId);
+                return (
+                  <div key={comment.id} className="flex items-start gap-3">
+                    <button onClick={() => setViewProfileId(comment.user_id)} className="shrink-0">
+                      <Avatar profile={profiles[comment.user_id]} size="sm" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      {editingCommentId === comment.id ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingCommentText}
+                            onChange={(e) => setEditingCommentText(e.target.value.slice(0, 240))}
+                            maxLength={240}
+                            className="input-field text-xs min-h-20 resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="flex-1 py-2 rounded-xl bg-white/5 text-white/45 font-semibold">Cancelar</button>
+                            <button onClick={() => updateComment(comment.id)} className="flex-1 py-2 rounded-xl bg-primary-500 text-white font-bold">Salvar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-sm leading-relaxed text-white/75 break-words">
+                            <button onClick={() => setViewProfileId(comment.user_id)} className="font-black text-white">@{profiles[comment.user_id]?.username || 'usuario'}</button> {comment.body}
+                          </p>
+                          <div className="mt-1 flex items-center gap-4 text-[11px] text-white/35">
+                            <span>{formatSocialDate(comment.created_at)}</span>
+                            {comment.edited_at && <span>editado</span>}
+                            <button onClick={() => toggleCommentLike(comment.id)} className={`font-bold ${likedComment ? 'text-primary-300' : 'text-white/35'}`}>
+                              {likesForComment.length} curtida{likesForComment.length === 1 ? '' : 's'}
+                            </button>
+                            {canDeleteComment && (
+                              <button onClick={() => setCommentMenuOpenId(comment.id)} className="font-bold text-white/35 flex items-center" aria-label="Opções do comentário">
+                                <MaterialIcon name="more_horiz" className="text-base" />
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button onClick={() => toggleCommentLike(comment.id)} className={`w-9 h-9 rounded-full flex items-center justify-center ${likedComment ? 'text-primary-300' : 'text-white/35'}`}>
+                      <MaterialIcon name="fitness_center" variant={likedComment ? 'filled' : 'outlined'} className="text-lg" />
+                    </button>
+                  </div>
+                );
+              })}
+              {activeComments.length === 0 && (
+                <p className="py-12 text-center text-sm text-white/35">Nenhum comentário ainda.</p>
+              )}
+            </div>
+
+            {activeCommentsPost.comments_enabled === false ? (
+              <p className="border-t border-white/10 px-5 py-4 text-center text-xs text-white/35">Comentários desativados.</p>
+            ) : (
+              <div className="border-t border-white/10 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex items-center gap-2">
+                <Avatar profile={profile} size="sm" />
+                <input
+                  value={commentText[activeCommentsPost.id] || ''}
+                  onChange={(e) => setCommentText((prev) => ({ ...prev, [activeCommentsPost.id]: e.target.value.slice(0, 240) }))}
+                  maxLength={240}
+                  className="input-field text-sm rounded-full"
+                  placeholder="Adicionar comentário..."
+                />
+                <button
+                  onClick={() => addComment(activeCommentsPost.id)}
+                  disabled={!commentText[activeCommentsPost.id]?.trim()}
+                  className="w-11 h-11 rounded-full bg-primary-500 text-white disabled:opacity-40 flex items-center justify-center"
+                  aria-label="Enviar comentário"
+                >
+                  <MaterialIcon name="send" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeCommentMenu && activeCommentCanDelete && (
         <div className="fixed inset-0 z-[120] bg-black/20" onClick={() => setCommentMenuOpenId(null)}>
           <div
             data-social-menu
             onClick={(event) => event.stopPropagation()}
-            className="absolute left-4 right-4 bottom-[calc(172px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden"
+            className="absolute left-4 right-4 bottom-[calc(24px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden"
           >
             {activeCommentOwn && (
               <button
