@@ -11,6 +11,7 @@ import { useToastStore } from '@/stores/useToastStore';
 import { calculateBMI, calculateTDEE } from '@/utils/calories';
 import { getToday, getTodayWorkoutType } from '@/utils/date';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 interface SocialProfile {
   id: string;
@@ -234,6 +235,9 @@ export function Social() {
   const [loading, setLoading] = useState(false);
   const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
   const [focusedPostBackProfileId, setFocusedPostBackProfileId] = useState<string | null>(null);
+  const [notificationSeenAt, setNotificationSeenAt] = useState('');
+  const [pendingImportShare, setPendingImportShare] = useState<WorkoutShare | null>(null);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
   const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -263,7 +267,7 @@ export function Social() {
   const [editingMessageText, setEditingMessageText] = useState('');
   const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatTopRef = useRef<HTMLDivElement | null>(null);
   const messageLongPressRef = useRef<number | null>(null);
 
   const currentUserId = session?.user.id || '';
@@ -312,7 +316,7 @@ export function Social() {
       || (message.sender_id === chatPeerId && message.receiver_id === currentUserId)
     )).filter((message) => !chatPreferences[chatPeerId]?.hidden_before || new Date(message.created_at) > new Date(chatPreferences[chatPeerId].hidden_before!))
       .filter((message) => !message.deleted_at)
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     : [];
   const rankingRows = rankingStats
     .filter((stats) => rankingMode === 'general' || stats.user_id === currentUserId || acceptedFriendIds.includes(stats.user_id))
@@ -411,6 +415,11 @@ export function Social() {
 
     return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
   }, [commentLikes, comments, currentUserId, incoming, likes, posts, profile]);
+  const unreadNotifications = useMemo(() => {
+    if (!notificationSeenAt) return notifications;
+    const seenTime = new Date(notificationSeenAt).getTime();
+    return notifications.filter((item) => new Date(item.createdAt).getTime() > seenTime);
+  }, [notificationSeenAt, notifications]);
   const postPreviews = useMemo(() => postFiles.map((file) => ({
     name: file.name,
     type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -456,6 +465,15 @@ export function Social() {
     if (backProfileId) setViewProfileId(backProfileId);
   }
 
+  function openNotifications() {
+    if (currentUserId) {
+      const seenAt = new Date().toISOString();
+      setNotificationSeenAt(seenAt);
+      localStorage.setItem(`gympilot-notifications-seen-${currentUserId}`, seenAt);
+    }
+    setShowNotifications(true);
+  }
+
   function restoreScrollAfterContentGrowth(beforeTop: number, beforeHeight: number) {
     requestAnimationFrame(() => {
       const page = document.scrollingElement || document.documentElement;
@@ -471,6 +489,14 @@ export function Social() {
   useEffect(() => () => {
     if (messagePreview) URL.revokeObjectURL(messagePreview.url);
   }, [messagePreview]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setNotificationSeenAt('');
+      return;
+    }
+    setNotificationSeenAt(localStorage.getItem(`gympilot-notifications-seen-${currentUserId}`) || '');
+  }, [currentUserId]);
 
   useEffect(() => {
     function closeOpenMenus(event: PointerEvent) {
@@ -554,7 +580,7 @@ export function Social() {
   useEffect(() => {
     if (!chatPeerId) return;
     requestAnimationFrame(() => {
-      chatEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+      chatTopRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
     });
   }, [chatPeerId, chatMessages.length]);
 
@@ -701,7 +727,7 @@ export function Social() {
     const { data } = await supabase
       .from('social_messages')
       .select('*')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(300);
     const list = (data || []) as SocialMessage[];
     setMessages(list);
@@ -1315,8 +1341,8 @@ export function Social() {
     const preview = previewImport(share.payload.code);
     if (!preview) return toast('Treino inválido.', 'error');
     if (preview.kind === 'multiple') {
-      if (!window.confirm('Importar todos vai substituir sua divisão atual. Continuar?')) return;
-      if (!importAllWorkouts(preview.workouts)) return toast('Não consegui importar.', 'error');
+      setPendingImportShare(share);
+      return;
     } else if (!importSingleWorkout(preview.workouts[0], 'new')) {
       return toast('Limite de 5 treinos atingido.', 'error');
     }
@@ -1325,10 +1351,22 @@ export function Social() {
     await refreshShares();
   }
 
+  async function confirmImportShare() {
+    if (!supabase || !pendingImportShare) return;
+    const preview = previewImport(pendingImportShare.payload.code);
+    if (!preview || preview.kind !== 'multiple') {
+      setPendingImportShare(null);
+      return toast('Treino inválido.', 'error');
+    }
+    if (!importAllWorkouts(preview.workouts)) return toast('Não consegui importar.', 'error');
+    await supabase.from('workout_shares').update({ imported_at: new Date().toISOString() }).eq('id', pendingImportShare.id);
+    setPendingImportShare(null);
+    toast('Treino importado!', 'success');
+    await refreshShares();
+  }
+
   async function confirmSignOut() {
     if (!supabase) return;
-    const shouldSignOut = window.confirm('Sair da conta? Você vai precisar entrar novamente para usar o Social.');
-    if (!shouldSignOut) return;
     await supabase.auth.signOut();
   }
 
@@ -1356,6 +1394,33 @@ export function Social() {
     }
     setMentionSearch('');
   }
+
+  const socialConfirmModals = (
+    <>
+      <ConfirmModal
+        open={Boolean(pendingImportShare)}
+        title="Importar treinos?"
+        message="Importar todos vai substituir sua divisão atual. Quer continuar?"
+        confirmText="Importar"
+        cancelText="Cancelar"
+        onConfirm={confirmImportShare}
+        onCancel={() => setPendingImportShare(null)}
+      />
+      <ConfirmModal
+        open={showSignOutConfirm}
+        title="Sair da conta?"
+        message="Você vai precisar entrar novamente para usar o Social."
+        confirmText="Sair"
+        cancelText="Cancelar"
+        danger
+        onConfirm={() => {
+          setShowSignOutConfirm(false);
+          void confirmSignOut();
+        }}
+        onCancel={() => setShowSignOutConfirm(false)}
+      />
+    </>
+  );
 
   if (!isSupabaseConfigured || !supabase) {
     return (
@@ -1418,27 +1483,30 @@ export function Social() {
 
   if (!profile) {
     return (
-      <div className="px-5 pt-14 pb-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[26px] font-bold">Social</h1>
-            <p className="text-xs text-white/35">Complete seu perfil online</p>
+      <>
+        <div className="px-5 pt-14 pb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-[26px] font-bold">Social</h1>
+              <p className="text-xs text-white/35">Complete seu perfil online</p>
+            </div>
+            <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
           </div>
-          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          <div className="card space-y-3">
+            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome exibido" />
+            <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} className="input-field text-sm" placeholder="username" />
+            <button
+              onClick={saveProfile}
+              disabled={!displayName || !username || loading}
+              className="btn-primary text-sm py-3 disabled:opacity-40"
+            >
+              Salvar perfil
+            </button>
+            <p className="text-xs text-white/35">Se essa tela aparecer mesmo após criar a conta, rode o SQL de upgrade no Supabase para ativar o perfil automático.</p>
+          </div>
         </div>
-        <div className="card space-y-3">
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome exibido" />
-          <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} className="input-field text-sm" placeholder="username" />
-          <button
-            onClick={saveProfile}
-            disabled={!displayName || !username || loading}
-            className="btn-primary text-sm py-3 disabled:opacity-40"
-          >
-            Salvar perfil
-          </button>
-          <p className="text-xs text-white/35">Se essa tela aparecer mesmo após criar a conta, rode o SQL de upgrade no Supabase para ativar o perfil automático.</p>
-        </div>
-      </div>
+        {socialConfirmModals}
+      </>
     );
   }
 
@@ -1465,6 +1533,7 @@ export function Social() {
         </div>
 
         <div className="space-y-2">
+          <div ref={chatTopRef} />
           {chatMessages.map((message) => {
             const mine = message.sender_id === currentUserId;
             return (
@@ -1548,7 +1617,6 @@ export function Social() {
               Comece a conversa com {chatPeer?.display_name || 'esse amigo'}.
             </div>
           )}
-          <div ref={chatEndRef} />
         </div>
 
         <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-2 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
@@ -1746,11 +1814,12 @@ export function Social() {
     const taggedProfilePosts = posts.filter((post) => post.user_id !== selectedProfile.id && Boolean(post.body && selectedMentionPattern.test(post.body)));
     const profileGridPosts = profilePostMode === 'mine' ? ownProfilePosts : taggedProfilePosts;
     return (
+      <>
       <div className="px-5 pt-14 pb-6 space-y-5">
         <div className="flex items-center justify-between">
           <button onClick={() => setViewProfileId(null)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <h1 className="text-lg font-bold">@{selectedProfile.username}</h1>
-          <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+          <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
         </div>
 
         <div className="flex flex-col items-center text-center space-y-3">
@@ -1898,6 +1967,8 @@ export function Social() {
           )}
         </div>
       </div>
+      {socialConfirmModals}
+      </>
     );
   }
 
@@ -1907,15 +1978,15 @@ export function Social() {
         <div className="flex items-center justify-between">
           <h1 className="text-[26px] font-black leading-none">Social</h1>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowNotifications(true)} className="relative w-10 h-10 rounded-full bg-white/5 text-white/60 flex items-center justify-center" aria-label="Notificações">
+            <button onClick={openNotifications} className="relative w-10 h-10 rounded-full bg-white/5 text-white/60 flex items-center justify-center" aria-label="Notificações">
               <MaterialIcon name="notifications" />
-              {notifications.length > 0 && (
+              {unreadNotifications.length > 0 && (
                 <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
-                  {notifications.length > 9 ? '9+' : notifications.length}
+                  {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
                 </span>
               )}
             </button>
-            <button onClick={confirmSignOut} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
+            <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
           </div>
         </div>
         <button onClick={() => setViewProfileId(currentUserId)} className="flex w-full items-center gap-3 text-left rounded-3xl bg-white/5 border border-white/10 p-3 active:bg-white/10">
@@ -2340,6 +2411,7 @@ export function Social() {
           </div>
         </div>
       )}
+      {socialConfirmModals}
     </div>
   );
 }
