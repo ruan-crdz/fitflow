@@ -235,6 +235,7 @@ export function Social() {
   const [postMenuOpenId, setPostMenuOpenId] = useState<string | null>(null);
   const [postFiles, setPostFiles] = useState<File[]>([]);
   const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionResults, setMentionResults] = useState<SocialProfile[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
@@ -257,11 +258,20 @@ export function Social() {
   const acceptedFriendIds = useMemo(() => friendships
     .filter((f) => f.status === 'accepted' && !f.deleted_at)
     .map((f) => (f.requester_id === currentUserId ? f.addressee_id : f.requester_id)), [friendships, currentUserId]);
+  const conversationPeerIds = useMemo(() => {
+    const peers = new Set(acceptedFriendIds);
+    messages.forEach((message) => {
+      if (message.sender_id === currentUserId) peers.add(message.receiver_id);
+      if (message.receiver_id === currentUserId) peers.add(message.sender_id);
+    });
+    Object.keys(chatPreferences).forEach((peerId) => peers.add(peerId));
+    return [...peers].filter(Boolean);
+  }, [acceptedFriendIds, chatPreferences, currentUserId, messages]);
   const incoming = friendships.filter((f) => f.status === 'pending' && f.addressee_id === currentUserId && !f.deleted_at);
   const selectedProfile = viewProfileId ? profiles[viewProfileId] : profile;
   const feedPosts = posts.filter((post) => !post.deleted_at && (feedMode === 'general' || post.user_id === currentUserId || acceptedFriendIds.includes(post.user_id)));
   const inboxShares = shares.filter((s) => s.receiver_id === currentUserId);
-  const conversations = useMemo(() => acceptedFriendIds
+  const conversations = useMemo(() => conversationPeerIds
     .map((friendId) => {
       const preference = chatPreferences[friendId];
       const visibleMessages = messages
@@ -280,7 +290,7 @@ export function Social() {
     .sort((a, b) => {
       if (Boolean(a.preference?.is_pinned) !== Boolean(b.preference?.is_pinned)) return a.preference?.is_pinned ? -1 : 1;
       return new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime();
-    }), [acceptedFriendIds, chatPreferences, messages, profiles, showArchivedChats]);
+    }), [conversationPeerIds, chatPreferences, messages, profiles, showArchivedChats]);
   const chatMessages = chatPeerId
     ? messages.filter((message) => (
       (message.sender_id === currentUserId && message.receiver_id === chatPeerId)
@@ -421,6 +431,36 @@ export function Social() {
 
     return () => window.clearTimeout(timeout);
   }, [searchUsername, session?.user.id, socialMode]);
+
+  useEffect(() => {
+    const match = postBody.match(/@([a-z0-9_]*)$/i);
+    const term = (mentionSearch || match?.[1] || '').trim();
+    if (!supabase || !session || !showPostModal || (!match && !mentionSearch)) {
+      setMentionResults([]);
+      return;
+    }
+    const client = supabase;
+
+    const timeout = window.setTimeout(async () => {
+      const clean = normalizeUsername(term);
+      const query = client
+        .from('social_profiles')
+        .select('id, username, display_name, bio, avatar_url, is_private')
+        .neq('id', session.user.id)
+        .limit(8);
+      const { data } = clean
+        ? await query.or(`username.ilike.%${clean}%,display_name.ilike.%${term}%`)
+        : await query.order('display_name', { ascending: true });
+      setMentionResults((data || []) as SocialProfile[]);
+      setProfiles((prev) => {
+        const next = { ...prev };
+        (data || []).forEach((item) => { next[item.id] = item as SocialProfile; });
+        return next;
+      });
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [postBody, mentionSearch, showPostModal, session?.user.id]);
 
   async function refreshAll() {
     setLoading(true);
@@ -928,6 +968,10 @@ export function Social() {
 
   async function removeFriendship(id: string) {
     if (!supabase) return;
+    const friendship = friendships.find((item) => item.id === id);
+    const peerId = friendship
+      ? (friendship.requester_id === currentUserId ? friendship.addressee_id : friendship.requester_id)
+      : null;
     const { data, error } = await supabase.from('friendships').update({ deleted_at: new Date().toISOString() }).eq('id', id).select('id');
     if (error) {
       const fallback = await supabase.from('friendships').update({ status: 'blocked', updated_at: new Date().toISOString() }).eq('id', id).select('id');
@@ -939,13 +983,23 @@ export function Social() {
       toast('Não consegui remover essa amizade. Rode o SQL de upgrade no Supabase.', 'error');
       return;
     }
+    if (peerId && messages.some((message) => (
+      (message.sender_id === currentUserId && message.receiver_id === peerId)
+      || (message.sender_id === peerId && message.receiver_id === currentUserId)
+    ))) {
+      await updateChatPreference(peerId, { is_archived: true }, false);
+    }
     setFriendships((prev) => prev.filter((friendship) => friendship.id !== id));
     toast('Amizade removida.', 'success');
     await refreshFriends();
   }
 
   function openChat(peerId: string) {
-    if (!acceptedFriendIds.includes(peerId)) {
+    const hasConversation = messages.some((message) => (
+      (message.sender_id === currentUserId && message.receiver_id === peerId)
+      || (message.sender_id === peerId && message.receiver_id === currentUserId)
+    ));
+    if (!acceptedFriendIds.includes(peerId) && !hasConversation) {
       toast('Você só pode mandar mensagem para amigos.', 'info');
       return;
     }
@@ -1116,14 +1170,14 @@ export function Social() {
 
   const mentionMatch = postBody.match(/@([a-z0-9_]*)$/i);
   const mentionTerm = (mentionSearch || mentionMatch?.[1] || '').toLowerCase();
-  const mentionCandidates = acceptedFriendIds
-    .map((id) => profiles[id])
+  const mentionCandidates = [...acceptedFriendIds.map((id) => profiles[id]), ...mentionResults, ...Object.values(profiles)]
     .filter(Boolean)
     .filter((item) => (
       !mentionTerm
       || item.username.toLowerCase().includes(mentionTerm)
       || item.display_name.toLowerCase().includes(mentionTerm)
     ))
+    .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index)
     .slice(0, 8);
 
   function insertMention(username: string) {
@@ -1226,6 +1280,7 @@ export function Social() {
 
   if (chatPeerId) {
     const chatPeer = profiles[chatPeerId];
+    const canSendToChatPeer = acceptedFriendIds.includes(chatPeerId);
     return (
       <div className="min-h-[100dvh] px-5 pt-28 pb-36">
         <div className="fixed left-0 right-0 top-0 z-50 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5">
@@ -1295,19 +1350,25 @@ export function Social() {
                 <button onClick={() => setMessageFile(null)} className="absolute -right-2 -top-2 w-7 h-7 rounded-full bg-black/80 text-white text-xs">X</button>
               </div>
             )}
+            {!canSendToChatPeer && (
+              <p className="rounded-2xl bg-white/5 px-3 py-2 text-center text-xs text-white/40">
+                Conversa arquivada. Siga novamente para enviar mensagens.
+              </p>
+            )}
             <div className="flex gap-2">
               <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
                 <MaterialIcon name="perm_media" className="text-xl text-primary-300" />
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
+                <input type="file" accept="image/*" disabled={!canSendToChatPeer} className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
               </label>
               <input
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void sendMessage(); }}
-                className="input-field text-sm rounded-full"
+                disabled={!canSendToChatPeer}
+                className="input-field text-sm rounded-full disabled:opacity-40"
                 placeholder="Mensagem..."
               />
-              <button onClick={sendMessage} disabled={sendingMessage || (!messageText.trim() && !messageFile)} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40 flex items-center justify-center">
+              <button onClick={sendMessage} disabled={!canSendToChatPeer || sendingMessage || (!messageText.trim() && !messageFile)} className="w-12 h-12 rounded-full bg-primary-500 text-white font-bold disabled:opacity-40 flex items-center justify-center">
                 <MaterialIcon name="send" />
               </button>
             </div>
@@ -1882,7 +1943,7 @@ export function Social() {
                       </div>
                     </button>
                   ))}
-                  {mentionCandidates.length === 0 && <p className="text-xs text-white/35 px-2 py-1">Nenhum amigo encontrado.</p>}
+                  {mentionCandidates.length === 0 && <p className="text-xs text-white/35 px-2 py-1">Nenhum perfil encontrado.</p>}
                 </div>
               </div>
             )}
