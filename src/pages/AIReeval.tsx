@@ -11,6 +11,7 @@ import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
 import { buildEvidenceContext, getEvidenceByIds, getEvidenceForQuery } from '@/utils/evidence';
+import { validateReevalPayload } from '@/utils/planValidator';
 
 interface Message {
   role: 'ai' | 'user' | 'system';
@@ -75,6 +76,7 @@ export function AIReeval() {
       const exs = getExercises(type);
       return `Treino ${type}: ${exs.map((e) => e.name).join(', ')} (${exs.length} exercícios, ${exs.reduce((a, e) => a + e.sets, 0)} séries)`;
     }).join('\n');
+    const sexLabel = profile.sex === 'male' ? 'Masculino' : profile.sex === 'female' ? 'Feminino' : 'Não informado';
     const locationLabel = profile.trainingLocation === 'casa'
       ? 'Casa'
       : profile.trainingLocation === 'hibrido'
@@ -91,7 +93,7 @@ O aluno se chama ${profile.name}. Use o nome dele naturalmente na conversa.
 
 PERFIL DO ALUNO:
 - Nome: ${profile.name}
-- Sexo: ${profile.sex === 'male' ? 'Masculino' : 'Feminino'}
+- Sexo: ${sexLabel}
 - Idade: ${profile.age} anos
 - Peso: ${profile.weight}kg, Altura: ${profile.height}cm
 - Nível: ${profile.experienceLevel || 'intermediário'}
@@ -295,6 +297,11 @@ Responda em texto natural no chat. Use a função apenas quando decidir aplicar 
 
   const applyRecommendation = async (result: ReevalActionPayload) => {
     const toast = useToastStore.getState().show;
+    const payloadErrors = validateReevalPayload({ removeDays: result.removeDays, exercises: result.exercises });
+    if (payloadErrors.length > 0) {
+      toast(`Reavaliação bloqueada: ${payloadErrors[0]}`, 'error');
+      return;
+    }
     const validEvidence = getEvidenceByIds(result.evidenceIds || []);
     if ((result.evidenceIds || []).length > 0 && validEvidence.length === 0) {
       toast('Não encontrei evidência válida para aplicar essa reavaliação com segurança.', 'error');

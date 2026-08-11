@@ -10,6 +10,7 @@ import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { buildEvidenceContext, extractSourceIds, getEvidenceByIds, getEvidenceForQuery, isScientificQuery } from '@/utils/evidence';
 import { calculateWaterIntake } from '@/utils/water';
+import { buildProfilePromptLines } from '@/utils/promptContext';
 import type { Profile, WorkoutType } from '@/types';
 
 const BASE_SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
@@ -66,22 +67,11 @@ function buildContext(profile: Profile): string {
     ? `\n- Fase do ciclo: ${CYCLE_PHASES.find((c) => c.value === cycle.phase)?.label} (${CYCLE_PHASES.find((c) => c.value === cycle.phase)?.tip})`
     : '';
 
-  const sexLabel = profile.sex === 'male' ? 'masculino' : 'feminino';
   const levelLabel = profile.experienceLevel === 'advanced' ? 'avançado'
     : profile.experienceLevel === 'intermediate' ? 'intermediário' : 'iniciante';
   const goalLabel = profile.goal === 'lose' ? 'perder gordura'
     : profile.goal === 'gain' ? 'ganhar massa' : 'manter peso';
-  const locationLabel = profile.trainingLocation === 'casa'
-    ? 'casa'
-    : profile.trainingLocation === 'hibrido'
-      ? 'híbrido (casa + academia)'
-      : 'academia';
-  const sessionDuration = profile.sessionDurationMin || 60;
-  const trainingAgeMonths = profile.trainingAgeMonths ?? 0;
-  const equipmentText = (profile.equipmentAccess || []).join(', ') || 'não informado';
-  const preferredText = (profile.preferredExercises || []).join(', ') || 'não informado';
-  const dislikedText = (profile.dislikedExercises || []).join(', ') || 'não informado';
-  const limitationsText = (profile.limitations || []).join(', ') || 'não informado';
+  const profileLines = buildProfilePromptLines(profile);
 
   // Nutrition context
   const foodStore = useFoodStore.getState();
@@ -129,21 +119,9 @@ function buildContext(profile: Profile): string {
 
   return `
 Dados do aluno:
-- Nome: ${profile.name}
-- Sexo biológico: ${sexLabel}
-- Idade: ${profile.age} anos
-- Peso: ${profile.weight}kg
-- Altura: ${profile.height}cm
 - Objetivo: ${goalLabel}
-- Dias de treino: ${profile.trainingDays.length}x por semana
 - Nível: ${levelLabel}${cycleInfo}
-- Tempo por sessão: ${sessionDuration} min
-- Local de treino: ${locationLabel}
-- Training age: ${trainingAgeMonths} meses
-- Equipamentos disponíveis: ${equipmentText}
-- Exercícios preferidos: ${preferredText}
-- Exercícios que evita: ${dislikedText}
-- Limitações/dor: ${limitationsText}
+${profileLines.map((line) => `- ${line}`).join('\n')}
 - TDEE estimado: ${tdee} kcal/dia
 - Atividade hoje: ${health.steps} passos, ${health.activeCalories} kcal ativas, fonte ${health.source}
 ${weightTrend ? `- ${weightTrend}` : ''}

@@ -8,10 +8,12 @@ interface CalorieInput {
   sex?: BiologicalSex;
 }
 
-/** Mifflin-St Jeor: male = +5, female = -161 */
+/** Mifflin-St Jeor: male = +5, female = -161, não informado = média (-78) */
 function basalMetabolicRate({ weight, height, age, sex }: Omit<CalorieInput, 'goal'>): number {
   const base = 10 * weight + 6.25 * height - 5 * age;
-  return sex === 'male' ? base + 5 : base - 161;
+  if (sex === 'male') return base + 5;
+  if (sex === 'female') return base - 161;
+  return base - 78;
 }
 
 /** TDEE com fator de atividade moderado (treina 3x/semana) */

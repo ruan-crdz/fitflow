@@ -13,6 +13,7 @@ import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { getToday } from '@/utils/date';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { addMacros, findFoodInTable, macrosForFood, toGrams, type MacroTotals } from '@/utils/nutrition';
 import { CAMERA_ITEMS_SCHEMA, UNKNOWN_MAPPING_SCHEMA } from '@/constants/aiSchemas';
 
@@ -713,21 +714,17 @@ RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}
                           placeholder="Qtd"
                           className="input-field text-sm w-16 text-center"
                         />
-                        <select
+                        <CustomSelect
                           value={ing.unit}
-                          onChange={(e) => {
+                          onChange={(value) => {
                             const next = [...ingredients];
-                            next[idx] = { ...next[idx], unit: e.target.value as IngredientUnit };
+                            next[idx] = { ...next[idx], unit: value as IngredientUnit };
                             setIngredients(next);
                           }}
-                          className="input-field h-12 text-xs w-20 px-2 text-center appearance-none"
-                        >
-                          {FOOD_UNITS.map((unit) => (
-                            <option key={unit.value} value={unit.value} className="bg-dark-200">
-                              {unit.label}
-                            </option>
-                          ))}
-                        </select>
+                          className="w-24"
+                          options={FOOD_UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
+                          menuClassName="max-h-56 overflow-y-auto"
+                        />
                         <input
                           type="number"
                           inputMode="numeric"

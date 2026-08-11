@@ -10,7 +10,7 @@ export type ActivityIntensity = 'leve' | 'moderada' | 'forte';
 
 export type Goal = 'lose' | 'maintain' | 'gain';
 
-export type BiologicalSex = 'male' | 'female';
+export type BiologicalSex = 'male' | 'female' | 'undisclosed';
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
 

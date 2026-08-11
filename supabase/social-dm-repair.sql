@@ -65,6 +65,13 @@ alter table public.social_chat_preferences
   add column if not exists last_read_at timestamptz,
   add column if not exists updated_at timestamptz not null default now();
 
+create table if not exists public.social_message_likes (
+  message_id uuid not null references public.social_messages(id) on delete cascade,
+  user_id uuid not null references public.social_profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (message_id, user_id)
+);
+
 do $$
 begin
   if not exists (
@@ -80,6 +87,7 @@ end $$;
 
 alter table public.social_messages enable row level security;
 alter table public.social_chat_preferences enable row level security;
+alter table public.social_message_likes enable row level security;
 
 drop policy if exists "messages visible to sender and receiver" on public.social_messages;
 drop policy if exists "users send own messages" on public.social_messages;
@@ -89,6 +97,9 @@ drop policy if exists "users update own messages" on public.social_messages;
 drop policy if exists "users read own chat preferences" on public.social_chat_preferences;
 drop policy if exists "users upsert own chat preferences" on public.social_chat_preferences;
 drop policy if exists "users update own chat preferences" on public.social_chat_preferences;
+drop policy if exists "message likes visible to participants" on public.social_message_likes;
+drop policy if exists "users like visible messages" on public.social_message_likes;
+drop policy if exists "users remove own message likes" on public.social_message_likes;
 
 create policy "messages visible to both users"
   on public.social_messages for select
@@ -146,6 +157,36 @@ create policy "users update own chat preferences"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+create policy "message likes visible to participants"
+  on public.social_message_likes for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.social_messages m
+      where m.id = message_id
+        and (auth.uid() = m.sender_id or auth.uid() = m.receiver_id)
+    )
+  );
+
+create policy "users like visible messages"
+  on public.social_message_likes for insert
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.social_messages m
+      where m.id = message_id
+        and (auth.uid() = m.sender_id or auth.uid() = m.receiver_id)
+    )
+  );
+
+create policy "users remove own message likes"
+  on public.social_message_likes for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
 create index if not exists social_messages_sender_receiver_idx
   on public.social_messages (sender_id, receiver_id, created_at desc);
 
@@ -154,5 +195,8 @@ create index if not exists social_messages_receiver_sender_idx
 
 create index if not exists social_chat_preferences_user_idx
   on public.social_chat_preferences (user_id, is_pinned desc, is_archived, updated_at desc);
+
+create index if not exists social_message_likes_message_idx
+  on public.social_message_likes (message_id, created_at desc);
 
 notify pgrst, 'reload schema';

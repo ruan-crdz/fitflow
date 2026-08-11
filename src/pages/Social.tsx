@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
@@ -110,6 +111,12 @@ interface SocialMessage {
   deleted_at?: string | null;
 }
 
+interface SocialMessageLike {
+  message_id: string;
+  user_id: string;
+  created_at?: string;
+}
+
 interface ChatPreference {
   user_id: string;
   peer_id: string;
@@ -120,6 +127,36 @@ interface ChatPreference {
 }
 
 type SocialEntryState = 'loading' | 'unauthenticated' | 'profile_incomplete' | 'ready' | 'error';
+
+const FEED_PAGE_SIZE = 12;
+const RANKING_PAGE_SIZE = 20;
+const CONVERSATION_PAGE_SIZE = 20;
+const NOTIFICATION_PAGE_SIZE = 20;
+const CHAT_BOTTOM_THRESHOLD_PX = 160;
+
+function socialCacheKey(scope: string, userId: string) {
+  return `fitflow-social-cache-${scope}-${userId}`;
+}
+
+function extractSharedPostFromMessage(body: string) {
+  const match = body.match(/\[\[post:([a-z0-9-]+)\]\]/i);
+  if (!match) return { postId: null, text: body };
+  return {
+    postId: match[1],
+    text: body.replace(match[0], '').trim(),
+  };
+}
+
+function buildSharedPostMessage(postId: string, text: string) {
+  const trimmed = text.trim();
+  return trimmed ? `[[post:${postId}]] ${trimmed}` : `[[post:${postId}]]`;
+}
+
+function messagePreviewText(body: string) {
+  const shared = extractSharedPostFromMessage(body);
+  if (!shared.postId) return body;
+  return shared.text ? `Publicacao compartilhada: ${shared.text}` : 'Publicacao compartilhada';
+}
 
 const visibilityFields: { key: keyof SocialProfile; label: string }[] = [
   { key: 'show_consistency', label: 'Consistência' },
@@ -145,7 +182,7 @@ function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
   if (
     lower.includes('could not find')
-    && (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('schema cache'))
+    && (lower.includes('media_type') || lower.includes('edited_at') || lower.includes('deleted_at') || lower.includes('last_read_at') || lower.includes('comments_enabled') || lower.includes('social_post_comment_likes') || lower.includes('social_chat_preferences') || lower.includes('social_message_likes') || lower.includes('schema cache'))
   ) {
     const missing = message.match(/'([^']+)'/)?.[1];
     return `Falta atualizar o Supabase${missing ? ` (${missing})` : ''}. Rode supabase/social-feed-upgrade.sql no SQL Editor.`;
@@ -159,6 +196,10 @@ function ptSupabaseError(message: string) {
 
 function normalizeUsername(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+}
+
+function isImageFile(file: File) {
+  return file.type.startsWith('image/');
 }
 
 function todayKey() {
@@ -235,6 +276,7 @@ export function Social() {
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([]);
   const [shares, setShares] = useState<WorkoutShare[]>([]);
   const [messages, setMessages] = useState<SocialMessage[]>([]);
+  const [messageLikes, setMessageLikes] = useState<SocialMessageLike[]>([]);
   const [chatPreferences, setChatPreferences] = useState<Record<string, ChatPreference>>({});
   const [rankingStats, setRankingStats] = useState<SocialProfileStats[]>([]);
   const [socialMode, setSocialMode] = useState<'ranking' | 'feed'>('feed');
@@ -263,8 +305,11 @@ export function Social() {
   const [mentionSearch, setMentionSearch] = useState('');
   const [mentionResults, setMentionResults] = useState<SocialProfile[]>([]);
   const [commentText, setCommentText] = useState<Record<string, string>>({});
+  const [commentMentionSearch, setCommentMentionSearch] = useState('');
+  const [commentMentionResults, setCommentMentionResults] = useState<SocialProfile[]>([]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+  const [editingCommentMentionSearch, setEditingCommentMentionSearch] = useState('');
   const [commentMenuOpenId, setCommentMenuOpenId] = useState<string | null>(null);
   const [activeCommentsPostId, setActiveCommentsPostId] = useState<string | null>(null);
   const [pendingLikes, setPendingLikes] = useState<Record<string, boolean>>({});
@@ -275,14 +320,37 @@ export function Social() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [messageText, setMessageText] = useState('');
   const [messageFile, setMessageFile] = useState<File | null>(null);
+  const [messageMentionSearch, setMessageMentionSearch] = useState('');
+  const [sharePostId, setSharePostId] = useState<string | null>(null);
+  const [sharePostSearch, setSharePostSearch] = useState('');
+  const [sharePostResults, setSharePostResults] = useState<SocialProfile[]>([]);
+  const [sharePostTargetId, setSharePostTargetId] = useState<string | null>(null);
+  const [sharePostMessage, setSharePostMessage] = useState('');
+  const [sharingPost, setSharingPost] = useState(false);
   const [showArchivedChats, setShowArchivedChats] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState('');
+  const [editingMessageMentionSearch, setEditingMessageMentionSearch] = useState('');
   const [chatMenuOpenId, setChatMenuOpenId] = useState<string | null>(null);
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [pendingChatUpdates, setPendingChatUpdates] = useState(0);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(FEED_PAGE_SIZE);
+  const [isLoadingMoreFeed, setIsLoadingMoreFeed] = useState(false);
+  const [visibleRankingCount, setVisibleRankingCount] = useState(RANKING_PAGE_SIZE);
+  const [visibleConversationCount, setVisibleConversationCount] = useState(CONVERSATION_PAGE_SIZE);
+  const [visibleNotificationCount, setVisibleNotificationCount] = useState(NOTIFICATION_PAGE_SIZE);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatMessagesWrapRef = useRef<HTMLDivElement | null>(null);
+  const feedLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const feedLoadMoreTimeoutRef = useRef<number | null>(null);
   const messageLongPressRef = useRef<number | null>(null);
+  const messageDoubleTapRef = useRef<{ messageId: string; at: number } | null>(null);
+  const chatAutoStickRef = useRef(true);
+  const previousChatMessageCountRef = useRef(0);
+  const chatScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatForceStickUntilRef = useRef(0);
   const feedRefreshTimeoutRef = useRef<number | null>(null);
   const messageRefreshTimeoutRef = useRef<number | null>(null);
   const postGalleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -347,7 +415,7 @@ export function Social() {
     const mentionPattern = new RegExp(`(^|\\s)@${myUsername}(?=\\s|$|[.,!?])`, 'i');
     const items: {
       id: string;
-      type: 'like' | 'comment_like' | 'comment' | 'mention' | 'follow_request';
+      type: 'like' | 'comment_like' | 'comment' | 'mention_comment' | 'mention_post' | 'follow_request';
       userId: string;
       postId?: string;
       friendshipId?: string;
@@ -395,7 +463,7 @@ export function Social() {
       if (comment.user_id !== currentUserId && mentionPattern.test(comment.body)) {
         items.push({
           id: `mention-comment-${comment.id}`,
-          type: 'mention',
+          type: 'mention_comment',
           userId: comment.user_id,
           postId: comment.post_id,
           text: 'mencionou você em um comentário',
@@ -422,7 +490,7 @@ export function Social() {
       if (post.user_id !== currentUserId && post.body && mentionPattern.test(post.body)) {
         items.push({
           id: `mention-post-${post.id}`,
-          type: 'mention',
+          type: 'mention_post',
           userId: post.user_id,
           postId: post.id,
           text: 'mencionou você em uma publicação',
@@ -447,6 +515,10 @@ export function Social() {
     const seenTime = new Date(notificationSeenAt).getTime();
     return notifications.filter((item) => new Date(item.createdAt).getTime() > seenTime);
   }, [notificationSeenAt, notifications]);
+  const visibleNotificationItems = notifications.slice(0, visibleNotificationCount);
+  const visibleConversationItems = conversations.slice(0, visibleConversationCount);
+  const visibleRankingRows = rankingRows.slice(0, visibleRankingCount);
+  const visibleMainFeedPosts = visibleFeedPosts.slice(0, focusedPostId ? visibleFeedPosts.length : visibleFeedCount);
   const postPreviews = useMemo(() => postFiles.map((file) => ({
     name: file.name,
     type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -470,8 +542,49 @@ export function Social() {
     );
   }, [foodLogs]);
   const waterGlasses = waterLogs[todayKey()] || 0;
+  const profilesByUsername = useMemo(() => {
+    const next: Record<string, SocialProfile> = {};
+    Object.values(profiles).forEach((item) => {
+      if (!item?.username) return;
+      next[item.username.toLowerCase()] = item;
+    });
+    return next;
+  }, [profiles]);
+
+  function renderTextWithMentions(text: string, className = 'font-black text-primary-300 hover:underline') {
+    const lines = text.split('\n');
+    return lines.map((line, lineIndex) => {
+      const parts = line.split(/(@[a-z0-9_]+)/gi);
+      return (
+        <span key={`line-${lineIndex}`}>
+          {parts.map((part, partIndex) => {
+            if (!part.startsWith('@')) {
+              return <span key={`txt-${lineIndex}-${partIndex}`}>{part}</span>;
+            }
+            const username = part.slice(1).toLowerCase();
+            const mentioned = profilesByUsername[username];
+            if (!mentioned) {
+              return <strong key={`raw-${lineIndex}-${partIndex}`} className="font-bold text-white">{part}</strong>;
+            }
+            return (
+              <button
+                key={`m-${lineIndex}-${partIndex}`}
+                type="button"
+                onClick={() => setViewProfileId(mentioned.id)}
+                className={className}
+              >
+                {part}
+              </button>
+            );
+          })}
+          {lineIndex < lines.length - 1 && <br />}
+        </span>
+      );
+    });
+  }
 
   function openFocusedPost(postId: string, backProfileId: string | null = null) {
+    setChatPeerId(null);
     setFocusedPostId(postId);
     setFocusedPostBackProfileId(backProfileId);
     setSocialMode('feed');
@@ -504,8 +617,8 @@ export function Social() {
   function restoreScrollAfterContentGrowth(beforeTop: number, beforeHeight: number) {
     requestAnimationFrame(() => {
       const page = document.scrollingElement || document.documentElement;
-      const growth = page.scrollHeight - beforeHeight;
-      page.scrollTop = beforeTop + Math.max(0, growth);
+      if (beforeHeight > 0 && page.scrollHeight <= 0) return;
+      page.scrollTop = beforeTop;
     });
   }
 
@@ -517,8 +630,79 @@ export function Social() {
     };
   }
 
+  function resolveChatScrollContainer() {
+    if (chatScrollContainerRef.current?.isConnected) return chatScrollContainerRef.current;
+    const fromChatEnd = chatEndRef.current?.closest('[data-chat-scroll-container]');
+    if (fromChatEnd instanceof HTMLDivElement) {
+      chatScrollContainerRef.current = fromChatEnd;
+      return fromChatEnd;
+    }
+    const fallback = document.querySelector<HTMLDivElement>('[data-chat-scroll-container]');
+    if (fallback) chatScrollContainerRef.current = fallback;
+    return fallback || null;
+  }
+
+  function enableChatForceStick(durationMs = 5000) {
+    chatForceStickUntilRef.current = Date.now() + durationMs;
+    chatAutoStickRef.current = true;
+  }
+
+  function shouldForceChatStick() {
+    return Date.now() < chatForceStickUntilRef.current;
+  }
+
+  function isNearChatBottom() {
+    const container = resolveChatScrollContainer();
+    if (!container) return true;
+    const distance = container.scrollHeight - (container.scrollTop + container.clientHeight);
+    return distance <= CHAT_BOTTOM_THRESHOLD_PX;
+  }
+
+  function scrollChatToLatest(behavior: ScrollBehavior = 'auto') {
+    const container = resolveChatScrollContainer();
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior });
+      return;
+    }
+    chatEndRef.current?.scrollIntoView({ block: 'end', behavior });
+  }
+
+  function handleChatMediaLoad() {
+    if (!chatPeerId) return;
+    if (chatAutoStickRef.current || shouldForceChatStick()) {
+      requestAnimationFrame(() => scrollChatToLatest('auto'));
+    }
+  }
+
+  function getFeedAnchorSnapshot() {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-feed-post-id]'));
+    const candidate = cards
+      .map((card) => ({ card, rect: card.getBoundingClientRect() }))
+      .find(({ rect }) => rect.bottom > 0);
+    if (!candidate) return null;
+    return {
+      postId: candidate.card.dataset.feedPostId || '',
+      top: candidate.rect.top,
+    };
+  }
+
+  function restoreFeedAnchor(snapshot: { postId: string; top: number } | null) {
+    if (!snapshot?.postId) return;
+    requestAnimationFrame(() => {
+      const next = document.querySelector<HTMLElement>(`[data-feed-post-id="${snapshot.postId}"]`);
+      if (!next) {
+        const page = document.scrollingElement || document.documentElement;
+        page.scrollTop = Math.max(0, page.scrollTop);
+        return;
+      }
+      const delta = next.getBoundingClientRect().top - snapshot.top;
+      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, behavior: 'auto' });
+    });
+  }
+
   function queueFeedRefresh() {
     if (document.hidden) return;
+    if (socialMode !== 'feed' || showNotifications || showConversations || viewProfileId || chatPeerId) return;
     if (feedRefreshTimeoutRef.current) window.clearTimeout(feedRefreshTimeoutRef.current);
     feedRefreshTimeoutRef.current = window.setTimeout(() => {
       feedRefreshTimeoutRef.current = null;
@@ -529,9 +713,13 @@ export function Social() {
   function queueMessageRefresh() {
     if (document.hidden) return;
     if (messageRefreshTimeoutRef.current) window.clearTimeout(messageRefreshTimeoutRef.current);
-    messageRefreshTimeoutRef.current = window.setTimeout(() => {
+    messageRefreshTimeoutRef.current = window.setTimeout(async () => {
       messageRefreshTimeoutRef.current = null;
-      void Promise.all([refreshMessages(), refreshChatPreferences()]);
+      if (chatPeerId) {
+        await refreshMessages();
+        return;
+      }
+      await Promise.all([refreshMessages(), refreshChatPreferences()]);
     }, 350);
   }
 
@@ -550,6 +738,44 @@ export function Social() {
     }
     setNotificationSeenAt(localStorage.getItem(`gympilot-notifications-seen-${currentUserId}`) || '');
   }, [currentUserId]);
+
+  useEffect(() => {
+    setVisibleFeedCount(FEED_PAGE_SIZE);
+  }, [socialMode, feedMode, focusedPostId, searchUsername]);
+
+  useEffect(() => {
+    setVisibleRankingCount(RANKING_PAGE_SIZE);
+  }, [rankingMode]);
+
+  useEffect(() => {
+    setVisibleConversationCount(CONVERSATION_PAGE_SIZE);
+  }, [showArchivedChats]);
+
+  useEffect(() => {
+    setVisibleNotificationCount(NOTIFICATION_PAGE_SIZE);
+  }, [showNotifications]);
+
+  useEffect(() => {
+    if (socialMode !== 'feed' || focusedPostId) return;
+    const node = feedLoadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadMoreFeed();
+        }
+      },
+      { root: null, rootMargin: '220px 0px 220px 0px', threshold: 0.01 },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [socialMode, focusedPostId, visibleMainFeedPosts.length, visibleFeedPosts.length, isLoadingMoreFeed]);
+
+  useEffect(() => () => {
+    if (feedLoadMoreTimeoutRef.current) window.clearTimeout(feedLoadMoreTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     function closeOpenMenus(event: PointerEvent) {
@@ -595,6 +821,7 @@ export function Social() {
     setSocialReady(false);
     setEntryState('loading');
     setEntryError('');
+    hydrateSocialCache(session.user.id);
     void refreshAll()
       .then((hasProfile) => {
         if (cancelled) return;
@@ -614,6 +841,7 @@ export function Social() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comments' }, queueFeedRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_post_comment_likes' }, queueFeedRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_messages' }, queueMessageRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_message_likes' }, queueMessageRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_chat_preferences' }, queueMessageRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => void refreshFriends())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_shares' }, () => void refreshShares())
@@ -630,8 +858,12 @@ export function Social() {
     if (!session || !supabase || !socialReady) return;
     const refreshVisibleSocial = () => {
       if (document.hidden) return;
-      void refreshFeed(true);
-      void refreshRanking();
+      if (socialMode === 'feed' && !showNotifications && !showConversations && !viewProfileId && !chatPeerId) {
+        void refreshFeed(true);
+      }
+      if (socialMode === 'ranking') {
+        void refreshRanking();
+      }
     };
     const interval = window.setInterval(refreshVisibleSocial, 30000);
     const handleVisibility = () => {
@@ -644,18 +876,17 @@ export function Social() {
       window.removeEventListener('focus', refreshVisibleSocial);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [session?.user.id, socialReady]);
+  }, [session?.user.id, socialReady, socialMode, showNotifications, showConversations, viewProfileId, chatPeerId]);
 
   useEffect(() => {
     if (!session || !supabase || !socialReady || !chatPeerId) return;
-    const refreshVisibleChat = () => {
+    const refreshVisibleChat = async () => {
       if (document.hidden) return;
-      void refreshMessages();
-      void refreshChatPreferences();
+      await refreshMessages();
     };
     const interval = window.setInterval(refreshVisibleChat, 8000);
     const handleVisibility = () => {
-      if (!document.hidden) refreshVisibleChat();
+      if (!document.hidden) void refreshVisibleChat();
     };
     window.addEventListener('focus', refreshVisibleChat);
     document.addEventListener('visibilitychange', handleVisibility);
@@ -673,11 +904,96 @@ export function Social() {
 
   useEffect(() => {
     if (!chatPeerId) return;
-    const scrollToLatest = () => chatEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
-    requestAnimationFrame(scrollToLatest);
-    const timeout = window.setTimeout(scrollToLatest, 80);
-    return () => window.clearTimeout(timeout);
+    enableChatForceStick();
+    chatAutoStickRef.current = true;
+    previousChatMessageCountRef.current = 0;
+    chatScrollContainerRef.current = null;
+    setShowJumpToLatest(false);
+    setPendingChatUpdates(0);
+
+    const syncStickMode = () => {
+      if (shouldForceChatStick()) {
+        chatAutoStickRef.current = true;
+        return;
+      }
+      const nearBottom = isNearChatBottom();
+      chatAutoStickRef.current = nearBottom;
+      if (nearBottom) {
+        setShowJumpToLatest(false);
+        setPendingChatUpdates(0);
+      }
+    };
+
+    const ensureBottom = () => {
+      scrollChatToLatest('auto');
+      syncStickMode();
+    };
+
+    const container = resolveChatScrollContainer();
+    const wrap = chatMessagesWrapRef.current;
+    let resizeObserver: ResizeObserver | null = null;
+    if (container) container.addEventListener('scroll', syncStickMode, { passive: true });
+    if (wrap && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (chatAutoStickRef.current || shouldForceChatStick()) {
+          scrollChatToLatest('auto');
+        }
+      });
+      resizeObserver.observe(wrap);
+    }
+    requestAnimationFrame(ensureBottom);
+    const timeout = window.setTimeout(ensureBottom, 80);
+    const timeout2 = window.setTimeout(ensureBottom, 180);
+    const timeout3 = window.setTimeout(ensureBottom, 300);
+    const timeout4 = window.setTimeout(ensureBottom, 600);
+    const timeout5 = window.setTimeout(ensureBottom, 1000);
+    const timeout6 = window.setTimeout(ensureBottom, 1600);
+    return () => {
+      if (container) container.removeEventListener('scroll', syncStickMode);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.clearTimeout(timeout);
+      window.clearTimeout(timeout2);
+      window.clearTimeout(timeout3);
+      window.clearTimeout(timeout4);
+      window.clearTimeout(timeout5);
+      window.clearTimeout(timeout6);
+    };
+  }, [chatPeerId]);
+
+  useEffect(() => {
+    if (!chatPeerId) return;
+    const currentCount = chatMessages.length;
+    const previousCount = previousChatMessageCountRef.current;
+    const hasNewMessages = currentCount > previousCount;
+
+    const forceStick = shouldForceChatStick();
+    if (chatAutoStickRef.current || forceStick) {
+      const stickToBottom = () => scrollChatToLatest('auto');
+      requestAnimationFrame(stickToBottom);
+      const timeout = window.setTimeout(stickToBottom, 80);
+      setShowJumpToLatest(false);
+      setPendingChatUpdates(0);
+      previousChatMessageCountRef.current = currentCount;
+      return () => window.clearTimeout(timeout);
+    }
+
+    if (hasNewMessages) {
+      setShowJumpToLatest(true);
+      setPendingChatUpdates((value) => Math.min(99, value + (currentCount - previousCount)));
+    }
+    previousChatMessageCountRef.current = currentCount;
   }, [chatPeerId, chatMessages.length]);
+
+  useEffect(() => {
+    if (!chatPeerId) return;
+    const main = document.querySelector<HTMLElement>('main.overflow-y-auto');
+    if (!main) return;
+    const previousOverflow = main.style.overflowY;
+    main.style.overflowY = 'hidden';
+    return () => {
+      main.style.overflowY = previousOverflow;
+    };
+  }, [chatPeerId]);
 
   useEffect(() => {
     const term = searchUsername.trim();
@@ -727,6 +1043,97 @@ export function Social() {
 
     return () => window.clearTimeout(timeout);
   }, [postBody, mentionSearch, showPostModal, session?.user.id]);
+
+  useEffect(() => {
+    const postId = activeCommentsPostId;
+    const draft = postId ? commentText[postId] || '' : '';
+    const match = draft.match(/@([a-z0-9_]*)$/i);
+    const term = (commentMentionSearch || match?.[1] || '').trim();
+    if (!supabase || !session || !postId || (!match && !commentMentionSearch)) {
+      setCommentMentionResults([]);
+      return;
+    }
+    const client = supabase;
+
+    const timeout = window.setTimeout(async () => {
+      const clean = normalizeUsername(term);
+      const query = client
+        .from('social_profiles')
+        .select('id, username, display_name, bio, avatar_url, is_private')
+        .neq('id', session.user.id)
+        .limit(8);
+      const { data } = clean
+        ? await query.or(`username.ilike.%${clean}%,display_name.ilike.%${term}%`)
+        : await query.order('display_name', { ascending: true });
+      setCommentMentionResults((data || []) as SocialProfile[]);
+      setProfiles((prev) => {
+        const next = { ...prev };
+        (data || []).forEach((item) => { next[item.id] = item as SocialProfile; });
+        return next;
+      });
+    }, 280);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeCommentsPostId, commentMentionSearch, commentText, session?.user.id]);
+
+  useEffect(() => {
+    const term = sharePostSearch.trim();
+    if (!supabase || !session || !sharePostId || term.length < 2) {
+      setSharePostResults([]);
+      return;
+    }
+    const client = supabase;
+
+    const timeout = window.setTimeout(async () => {
+      const clean = normalizeUsername(term);
+      const { data } = await client
+        .from('social_profiles')
+        .select('id, username, display_name, bio, avatar_url, is_private')
+        .or(`username.ilike.%${clean}%,display_name.ilike.%${term}%`)
+        .neq('id', session.user.id)
+        .limit(8);
+      setSharePostResults((data || []) as SocialProfile[]);
+      setProfiles((prev) => {
+        const next = { ...prev };
+        (data || []).forEach((item) => { next[item.id] = item as SocialProfile; });
+        return next;
+      });
+    }, 280);
+
+    return () => window.clearTimeout(timeout);
+  }, [sharePostSearch, sharePostId, session?.user.id]);
+
+  function hydrateSocialCache(userId: string) {
+    try {
+      const postsRaw = localStorage.getItem(socialCacheKey('posts', userId));
+      if (postsRaw) {
+        const parsed = JSON.parse(postsRaw) as {
+          posts: Post[];
+          images: PostImage[];
+          likes: Like[];
+          comments: Comment[];
+          commentLikes: CommentLike[];
+        };
+        setPosts(parsed.posts || []);
+        setImages(parsed.images || []);
+        setLikes(parsed.likes || []);
+        setComments(parsed.comments || []);
+        setCommentLikes(parsed.commentLikes || []);
+      }
+
+      const rankingRaw = localStorage.getItem(socialCacheKey('ranking', userId));
+      if (rankingRaw) {
+        setRankingStats((JSON.parse(rankingRaw) || []) as SocialProfileStats[]);
+      }
+
+      const messagesRaw = localStorage.getItem(socialCacheKey('messages', userId));
+      if (messagesRaw) {
+        setMessages((JSON.parse(messagesRaw) || []) as SocialMessage[]);
+      }
+    } catch {
+      // Ignore invalid cache.
+    }
+  }
 
   async function refreshAll() {
     setLoading(true);
@@ -794,7 +1201,9 @@ export function Social() {
 
   async function refreshFeed(preserveScroll = false) {
     if (!supabase) return;
-    const scrollSnapshot = preserveScroll ? getScrollSnapshot() : null;
+    const shouldPreserve = preserveScroll && socialMode === 'feed' && !showNotifications && !showConversations && !viewProfileId && !chatPeerId;
+    const scrollSnapshot = shouldPreserve ? getScrollSnapshot() : null;
+    const anchorSnapshot = shouldPreserve ? getFeedAnchorSnapshot() : null;
     const [{ data: postData }, { data: imageData }, { data: likeData }, { data: commentData }, { data: commentLikeData }] = await Promise.all([
       supabase.from('social_posts').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(100),
       supabase.from('social_post_images').select('*').order('position', { ascending: true }),
@@ -809,12 +1218,28 @@ export function Social() {
     setLikes((likeData || []) as Like[]);
     setComments(commentList);
     setCommentLikes((commentLikeData || []) as CommentLike[]);
+    if (currentUserId) {
+      localStorage.setItem(
+        socialCacheKey('posts', currentUserId),
+        JSON.stringify({
+          posts: postList,
+          images: (imageData || []) as PostImage[],
+          likes: (likeData || []) as Like[],
+          comments: commentList,
+          commentLikes: (commentLikeData || []) as CommentLike[],
+        }),
+      );
+    }
     await loadProfiles([
       ...postList.map((p) => p.user_id),
       ...(likeData || []).map((like: Like) => like.user_id),
       ...commentList.map((c) => c.user_id),
     ]);
-    if (scrollSnapshot) restoreScrollAfterContentGrowth(scrollSnapshot.top, scrollSnapshot.height);
+    if (anchorSnapshot) {
+      restoreFeedAnchor(anchorSnapshot);
+    } else if (scrollSnapshot) {
+      restoreScrollAfterContentGrowth(scrollSnapshot.top, scrollSnapshot.height);
+    }
   }
 
   async function refreshShares() {
@@ -833,7 +1258,18 @@ export function Social() {
       .order('created_at', { ascending: false })
       .limit(300);
     const list = (data || []) as SocialMessage[];
+    const messageIds = list.map((message) => message.id);
+    if (messageIds.length) {
+      const { data: likeData } = await supabase
+        .from('social_message_likes')
+        .select('*')
+        .in('message_id', messageIds);
+      setMessageLikes((likeData || []) as SocialMessageLike[]);
+    } else {
+      setMessageLikes([]);
+    }
     setMessages(list);
+    if (currentUserId) localStorage.setItem(socialCacheKey('messages', currentUserId), JSON.stringify(list));
     await loadProfiles(list.flatMap((message) => [message.sender_id, message.receiver_id]));
   }
 
@@ -854,6 +1290,7 @@ export function Social() {
       .limit(50);
     const list = (data || []) as SocialProfileStats[];
     setRankingStats(list);
+    if (currentUserId) localStorage.setItem(socialCacheKey('ranking', currentUserId), JSON.stringify(list));
     await loadProfiles(list.map((item) => item.user_id));
   }
 
@@ -961,6 +1398,10 @@ export function Social() {
     if (!supabase || !session || postFiles.length === 0) return;
     const rows: { post_id: string; image_url: string; position: number }[] = [];
     for (const [index, file] of postFiles.slice(0, 6).entries()) {
+      if (!isImageFile(file)) {
+        toast('Vídeo não é permitido. Envie apenas imagens.', 'error');
+        continue;
+      }
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `${session.user.id}/${postId}/${index}-${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from('social-posts').upload(path, file, { upsert: true });
@@ -976,9 +1417,12 @@ export function Social() {
 
   function appendPostFiles(files: File[]) {
     if (!files.length) return;
+    const blocked = files.some((file) => !isImageFile(file));
+    if (blocked) toast('Vídeo não é permitido. Selecione apenas imagens.', 'error');
     setPostFiles((prev) => {
       const next = [...prev];
       files.forEach((file) => {
+        if (!isImageFile(file)) return;
         if (next.length >= 6) return;
         const exists = next.some((current) => (
           current.name === file.name
@@ -1031,6 +1475,7 @@ export function Social() {
   function startEditPost(post: Post) {
     setEditingPostId(post.id);
     setPostBody(post.body || '');
+    setMentionSearch('');
     setPostFiles([]);
     setShowPostModal(true);
   }
@@ -1160,6 +1605,28 @@ export function Social() {
         liked
           ? [...prev, optimisticLike]
           : prev.filter((like) => !(like.comment_id === commentId && like.user_id === session.user.id))
+      ));
+      toast(ptSupabaseError(error.message), 'error');
+    }
+  }
+
+  async function toggleMessageLike(messageId: string) {
+    if (!supabase || !session) return;
+    const liked = messageLikes.some((like) => like.message_id === messageId && like.user_id === session.user.id);
+    const optimisticLike = { message_id: messageId, user_id: session.user.id };
+    setMessageLikes((prev) => (
+      liked
+        ? prev.filter((like) => !(like.message_id === messageId && like.user_id === session.user.id))
+        : [...prev, optimisticLike]
+    ));
+    const { error } = liked
+      ? await supabase.from('social_message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id)
+      : await supabase.from('social_message_likes').insert(optimisticLike);
+    if (error) {
+      setMessageLikes((prev) => (
+        liked
+          ? [...prev, optimisticLike]
+          : prev.filter((like) => !(like.message_id === messageId && like.user_id === session.user.id))
       ));
       toast(ptSupabaseError(error.message), 'error');
     }
@@ -1323,6 +1790,7 @@ export function Social() {
       toast('Perfis privados só recebem mensagem de quem já seguem.', 'info');
       return;
     }
+    enableChatForceStick();
     setChatPeerId(peerId);
     setShowConversations(false);
     setViewProfileId(null);
@@ -1333,8 +1801,8 @@ export function Social() {
 
   async function uploadMessageMedia(file: File | null) {
     if (!supabase || !session || !file) return { media_url: null, media_type: null };
-    if (!file.type.startsWith('image/')) {
-      toast('Envie apenas fotos na DM.', 'error');
+    if (!isImageFile(file)) {
+      toast('Vídeo não é permitido na DM. Envie apenas imagens.', 'error');
       return { media_url: null, media_type: null };
     }
     const ext = file.name.split('.').pop() || 'jpg';
@@ -1388,6 +1856,53 @@ export function Social() {
     setSendingMessage(false);
   }
 
+  function openSharePost(postId: string) {
+    setSharePostId(postId);
+    setSharePostTargetId(null);
+    setSharePostSearch('');
+    setSharePostResults([]);
+    setSharePostMessage('');
+  }
+
+  function closeSharePost() {
+    setSharePostId(null);
+    setSharePostTargetId(null);
+    setSharePostSearch('');
+    setSharePostResults([]);
+    setSharePostMessage('');
+  }
+
+  async function sendSharedPost() {
+    if (!supabase || !session || !sharePostId || !sharePostTargetId) return;
+    if (sharingPost) return;
+    const target = profiles[sharePostTargetId];
+    const canSend = acceptedFriendIds.includes(sharePostTargetId) || (profile?.is_private === false && target?.is_private === false);
+    if (!canSend) {
+      toast('Só é possível enviar para amigos ou perfis públicos.', 'info');
+      return;
+    }
+
+    setSharingPost(true);
+    const body = buildSharedPostMessage(sharePostId, sharePostMessage);
+    const payload: Partial<SocialMessage> & { sender_id: string; receiver_id: string; body: string } = {
+      sender_id: session.user.id,
+      receiver_id: sharePostTargetId,
+      body,
+    };
+    const { error } = await supabase.from('social_messages').insert(payload);
+    if (error) {
+      toast(ptSupabaseError(error.message), 'error');
+      setSharingPost(false);
+      return;
+    }
+
+    await updateChatPreference(sharePostTargetId, { hidden_before: null, is_archived: false, last_read_at: new Date().toISOString() }, false);
+    await refreshMessages();
+    setSharingPost(false);
+    closeSharePost();
+    toast('Publicação enviada!', 'success');
+  }
+
   async function updateMessage(messageId: string) {
     if (!supabase || !session || !editingMessageText.trim()) return;
     const { error } = await supabase
@@ -1429,6 +1944,21 @@ export function Social() {
     messageLongPressRef.current = null;
   }
 
+  function handleMessagePointerUp(event: ReactPointerEvent<HTMLDivElement>, messageId: string, canLike: boolean) {
+    cancelMessageLongPress();
+    if (!canLike) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button,textarea,input,label,a')) return;
+    const now = Date.now();
+    const previous = messageDoubleTapRef.current;
+    if (previous && previous.messageId === messageId && now - previous.at <= 320) {
+      messageDoubleTapRef.current = null;
+      void toggleMessageLike(messageId);
+      return;
+    }
+    messageDoubleTapRef.current = { messageId, at: now };
+  }
+
   function markChatRead(peerId: string) {
     void updateChatPreference(peerId, { last_read_at: new Date().toISOString() }, false);
   }
@@ -1458,7 +1988,6 @@ export function Social() {
     }));
     const { error } = await supabase.from('social_chat_preferences').upsert(payload);
     if (error && showError) toast(ptSupabaseError(error.message), 'error');
-    else await refreshChatPreferences();
   }
 
   async function deleteChat(peerId: string) {
@@ -1514,10 +2043,67 @@ export function Social() {
     ))
     .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index)
     .slice(0, 8);
+  const messageMentionPool = [...acceptedFriendIds.map((id) => profiles[id]), ...conversationPeerIds.map((id) => profiles[id]), ...Object.values(profiles)]
+    .filter(Boolean)
+    .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index);
+
+  const activeCommentDraft = activeCommentsPostId ? (commentText[activeCommentsPostId] || '') : '';
+  const commentMentionMatch = activeCommentDraft.match(/@([a-z0-9_]*)$/i);
+  const commentMentionTerm = (commentMentionSearch || commentMentionMatch?.[1] || '').toLowerCase();
+  const commentMentionCandidates = [...acceptedFriendIds.map((id) => profiles[id]), ...commentMentionResults, ...Object.values(profiles)]
+    .filter(Boolean)
+    .filter((item) => (
+      !commentMentionTerm
+      || item.username.toLowerCase().includes(commentMentionTerm)
+      || item.display_name.toLowerCase().includes(commentMentionTerm)
+    ))
+    .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index)
+    .slice(0, 8);
+  const editingCommentMentionMatch = editingCommentText.match(/@([a-z0-9_]*)$/i);
+  const editingCommentMentionTerm = (editingCommentMentionSearch || editingCommentMentionMatch?.[1] || '').toLowerCase();
+  const editingCommentMentionCandidates = messageMentionPool
+    .filter((item) => (
+      !editingCommentMentionTerm
+      || item.username.toLowerCase().includes(editingCommentMentionTerm)
+      || item.display_name.toLowerCase().includes(editingCommentMentionTerm)
+    ))
+    .slice(0, 8);
+  const messageMentionMatch = messageText.match(/@([a-z0-9_]*)$/i);
+  const messageMentionTerm = (messageMentionSearch || messageMentionMatch?.[1] || '').toLowerCase();
+  const messageMentionCandidates = messageMentionPool
+    .filter((item) => (
+      !messageMentionTerm
+      || item.username.toLowerCase().includes(messageMentionTerm)
+      || item.display_name.toLowerCase().includes(messageMentionTerm)
+    ))
+    .slice(0, 8);
+  const editingMessageMentionMatch = editingMessageText.match(/@([a-z0-9_]*)$/i);
+  const editingMessageMentionTerm = (editingMessageMentionSearch || editingMessageMentionMatch?.[1] || '').toLowerCase();
+  const editingMessageMentionCandidates = messageMentionPool
+    .filter((item) => (
+      !editingMessageMentionTerm
+      || item.username.toLowerCase().includes(editingMessageMentionTerm)
+      || item.display_name.toLowerCase().includes(editingMessageMentionTerm)
+    ))
+    .slice(0, 8);
+  const sharePost = sharePostId ? posts.find((post) => post.id === sharePostId) || null : null;
+  const shareRecipients = [...conversationPeerIds.map((id) => profiles[id]), ...acceptedFriendIds.map((id) => profiles[id]), ...sharePostResults]
+    .filter(Boolean)
+    .filter((item, index, list) => item.id !== currentUserId && list.findIndex((candidate) => candidate.id === item.id) === index)
+    .filter((item) => {
+      const term = sharePostSearch.trim().toLowerCase();
+      if (!term) return true;
+      return item.username.toLowerCase().includes(term) || item.display_name.toLowerCase().includes(term);
+    })
+    .slice(0, 20);
+  const shareTargetProfile = sharePostTargetId ? profiles[sharePostTargetId] : null;
   const activeCommentMenu = commentMenuOpenId ? comments.find((comment) => comment.id === commentMenuOpenId) : null;
   const activeCommentPost = activeCommentMenu ? posts.find((post) => post.id === activeCommentMenu.post_id) : null;
   const activeCommentOwn = activeCommentMenu?.user_id === currentUserId;
   const activeCommentCanDelete = Boolean(activeCommentMenu && (activeCommentOwn || activeCommentPost?.user_id === currentUserId));
+  const activePostMenu = postMenuOpenId ? posts.find((post) => post.id === postMenuOpenId) : null;
+  const activeChatMessageMenu = messageMenuOpenId ? chatMessages.find((message) => message.id === messageMenuOpenId) : null;
+  const activeChatMessageCanEdit = Boolean(activeChatMessageMenu?.body && !extractSharedPostFromMessage(activeChatMessageMenu?.body || '').postId);
   const activeCommentsPost = activeCommentsPostId ? posts.find((post) => post.id === activeCommentsPostId) : null;
   const activeComments = activeCommentsPostId ? comments.filter((comment) => comment.post_id === activeCommentsPostId) : [];
 
@@ -1530,11 +2116,64 @@ export function Social() {
     setMentionSearch('');
   }
 
+  function insertCommentMention(postId: string, username: string) {
+    const value = commentText[postId] || '';
+    if (commentMentionMatch) {
+      setCommentText((prev) => ({ ...prev, [postId]: value.replace(/@([a-z0-9_]*)$/i, `@${username} `) }));
+    } else {
+      const spacer = value.endsWith(' ') || !value ? '' : ' ';
+      setCommentText((prev) => ({ ...prev, [postId]: `${value}${spacer}@${username} ` }));
+    }
+    setCommentMentionSearch('');
+  }
+
+  function insertEditingCommentMention(username: string) {
+    if (editingCommentMentionMatch) {
+      setEditingCommentText((value) => value.replace(/@([a-z0-9_]*)$/i, `@${username} `));
+    } else {
+      setEditingCommentText((value) => `${value}${value.endsWith(' ') || !value ? '' : ' '}@${username} `);
+    }
+    setEditingCommentMentionSearch('');
+  }
+
+  function insertMessageMention(username: string) {
+    if (messageMentionMatch) {
+      setMessageText((value) => value.replace(/@([a-z0-9_]*)$/i, `@${username} `));
+    } else {
+      setMessageText((value) => `${value}${value.endsWith(' ') || !value ? '' : ' '}@${username} `);
+    }
+    setMessageMentionSearch('');
+  }
+
+  function insertEditingMessageMention(username: string) {
+    if (editingMessageMentionMatch) {
+      setEditingMessageText((value) => value.replace(/@([a-z0-9_]*)$/i, `@${username} `));
+    } else {
+      setEditingMessageText((value) => `${value}${value.endsWith(' ') || !value ? '' : ' '}@${username} `);
+    }
+    setEditingMessageMentionSearch('');
+  }
+
   function openComments(postId: string) {
     setActiveCommentsPostId(postId);
     setCommentMenuOpenId(null);
     setEditingCommentId(null);
     setEditingCommentText('');
+    setEditingCommentMentionSearch('');
+    setCommentMentionSearch('');
+  }
+
+  function loadMoreFeed() {
+    if (isLoadingMoreFeed) return;
+    if (focusedPostId || socialMode !== 'feed') return;
+    if (visibleMainFeedPosts.length >= visibleFeedPosts.length) return;
+    setIsLoadingMoreFeed(true);
+    if (feedLoadMoreTimeoutRef.current) window.clearTimeout(feedLoadMoreTimeoutRef.current);
+    feedLoadMoreTimeoutRef.current = window.setTimeout(() => {
+      setVisibleFeedCount((count) => count + FEED_PAGE_SIZE);
+      setIsLoadingMoreFeed(false);
+      feedLoadMoreTimeoutRef.current = null;
+    }, 260);
   }
 
   const socialConfirmModals = (
@@ -1673,7 +2312,7 @@ export function Social() {
     const chatPeer = profiles[chatPeerId];
     const canSendToChatPeer = acceptedFriendIds.includes(chatPeerId) || (profile?.is_private === false && chatPeer?.is_private === false);
     return (
-      <div className="min-h-[100dvh] px-5 pt-28 pb-36">
+      <div className="min-h-[100dvh] px-5 pt-28 pb-[3rem] overflow-hidden">
         <div className="fixed left-0 right-0 top-0 z-50 px-5 pt-14 pb-4 bg-[rgb(var(--color-bg-rgb))]/95 backdrop-blur-xl border-b border-white/5">
           <div className="mx-auto max-w-md flex items-center gap-3">
             <button onClick={() => { markChatRead(chatPeerId); setChatPeerId(null); setShowConversations(true); }} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
@@ -1687,14 +2326,25 @@ export function Social() {
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div
+          ref={chatScrollContainerRef}
+          data-chat-scroll-container
+          className="fixed left-0 right-0 top-[116px] bottom-[calc(148px+env(safe-area-inset-bottom))] z-30 overflow-y-auto px-5"
+        >
+          <div ref={chatMessagesWrapRef} className="space-y-2 [overflow-anchor:none] max-w-md mx-auto">
           {chatMessages.map((message) => {
             const mine = message.sender_id === currentUserId;
+            const shared = extractSharedPostFromMessage(message.body || '');
+            const sharedPost = shared.postId ? posts.find((post) => post.id === shared.postId) : null;
+            const sharedPostImage = sharedPost ? images.find((image) => image.post_id === sharedPost.id) : null;
+            const likeCount = messageLikes.filter((like) => like.message_id === message.id).length;
+            const likedByMe = messageLikes.some((like) => like.message_id === message.id && like.user_id === currentUserId);
             return (
               <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div
+                  onDoubleClick={() => { void toggleMessageLike(message.id); }}
                   onPointerDown={() => startMessageLongPress(message.id, mine && editingMessageId !== message.id)}
-                  onPointerUp={cancelMessageLongPress}
+                  onPointerUp={(event) => handleMessagePointerUp(event, message.id, editingMessageId !== message.id)}
                   onPointerLeave={cancelMessageLongPress}
                   onPointerCancel={cancelMessageLongPress}
                   onContextMenu={(event) => {
@@ -1705,7 +2355,28 @@ export function Social() {
                   className={`relative max-w-[78%] select-none rounded-2xl px-4 py-2 text-sm leading-relaxed ${mine ? 'bg-primary-500 text-white rounded-br-md' : 'bg-white/10 border border-white/10 text-white/75 rounded-bl-md'}`}
                 >
                   {message.media_url && message.media_type === 'image' && (
-                    <img src={message.media_url} alt="" className="mb-2 max-h-72 rounded-xl object-cover" />
+                    <img src={message.media_url} alt="" onLoad={handleChatMediaLoad} className="mb-2 max-h-72 rounded-xl object-cover" />
+                  )}
+                  {shared.postId && (
+                    <button
+                      onClick={() => {
+                        if (!sharedPost) return;
+                        openFocusedPost(sharedPost.id, sharedPost.user_id);
+                      }}
+                      className={`mb-2 block w-full overflow-hidden rounded-2xl border text-left ${mine ? 'border-white/25 bg-white/10' : 'border-white/15 bg-white/5'} ${sharedPost ? 'active:scale-[0.99] transition-transform' : ''}`}
+                    >
+                      {sharedPostImage ? (
+                        <img src={sharedPostImage.image_url} alt="" onLoad={handleChatMediaLoad} className="h-40 w-full object-cover" />
+                      ) : (
+                        <div className="p-3">
+                          <p className="text-xs font-black uppercase tracking-wide opacity-80">Publicacao compartilhada</p>
+                          <p className="mt-1 text-xs opacity-80 line-clamp-3 break-words">{sharedPost?.body || 'Toque para abrir a publicacao no feed.'}</p>
+                        </div>
+                      )}
+                      <div className="px-3 py-2 text-[11px] opacity-80 border-t border-white/10">
+                        {sharedPost ? 'Toque para abrir no feed' : 'Publicacao nao encontrada'}
+                      </div>
+                    </button>
                   )}
                   {message.body && (
                     editingMessageId === message.id ? (
@@ -1715,51 +2386,44 @@ export function Social() {
                           onChange={(e) => setEditingMessageText(e.target.value.slice(0, 1000))}
                           className="w-full min-h-20 rounded-xl bg-black/15 border border-white/10 px-3 py-2 text-sm resize-none"
                         />
+                        {(editingMessageMentionMatch || editingMessageMentionSearch) && (
+                          <div className="rounded-xl bg-black/15 border border-white/10 p-2 space-y-1">
+                            <input
+                              value={editingMessageMentionSearch || editingMessageMentionMatch?.[1] || ''}
+                              onChange={(e) => setEditingMessageMentionSearch(normalizeUsername(e.target.value))}
+                              className="w-full h-9 rounded-lg bg-black/20 border border-white/10 px-2 text-xs"
+                              placeholder="Marcar alguém"
+                            />
+                            <div className="max-h-28 overflow-y-auto space-y-1">
+                              {editingMessageMentionCandidates.map((candidate) => (
+                                <button key={candidate.id} onClick={() => insertEditingMessageMention(candidate.username)} className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left bg-white/5">
+                                  <Avatar profile={candidate} size="sm" />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                                    <p className="text-[10px] text-white/45 truncate">@{candidate.username}</p>
+                                  </div>
+                                </button>
+                              ))}
+                              {editingMessageMentionCandidates.length === 0 && <p className="px-2 py-1 text-[11px] text-white/45">Nenhum perfil encontrado.</p>}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <button onClick={() => { setEditingMessageId(null); setEditingMessageText(''); }} className="flex-1 py-2 rounded-xl bg-white/10 text-xs font-semibold">Cancelar</button>
                           <button onClick={() => updateMessage(message.id)} className="flex-1 py-2 rounded-xl bg-white text-black text-xs font-bold">Salvar</button>
                         </div>
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                      shared.text ? <p className="whitespace-pre-wrap break-words">{shared.text}</p> : null
                     )
                   )}
                   {message.edited_at && editingMessageId !== message.id && (
                     <p className={`mt-1 text-[10px] ${mine ? 'text-white/55' : 'text-white/30'}`}>editado</p>
                   )}
-                  {mine && editingMessageId !== message.id && messageMenuOpenId === message.id && (
-                    <div className="absolute right-full top-1/2 z-[90] mr-2 w-40 -translate-y-1/2" data-social-menu>
-                      <button
-                        onClick={() => setMessageMenuOpenId((id) => (id === message.id ? null : message.id))}
-                        className="hidden"
-                        aria-label="Opções da mensagem"
-                      >
-                        <MaterialIcon name="more_horiz" className="text-base" />
-                      </button>
-                      {messageMenuOpenId === message.id && (
-                        <div className="w-40 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
-                          {message.body && (
-                            <button
-                              onClick={() => {
-                                setMessageMenuOpenId(null);
-                                setEditingMessageId(message.id);
-                                setEditingMessageText(message.body);
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
-                            >
-                              <MaterialIcon name="edit" className="text-base text-primary-300" />
-                              Editar
-                            </button>
-                          )}
-                          <button
-                            onClick={() => { setMessageMenuOpenId(null); void deleteMessage(message.id); }}
-                            className={`w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 active:bg-red-500/10 ${message.body ? 'border-t border-white/5' : ''}`}
-                          >
-                            <MaterialIcon name="delete" className="text-base" />
-                            Apagar
-                          </button>
-                        </div>
-                      )}
+                  {likeCount > 0 && editingMessageId !== message.id && (
+                    <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${likedByMe ? 'bg-primary-400/25 text-primary-200' : 'bg-black/20 text-white/60'}`}>
+                      <MaterialIcon name={likedByMe ? 'favorite' : 'favorite_border'} className="text-[12px]" />
+                      <span>{likeCount}</span>
                     </div>
                   )}
                 </div>
@@ -1772,7 +2436,22 @@ export function Social() {
             </div>
           )}
           <div ref={chatEndRef} />
+          </div>
         </div>
+
+        {showJumpToLatest && (
+          <button
+            onClick={() => {
+              chatAutoStickRef.current = true;
+              setShowJumpToLatest(false);
+              setPendingChatUpdates(0);
+              scrollChatToLatest('smooth');
+            }}
+            className="fixed right-5 bottom-[calc(142px+env(safe-area-inset-bottom))] z-[70] rounded-full bg-primary-500 text-white px-4 h-10 text-xs font-black shadow-lg shadow-primary-500/35"
+          >
+            {pendingChatUpdates > 0 ? `${pendingChatUpdates > 99 ? '99+' : pendingChatUpdates} novas` : 'Ver últimas'}
+          </button>
+        )}
 
         <div className="fixed left-0 right-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 px-4 pb-3 pt-2 bg-[rgb(var(--color-bg-rgb))]/95 border-t border-white/5">
           <div className="max-w-md mx-auto space-y-2">
@@ -1787,10 +2466,49 @@ export function Social() {
                 Mensagens bloqueadas. Se algum perfil for privado, vocês precisam se seguir.
               </p>
             )}
+            {(messageMentionMatch || messageMentionSearch) && (
+              <div className="rounded-2xl bg-white/5 border border-white/10 p-2.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="alternate_email" className="text-primary-300" />
+                  <input
+                    value={messageMentionSearch || messageMentionMatch?.[1] || ''}
+                    onChange={(e) => setMessageMentionSearch(normalizeUsername(e.target.value))}
+                    className="input-field text-xs h-10"
+                    placeholder="Buscar perfil para marcar"
+                  />
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {messageMentionCandidates.map((candidate) => (
+                    <button key={candidate.id} onClick={() => insertMessageMention(candidate.username)} className="w-full flex items-center gap-2 rounded-xl px-2 py-2 text-left bg-white/5">
+                      <Avatar profile={candidate} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                        <p className="text-[10px] text-white/35 truncate">@{candidate.username}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {messageMentionCandidates.length === 0 && <p className="text-xs text-white/35 px-2 py-1">Nenhum perfil encontrado.</p>}
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <label className="w-12 h-12 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
                 <MaterialIcon name="perm_media" className="text-xl text-primary-300" />
-                <input type="file" accept="image/*" disabled={!canSendToChatPeer} className="hidden" onChange={(e) => setMessageFile(e.target.files?.[0] || null)} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!canSendToChatPeer}
+                  className="hidden"
+                  onChange={(e) => {
+                    const nextFile = e.target.files?.[0] || null;
+                    if (nextFile && !isImageFile(nextFile)) {
+                      toast('Vídeo não é permitido na DM. Envie apenas imagens.', 'error');
+                      setMessageFile(null);
+                      return;
+                    }
+                    setMessageFile(nextFile);
+                  }}
+                />
               </label>
               <input
                 value={messageText}
@@ -1806,6 +2524,38 @@ export function Social() {
             </div>
           </div>
         </div>
+
+        {activeChatMessageMenu && (
+          <div className="fixed inset-0 z-[120] bg-black/20" onClick={() => setMessageMenuOpenId(null)}>
+            <div
+              data-social-menu
+              onClick={(event) => event.stopPropagation()}
+              className="absolute left-4 right-4 bottom-[calc(24px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden"
+            >
+              {activeChatMessageCanEdit && (
+                <button
+                  onClick={() => {
+                    setMessageMenuOpenId(null);
+                    setEditingMessageId(activeChatMessageMenu.id);
+                    setEditingMessageText(activeChatMessageMenu.body);
+                    setEditingMessageMentionSearch('');
+                  }}
+                  className="w-full px-5 py-4 text-left text-sm text-white/75 flex items-center gap-3 active:bg-white/5"
+                >
+                  <MaterialIcon name="edit" className="text-lg text-primary-300" />
+                  Editar mensagem
+                </button>
+              )}
+              <button
+                onClick={() => { setMessageMenuOpenId(null); void deleteMessage(activeChatMessageMenu.id); }}
+                className={`w-full px-5 py-4 text-left text-sm text-red-300 flex items-center gap-3 active:bg-red-500/10 ${activeChatMessageCanEdit ? 'border-t border-white/5' : ''}`}
+              >
+                <MaterialIcon name="delete" className="text-lg" />
+                Apagar mensagem
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1820,11 +2570,17 @@ export function Social() {
         </div>
 
         <div className="space-y-2">
-          {notifications.map((notification) => {
+          {visibleNotificationItems.map((notification) => {
             const actor = profiles[notification.userId];
             const relatedPost = notification.postId ? posts.find((post) => post.id === notification.postId) : null;
             const relatedImage = relatedPost ? images.find((image) => image.post_id === relatedPost.id) : null;
-            const icon = notification.type === 'like' || notification.type === 'comment_like' ? 'fitness_center' : notification.type === 'comment' ? 'chat_bubble' : notification.type === 'follow_request' ? 'person_add' : 'alternate_email';
+            const icon = notification.type === 'like' || notification.type === 'comment_like'
+              ? 'fitness_center'
+              : notification.type === 'comment'
+                ? 'chat_bubble'
+                : notification.type === 'follow_request'
+                  ? 'person_add'
+                  : 'alternate_email';
             return (
               <div key={notification.id} className="rounded-3xl bg-white/5 border border-white/10 p-3 flex items-center gap-3">
                 <button onClick={() => setViewProfileId(notification.userId)} className="shrink-0">
@@ -1878,6 +2634,14 @@ export function Social() {
               <p className="text-sm text-white/40">Curtidas, comentários e menções vão aparecer aqui.</p>
             </div>
           )}
+          {visibleNotificationItems.length < notifications.length && (
+            <button
+              onClick={() => setVisibleNotificationCount((count) => count + NOTIFICATION_PAGE_SIZE)}
+              className="w-full py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-bold text-white/70"
+            >
+              Carregar mais notificações
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1904,7 +2668,7 @@ export function Social() {
         )}
 
         <div className="space-y-2">
-          {conversations.map((conversation) => (
+          {visibleConversationItems.map((conversation) => (
             <div key={conversation.friendId} className="relative rounded-3xl bg-white/5 border border-white/10 p-3">
               <button onClick={() => openChat(conversation.friendId)} className="w-full flex items-center gap-3 text-left pr-12">
                 <Avatar profile={conversation.profile} />
@@ -1914,7 +2678,7 @@ export function Social() {
                     {conversation.profile?.display_name}
                   </p>
                   <p className="text-xs text-white/35 truncate">
-                    {conversation.lastMessage ? (conversation.lastMessage.body || 'Foto') : 'Toque para começar uma conversa'}
+                    {conversation.lastMessage ? (conversation.lastMessage.body ? messagePreviewText(conversation.lastMessage.body) : 'Foto') : 'Toque para começar uma conversa'}
                   </p>
                 </div>
                 {conversation.unreadCount > 0 && (
@@ -1948,6 +2712,14 @@ export function Social() {
               <h2 className="font-bold">{showArchivedChats ? 'Sem conversas arquivadas' : 'Sem conversas ativas'}</h2>
               <p className="text-sm text-white/40">{showArchivedChats ? 'Quando você arquivar uma conversa, ela aparece aqui.' : 'Adicione amigos ou converse com perfis públicos.'}</p>
             </div>
+          )}
+          {visibleConversationItems.length < conversations.length && (
+            <button
+              onClick={() => setVisibleConversationCount((count) => count + CONVERSATION_PAGE_SIZE)}
+              className="w-full py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-bold text-white/70"
+            >
+              Carregar mais conversas
+            </button>
           )}
         </div>
       </div>
@@ -2170,24 +2942,6 @@ export function Social() {
           </div>
         </div>
 
-        {!focusedPostId && socialMode === 'feed' && (
-          <div className="space-y-3">
-            <div className="relative">
-              <MaterialIcon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35 text-lg" />
-              <input
-                value={searchUsername}
-                onChange={(e) => setSearchUsername(e.target.value)}
-                className="input-field text-sm rounded-full pl-11"
-                placeholder="Pesquisar pessoas..."
-              />
-            </div>
-            <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
-              <button onClick={() => setFeedMode('general')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
-              <button onClick={() => setFeedMode('friends')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
-            </div>
-          </div>
-        )}
-
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-black tracking-tight">FEED</h2>
           <div className="flex items-center gap-2">
@@ -2209,10 +2963,30 @@ export function Social() {
         </div>
       </div>
 
+      {!focusedPostId && (
+        <div className="relative">
+          <MaterialIcon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35 text-lg" />
+          <input
+            value={searchUsername}
+            onFocus={() => setSocialMode('feed')}
+            onChange={(e) => setSearchUsername(e.target.value)}
+            className="input-field text-sm rounded-full pl-11"
+            placeholder="Pesquisar pessoas..."
+          />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
         <button onClick={() => { setFocusedPostId(null); setFocusedPostBackProfileId(null); setSocialMode('ranking'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'ranking' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Ranking</button>
         <button onClick={() => { setFocusedPostId(null); setFocusedPostBackProfileId(null); setSocialMode('feed'); }} className={`py-2 rounded-full text-sm font-black ${socialMode === 'feed' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Feed</button>
       </div>
+
+      {!focusedPostId && socialMode === 'feed' && (
+        <div className="grid grid-cols-2 rounded-full bg-white/5 p-1">
+          <button onClick={() => setFeedMode('general')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
+          <button onClick={() => setFeedMode('friends')} className={`py-2 rounded-full text-sm font-bold ${feedMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
+        </div>
+      )}
 
       {socialMode === 'ranking' && (
         <div className="space-y-3">
@@ -2225,7 +2999,7 @@ export function Social() {
             <button onClick={() => setRankingMode('general')} className={`py-2 rounded-full text-sm font-bold ${rankingMode === 'general' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Geral</button>
             <button onClick={() => setRankingMode('friends')} className={`py-2 rounded-full text-sm font-bold ${rankingMode === 'friends' ? 'bg-primary-500 text-white' : 'text-white/45'}`}>Amigos</button>
           </div>
-          {rankingRows.map((row, index) => (
+          {visibleRankingRows.map((row, index) => (
             <button key={row.stats.user_id} onClick={() => setViewProfileId(row.stats.user_id)} className="w-full flex items-center gap-3 rounded-3xl bg-white/5 border border-white/10 p-3 text-left">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${index === 0 ? 'bg-primary-500 text-white' : 'bg-white/10 text-white/70'}`}>
                 {index + 1}
@@ -2245,6 +3019,14 @@ export function Social() {
             <p className="card text-sm text-white/35">
               {rankingMode === 'friends' ? 'Nenhum amigo no ranking ainda.' : 'Ranking vazio por enquanto.'}
             </p>
+          )}
+          {visibleRankingRows.length < rankingRows.length && (
+            <button
+              onClick={() => setVisibleRankingCount((count) => count + RANKING_PAGE_SIZE)}
+              className="w-full py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-bold text-white/70"
+            >
+              Carregar mais no ranking
+            </button>
           )}
         </div>
       )}
@@ -2352,7 +3134,7 @@ export function Social() {
             </button>
           </div>
         )}
-        {visibleFeedPosts.map((post) => {
+        {visibleMainFeedPosts.map((post) => {
           const author = profiles[post.user_id];
           const postImages = images.filter((img) => img.post_id === post.id);
           const postLikes = likes.filter((like) => like.post_id === post.id);
@@ -2361,6 +3143,7 @@ export function Social() {
           return (
             <article
               key={post.id}
+              data-feed-post-id={post.id}
               onDoubleClick={() => { if (!liked) void toggleLike(post.id); }}
               className="-mx-5 border-y border-white/10 bg-[rgb(var(--color-bg-rgb))] px-5 py-4 space-y-3"
             >
@@ -2382,35 +3165,10 @@ export function Social() {
                     >
                       <MaterialIcon name="more_horiz" className="text-xl" />
                     </button>
-                    {postMenuOpenId === post.id && (
-                      <div className="absolute right-0 top-11 z-20 w-56 rounded-2xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden">
-                        <button
-                          onClick={() => { setPostMenuOpenId(null); startEditPost(post); }}
-                          className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 active:bg-white/5"
-                        >
-                          <MaterialIcon name="edit" className="text-base text-primary-300" />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => { setPostMenuOpenId(null); void togglePostComments(post); }}
-                          className="w-full px-4 py-3 text-left text-sm text-white/70 flex items-center gap-2 border-t border-white/5 active:bg-white/5"
-                        >
-                          <MaterialIcon name={post.comments_enabled === false ? 'forum' : 'comments_disabled'} className="text-base text-primary-300" />
-                          {post.comments_enabled === false ? 'Ativar comentários' : 'Desativar comentários'}
-                        </button>
-                        <button
-                          onClick={() => { setPostMenuOpenId(null); void deletePost(post.id); }}
-                          className="w-full px-4 py-3 text-left text-sm text-red-300 flex items-center gap-2 border-t border-white/5 active:bg-red-500/10"
-                        >
-                          <MaterialIcon name="delete" className="text-base" />
-                          Excluir
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-              {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap break-words">{post.body}</p>}
+              {post.body && <p className="text-sm text-white/75 leading-relaxed whitespace-pre-wrap break-words">{renderTextWithMentions(post.body)}</p>}
               {postImages.length > 0 && (
                 <div className="-mx-5 flex snap-x snap-mandatory overflow-x-auto no-scrollbar">
                   {postImages.map((img) => (
@@ -2438,6 +3196,13 @@ export function Social() {
                   aria-label="Abrir comentários"
                 >
                   <MaterialIcon name="chat_bubble" variant="outlined" className="text-2xl" />
+                </button>
+                <button
+                  onClick={() => openSharePost(post.id)}
+                  className="h-10 w-10 rounded-full text-white/70 flex items-center justify-center"
+                  aria-label="Enviar publicação"
+                >
+                  <MaterialIcon name="send" variant="outlined" className="text-2xl" />
                 </button>
                 </div>
                 <button onClick={() => openFocusedPost(post.id)} className="h-10 w-10 rounded-full text-white/45 flex items-center justify-center" aria-label="Abrir publicação">
@@ -2469,6 +3234,28 @@ export function Social() {
                                 maxLength={240}
                                 className="input-field text-xs min-h-20 resize-none"
                               />
+                              {(editingCommentMentionMatch || editingCommentMentionSearch) && (
+                                <div className="rounded-xl bg-white/5 border border-white/10 p-2 space-y-1">
+                                  <input
+                                    value={editingCommentMentionSearch || editingCommentMentionMatch?.[1] || ''}
+                                    onChange={(e) => setEditingCommentMentionSearch(normalizeUsername(e.target.value))}
+                                    className="input-field text-xs h-9"
+                                    placeholder="Marcar alguém"
+                                  />
+                                  <div className="max-h-28 overflow-y-auto space-y-1">
+                                    {editingCommentMentionCandidates.map((candidate) => (
+                                      <button key={candidate.id} onClick={() => insertEditingCommentMention(candidate.username)} className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left bg-white/5">
+                                        <Avatar profile={candidate} size="sm" />
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                                          <p className="text-[10px] text-white/35 truncate">@{candidate.username}</p>
+                                        </div>
+                                      </button>
+                                    ))}
+                                    {editingCommentMentionCandidates.length === 0 && <p className="px-2 py-1 text-[11px] text-white/35">Nenhum perfil encontrado.</p>}
+                                  </div>
+                                </div>
+                              )}
                               <div className="flex gap-2">
                                 <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="flex-1 py-2 rounded-xl bg-white/5 text-white/45 font-semibold">Cancelar</button>
                                 <button onClick={() => updateComment(comment.id)} className="flex-1 py-2 rounded-xl bg-primary-500 text-white font-bold">Salvar</button>
@@ -2477,7 +3264,8 @@ export function Social() {
                           ) : (
                             <>
                               <p className="whitespace-pre-wrap break-words">
-                                <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button> {comment.body}
+                                <button onClick={() => setViewProfileId(comment.user_id)} className="font-bold text-white/80">@{profiles[comment.user_id]?.username}</button>{' '}
+                                {renderTextWithMentions(comment.body, 'font-black text-primary-300/95 hover:underline')}
                               </p>
                               {comment.edited_at && (
                                 <p className="text-[10px] text-white/30">editado</p>
@@ -2509,20 +3297,26 @@ export function Social() {
                   </div>
                 )}
                 {postComments.length > 2 && (
-                  <button onClick={() => openComments(post.id)} className="text-xs text-white/35">
+                  <button onClick={() => openComments(post.id)} className="block w-full text-left text-xs text-white/35">
                     Ver todos os {postComments.length} comentários
                   </button>
                 )}
                 {post.comments_enabled === false ? (
                   <p className="rounded-xl bg-white/5 px-3 py-3 text-center text-xs text-white/35">Comentários desativados.</p>
                 ) : (
-                  <button onClick={() => openComments(post.id)} className="text-xs text-white/35">Adicionar comentário...</button>
+                  <button onClick={() => openComments(post.id)} className="block w-full text-left text-xs text-white/55 pt-1">Adicionar comentário...</button>
                 )}
               </div>
             </article>
           );
         })}
         {visibleFeedPosts.length === 0 && <p className="card text-sm text-white/35">{focusedPostId ? 'Publicação não encontrada.' : 'Nenhuma publicação ainda.'}</p>}
+        {!focusedPostId && visibleMainFeedPosts.length < visibleFeedPosts.length && (
+          <div ref={feedLoadMoreRef} className="py-3 flex items-center justify-center gap-2 text-xs text-white/45">
+            <span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-primary-300 animate-spin" />
+            Carregando posts...
+          </div>
+        )}
       </div>
         </>
       )}
@@ -2561,6 +3355,28 @@ export function Social() {
                             maxLength={240}
                             className="input-field text-xs min-h-20 resize-none"
                           />
+                          {(editingCommentMentionMatch || editingCommentMentionSearch) && (
+                            <div className="rounded-xl bg-white/5 border border-white/10 p-2 space-y-1">
+                              <input
+                                value={editingCommentMentionSearch || editingCommentMentionMatch?.[1] || ''}
+                                onChange={(e) => setEditingCommentMentionSearch(normalizeUsername(e.target.value))}
+                                className="input-field text-xs h-9"
+                                placeholder="Marcar alguém"
+                              />
+                              <div className="max-h-28 overflow-y-auto space-y-1">
+                                {editingCommentMentionCandidates.map((candidate) => (
+                                  <button key={candidate.id} onClick={() => insertEditingCommentMention(candidate.username)} className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left bg-white/5">
+                                    <Avatar profile={candidate} size="sm" />
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                                      <p className="text-[10px] text-white/35 truncate">@{candidate.username}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                                {editingCommentMentionCandidates.length === 0 && <p className="px-2 py-1 text-[11px] text-white/35">Nenhum perfil encontrado.</p>}
+                              </div>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <button onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }} className="flex-1 py-2 rounded-xl bg-white/5 text-white/45 font-semibold">Cancelar</button>
                             <button onClick={() => updateComment(comment.id)} className="flex-1 py-2 rounded-xl bg-primary-500 text-white font-bold">Salvar</button>
@@ -2569,7 +3385,8 @@ export function Social() {
                       ) : (
                         <>
                           <p className="text-sm leading-relaxed text-white/75 break-words">
-                            <button onClick={() => setViewProfileId(comment.user_id)} className="font-black text-white">@{profiles[comment.user_id]?.username || 'usuario'}</button> {comment.body}
+                            <button onClick={() => setViewProfileId(comment.user_id)} className="font-black text-white">@{profiles[comment.user_id]?.username || 'usuario'}</button>{' '}
+                            {renderTextWithMentions(comment.body, 'font-black text-primary-300/95 hover:underline')}
                           </p>
                           <div className="mt-1 flex items-center gap-4 text-[11px] text-white/35">
                             <span>{formatSocialDate(comment.created_at)}</span>
@@ -2600,23 +3417,51 @@ export function Social() {
             {activeCommentsPost.comments_enabled === false ? (
               <p className="border-t border-white/10 px-5 py-4 text-center text-xs text-white/35">Comentários desativados.</p>
             ) : (
-              <div className="border-t border-white/10 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex items-center gap-2">
-                <Avatar profile={profile} size="sm" />
-                <input
-                  value={commentText[activeCommentsPost.id] || ''}
-                  onChange={(e) => setCommentText((prev) => ({ ...prev, [activeCommentsPost.id]: e.target.value.slice(0, 240) }))}
-                  maxLength={240}
-                  className="input-field text-sm rounded-full"
-                  placeholder="Adicionar comentário..."
-                />
-                <button
-                  onClick={() => addComment(activeCommentsPost.id)}
-                  disabled={!commentText[activeCommentsPost.id]?.trim()}
-                  className="w-11 h-11 rounded-full bg-primary-500 text-white disabled:opacity-40 flex items-center justify-center"
-                  aria-label="Enviar comentário"
-                >
-                  <MaterialIcon name="send" />
-                </button>
+              <div className="border-t border-white/10 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] space-y-2">
+                {(commentMentionMatch || commentMentionSearch) && (
+                  <div className="rounded-2xl bg-white/5 border border-white/10 p-2.5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <MaterialIcon name="alternate_email" className="text-primary-300" />
+                      <input
+                        value={commentMentionSearch || commentMentionMatch?.[1] || ''}
+                        onChange={(e) => setCommentMentionSearch(normalizeUsername(e.target.value))}
+                        className="input-field text-xs h-10"
+                        placeholder="Buscar perfil para marcar"
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto space-y-1">
+                      {commentMentionCandidates.map((candidate) => (
+                        <button key={candidate.id} onClick={() => insertCommentMention(activeCommentsPost.id, candidate.username)} className="w-full flex items-center gap-2 rounded-xl px-2 py-2 text-left bg-white/5">
+                          <Avatar profile={candidate} size="sm" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold truncate">{candidate.display_name}</p>
+                            <p className="text-[10px] text-white/35 truncate">@{candidate.username}</p>
+                          </div>
+                        </button>
+                      ))}
+                      {commentMentionCandidates.length === 0 && <p className="text-xs text-white/35 px-2 py-1">Nenhum perfil encontrado.</p>}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Avatar profile={profile} size="sm" />
+                  <input
+                    value={commentText[activeCommentsPost.id] || ''}
+                    onChange={(e) => setCommentText((prev) => ({ ...prev, [activeCommentsPost.id]: e.target.value.slice(0, 240) }))}
+                    maxLength={240}
+                    className="input-field text-sm rounded-full"
+                    placeholder="Adicionar comentário..."
+                  />
+                  <button
+                    onClick={() => addComment(activeCommentsPost.id)}
+                    disabled={!commentText[activeCommentsPost.id]?.trim()}
+                    className="w-11 h-11 rounded-full bg-primary-500 text-white disabled:opacity-40 flex items-center justify-center"
+                    aria-label="Enviar comentário"
+                  >
+                    <MaterialIcon name="send" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2649,6 +3494,106 @@ export function Social() {
             >
               <MaterialIcon name="delete" className="text-lg" />
               Apagar comentário
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activePostMenu && activePostMenu.user_id === currentUserId && (
+        <div className="fixed inset-0 z-[121] bg-black/20" onClick={() => setPostMenuOpenId(null)}>
+          <div
+            data-social-menu
+            onClick={(event) => event.stopPropagation()}
+            className="absolute left-4 right-4 bottom-[calc(24px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-3xl bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 shadow-2xl overflow-hidden"
+          >
+            <button
+              onClick={() => { setPostMenuOpenId(null); startEditPost(activePostMenu); }}
+              className="w-full px-5 py-4 text-left text-sm text-white/75 flex items-center gap-3 active:bg-white/5"
+            >
+              <MaterialIcon name="edit" className="text-lg text-primary-300" />
+              Editar publicação
+            </button>
+            <button
+              onClick={() => { setPostMenuOpenId(null); void togglePostComments(activePostMenu); }}
+              className="w-full px-5 py-4 text-left text-sm text-white/75 flex items-center gap-3 border-t border-white/5 active:bg-white/5"
+            >
+              <MaterialIcon name={activePostMenu.comments_enabled === false ? 'forum' : 'comments_disabled'} className="text-lg text-primary-300" />
+              {activePostMenu.comments_enabled === false ? 'Ativar comentários' : 'Desativar comentários'}
+            </button>
+            <button
+              onClick={() => { setPostMenuOpenId(null); void deletePost(activePostMenu.id); }}
+              className="w-full px-5 py-4 text-left text-sm text-red-300 flex items-center gap-3 border-t border-white/5 active:bg-red-500/10"
+            >
+              <MaterialIcon name="delete" className="text-lg" />
+              Excluir publicação
+            </button>
+          </div>
+        </div>
+      )}
+
+      {sharePostId && (
+        <div className="fixed inset-0 z-[125] flex items-end justify-center bg-black/65" onClick={closeSharePost}>
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md rounded-t-[28px] bg-[rgb(var(--color-bg-card-rgb))] border border-white/10 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black">Enviar publicação</h2>
+              <button onClick={closeSharePost} className="w-10 h-10 rounded-full bg-white/5 text-white/60">X</button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs font-black uppercase tracking-wide text-white/40">Prévia</p>
+              <p className="mt-1 text-sm text-white/75 line-clamp-3 break-words">{sharePost?.body || 'Publicação com mídia'}</p>
+            </div>
+
+            <div className="relative">
+              <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" />
+              <input
+                value={sharePostSearch}
+                onChange={(event) => setSharePostSearch(event.target.value)}
+                className="input-field text-sm rounded-full pl-10"
+                placeholder="Buscar amigo para enviar"
+              />
+            </div>
+
+            <div className="max-h-56 overflow-y-auto space-y-2">
+              {shareRecipients.map((candidate) => {
+                const selected = sharePostTargetId === candidate.id;
+                return (
+                  <button
+                    key={candidate.id}
+                    onClick={() => setSharePostTargetId(candidate.id)}
+                    className={`w-full flex items-center gap-3 rounded-2xl border p-2.5 text-left ${selected ? 'border-primary-500/40 bg-primary-500/10' : 'border-white/10 bg-white/5'}`}
+                  >
+                    <Avatar profile={candidate} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold truncate">{candidate.display_name}</p>
+                      <p className="text-[11px] text-white/35 truncate">@{candidate.username}</p>
+                    </div>
+                    {selected && <MaterialIcon name="check_circle" className="text-primary-300" />}
+                  </button>
+                );
+              })}
+              {shareRecipients.length === 0 && (
+                <p className="rounded-2xl bg-white/5 border border-white/10 p-3 text-sm text-white/40">Nenhum perfil encontrado para envio.</p>
+              )}
+            </div>
+
+            <textarea
+              value={sharePostMessage}
+              onChange={(event) => setSharePostMessage(event.target.value.slice(0, 180))}
+              className="input-field text-sm min-h-20 resize-none"
+              placeholder="Adicionar mensagem (opcional)"
+              maxLength={180}
+            />
+
+            <button
+              onClick={sendSharedPost}
+              disabled={!shareTargetProfile || sharingPost}
+              className="w-full py-3 rounded-2xl bg-primary-500 text-white font-black disabled:opacity-40"
+            >
+              {sharingPost ? 'Enviando...' : 'Enviar publicação'}
             </button>
           </div>
         </div>

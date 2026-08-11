@@ -6,6 +6,7 @@ import { WORKOUT_MAP } from '@/constants/workouts';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ActivityIntensity, ActivityLocation, WorkoutSession } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { CustomDatePicker } from '@/components/ui/CustomDatePicker';
 
 const ACTIVITY_PRESETS = ['Caminhada', 'Esteira', 'Bike', 'Treino em casa', 'Livre'];
 
@@ -252,12 +253,7 @@ function FreeActivityModal({ onClose }: { onClose: () => void }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs font-medium text-white/50">Data</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
-            />
+            <CustomDatePicker value={date} onChange={setDate} />
           </label>
         </div>
 

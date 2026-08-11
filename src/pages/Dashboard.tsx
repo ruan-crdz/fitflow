@@ -25,9 +25,12 @@ import { DASHBOARD_WIDGET_LABELS, DEFAULT_DASHBOARD_WIDGETS, useDashboardStore }
 import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
 import { useNotesStore } from '@/stores/useNotesStore';
 import { useRecoveryStore } from '@/stores/useRecoveryStore';
+import { computeReadiness, READINESS_WEIGHTS } from '@/utils/readiness';
 import type { WorkoutType } from '@/types';
 import type { ActivityIntensity, ActivityLocation } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { CustomSelect } from '@/components/ui/CustomSelect';
+import { CustomDatePicker } from '@/components/ui/CustomDatePicker';
 
 type DashboardHistory = 'consistency' | 'load' | 'calories' | 'water' | 'bmi' | 'weight' | null;
 
@@ -102,9 +105,8 @@ export function Dashboard() {
   const weeklyProgress = Math.min(weeklyCompleted / targetWeeklySessions, 1);
   const nextWorkoutType = activeSlots[structuredSessions.length % Math.max(activeSlots.length, 1)] || 'A';
   const todayCheckin = checkins[today];
-  const readinessScore = todayCheckin
-    ? Math.max(0, Math.min(100, Math.round(((todayCheckin.energy * 20) + ((10 - todayCheckin.soreness) * 6) + ((6 - todayCheckin.stress) * 8) + (todayCheckin.sleepHours * 5)) / 3)))
-    : null;
+  const readiness = computeReadiness(todayCheckin || null);
+  const readinessScore = readiness?.score ?? null;
   const readinessLabel = readinessScore === null
     ? 'Sem check-in hoje'
     : readinessScore >= 70
@@ -139,7 +141,7 @@ export function Dashboard() {
           <p className="gym-kicker">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}
           </p>
-          <h1 className="gym-title mt-1">{profile.name} <MaterialIcon name={profile.sex === 'male' ? 'fitness_center' : 'favorite'} className="inline-flex text-primary-300 text-[24px]" /></h1>
+          <h1 className="gym-title mt-1">{profile.name} <MaterialIcon name={profile.sex === 'male' ? 'fitness_center' : profile.sex === 'female' ? 'favorite' : 'bolt'} className="inline-flex text-primary-300 text-[24px]" /></h1>
         </div>
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -286,7 +288,15 @@ export function Dashboard() {
             transition={{ type: 'spring', stiffness: 90 }}
           />
         </div>
-        <p className="text-xs text-white/40">Atualizado no pós-treino com energia, dor muscular, estresse e sono.</p>
+        <p className="text-xs text-white/40">Fórmula: energia {Math.round(READINESS_WEIGHTS.energy * 100)}% + dor invertida {Math.round(READINESS_WEIGHTS.soreness * 100)}% + estresse invertido {Math.round(READINESS_WEIGHTS.stress * 100)}% + sono {Math.round(READINESS_WEIGHTS.sleep * 100)}%.</p>
+        {readiness && todayCheckin && (
+          <div className="grid grid-cols-2 gap-2 text-[11px] text-white/45">
+            <p>Energia: {todayCheckin.energy}/5 ({Math.round(readiness.energy)} pts)</p>
+            <p>Dor: {todayCheckin.soreness}/10 ({Math.round(readiness.soreness)} pts)</p>
+            <p>Estresse: {todayCheckin.stress}/5 ({Math.round(readiness.stress)} pts)</p>
+            <p>Sono: {todayCheckin.sleepHours}h ({Math.round(readiness.sleep)} pts)</p>
+          </div>
+        )}
       </div>}
 
       {isWidgetVisible('weeklyGoal') && <div className="card space-y-3">
@@ -569,12 +579,7 @@ function FreeActivityModal({ onClose }: { onClose: () => void }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs text-white/45">Data</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
-            />
+            <CustomDatePicker value={date} onChange={setDate} />
           </label>
           <label className="space-y-1">
             <span className="text-xs text-white/45">Duração (min)</span>
@@ -598,23 +603,19 @@ function FreeActivityModal({ onClose }: { onClose: () => void }) {
           </label>
           <label className="space-y-1">
             <span className="text-xs text-white/45">Local</span>
-            <select
+            <CustomSelect
               value={location}
-              onChange={(e) => setLocation(e.target.value as ActivityLocation)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
-            >
-              {Object.entries(LOCATION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+              onChange={(value) => setLocation(value as ActivityLocation)}
+              options={Object.entries(LOCATION_LABELS).map(([value, label]) => ({ value, label }))}
+            />
           </label>
           <label className="space-y-1">
             <span className="text-xs text-white/45">Intensidade</span>
-            <select
+            <CustomSelect
               value={intensity}
-              onChange={(e) => setIntensity(e.target.value as ActivityIntensity)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm outline-none focus:border-primary-400"
-            >
-              {Object.entries(INTENSITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+              onChange={(value) => setIntensity(value as ActivityIntensity)}
+              options={Object.entries(INTENSITY_LABELS).map(([value, label]) => ({ value, label }))}
+            />
           </label>
           <label className="space-y-1 col-span-2">
             <span className="text-xs text-white/45">Observações (opcional)</span>

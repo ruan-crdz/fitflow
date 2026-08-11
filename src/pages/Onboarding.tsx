@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus, TrainingLocation } from '@/types';
+import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
 
 type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'personalization' | 'focus' | 'customSplit' | 'setup';
 
@@ -11,12 +12,21 @@ interface OnboardingProps {
   onBack?: () => void;
 }
 
+function PrivacyHint({ text }: { text: string }) {
+  return (
+    <p className="mt-1 text-[11px] text-white/35 flex items-start gap-1.5">
+      <MaterialIcon name="info" className="text-[14px] text-primary-300 mt-[1px]" />
+      <span>{text}</span>
+    </p>
+  );
+}
+
 export function Onboarding({ onBack }: OnboardingProps) {
   const navigate = useNavigate();
   const setProfile = useProfileStore((s) => s.setProfile);
 
   const [step, setStep] = useState<Step>('welcome');
-  const [sex, setSex] = useState<BiologicalSex>('female');
+  const [sex, setSex] = useState<BiologicalSex>('undisclosed');
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [weight, setWeight] = useState('');
@@ -56,23 +66,18 @@ export function Onboarding({ onBack }: OnboardingProps) {
     && weightNumber >= 30 && weightNumber <= 300
     && heightNumber >= 100 && heightNumber <= 250;
 
-  const toList = (text: string) => text
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-
   const saveProfile = () => {
     setProfile({
       name, age: Number(age), weight: Number(weight), height: Number(height),
       goal, trainingDays: days, sex, experienceLevel: experience,
       trainingFocus: focus,
-      sessionDurationMin: Number.isFinite(sessionDurationNumber) && sessionDurationNumber > 0 ? sessionDurationNumber : 60,
+      sessionDurationMin: toPositiveIntOrFallback(sessionDurationNumber, 60),
       trainingLocation,
-      equipmentAccess: toList(equipmentText),
+      equipmentAccess: parseCsvList(equipmentText),
       trainingAgeMonths: Number.isFinite(trainingAgeNumber || NaN) ? trainingAgeNumber : undefined,
-      preferredExercises: toList(preferredExercisesText),
-      dislikedExercises: toList(dislikedExercisesText),
-      limitations: toList(limitationsText),
+      preferredExercises: parseCsvList(preferredExercisesText),
+      dislikedExercises: parseCsvList(dislikedExercisesText),
+      limitations: parseCsvList(limitationsText),
       ...(focus === 'custom' && Object.keys(customSplit).length > 0 ? { customSplit } : {}),
     });
   };
@@ -180,7 +185,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
             <div className="space-y-8">
               <div>
                 <h1 className="text-3xl font-bold mb-2"><MaterialIcon name="star" className="text-primary-300" /> Sobre você </h1>
-                <p className="text-white/50">Para adaptar o treino à sua fisiologia</p>
+                <p className="text-white/50">Se quiser, você pode não informar agora</p>
               </div>
               <div className="space-y-3">
                 <button
@@ -207,10 +212,23 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     <p className="text-white/40 text-xs">Corpo biologicamente masculino</p>
                   </div>
                 </button>
+                <button
+                  onClick={() => setSex('undisclosed')}
+                  className={`w-full p-5 rounded-2xl border text-left flex items-center gap-4 transition-all ${
+                    sex === 'undisclosed' ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 bg-dark-200'
+                  }`}
+                >
+                  <MaterialIcon name="shield" className="text-3xl text-primary-300" />
+                  <div>
+                    <span className="font-semibold text-lg">Prefiro não informar</span>
+                    <p className="text-white/40 text-xs">Você pode alterar depois no Perfil</p>
+                  </div>
+                </button>
               </div>
               <p className="text-[11px] text-white/30 text-center">
-                Usamos isso para calcular necessidades calóricas e adaptar volume de treino.
+                Esse dado é opcional e usado apenas para estimativas fisiológicas.
               </p>
+              <PrivacyHint text="Seu sexo biológico só influencia estimativas fisiológicas e pode ficar como não informado." />
               <button className="btn-primary" onClick={() => setStep('name')}>
                 Continuar
               </button>
@@ -262,6 +280,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     placeholder="25"
                     className="input-field"
                   />
+                  <PrivacyHint text="Idade ajusta volume, recuperação e faixa de intensidade sugerida." />
                 </div>
                 <div>
                   <label className="text-sm text-white/40 mb-1 block">Peso (kg)</label>
@@ -276,6 +295,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     className="input-field"
                     step="0.1"
                   />
+                  <PrivacyHint text="Peso entra em estimativas de calorias, hidratação e acompanhamento de progresso." />
                 </div>
                 <div>
                   <label className="text-sm text-white/40 mb-1 block">Altura (cm)</label>
@@ -289,6 +309,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     placeholder="170"
                     className="input-field"
                   />
+                  <PrivacyHint text="Altura ajuda no cálculo de métricas corporais e metas diárias." />
                 </div>
               </div>
               <button className="btn-primary" disabled={!bodyValid} onClick={() => setStep('goal')}>
@@ -318,6 +339,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                   </button>
                 ))}
               </div>
+              <PrivacyHint text="Seu objetivo define estratégia de treino e distribuição de macros sugerida." />
               <button className="btn-primary" onClick={() => setStep('experience')}>
                 Continuar
               </button>
@@ -348,6 +370,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                   </button>
                 ))}
               </div>
+              <PrivacyHint text="Seu nível evita prescrição agressiva demais e melhora segurança da progressão." />
               <button className="btn-primary" onClick={() => setStep('days')}>
                 Continuar
               </button>
@@ -377,6 +400,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
               <p className="text-center text-sm text-white/30">
                 {days.length} {days.length === 1 ? 'dia' : 'dias'} selecionado{days.length !== 1 ? 's' : ''}
               </p>
+              <PrivacyHint text="Dias disponíveis orientam frequência semanal e rotação entre treinos." />
               <button
                 className="btn-primary"
                 disabled={days.length < 1}
@@ -408,6 +432,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     placeholder="60"
                     className="input-field"
                   />
+                  <PrivacyHint text="Tempo por sessão controla quantos exercícios/séries entram em cada treino." />
                 </div>
 
                 <div>
@@ -440,6 +465,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     placeholder="halteres, banco, barra, elástico"
                     className="input-field"
                   />
+                  <PrivacyHint text="Equipamentos evitam sugestões inviáveis para seu ambiente real." />
                 </div>
 
                 <div>
@@ -486,6 +512,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
                     placeholder="dor no ombro, lombar sensível"
                     className="input-field min-h-20 resize-none"
                   />
+                  <PrivacyHint text="Limitações físicas são usadas para bloquear exercícios de maior risco." />
                 </div>
               </div>
 

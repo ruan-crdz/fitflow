@@ -13,16 +13,17 @@ export function AIIntro() {
   const profile = useProfileStore((s) => s.profile);
   const [step, setStep] = useState(0);
   const isMale = profile?.sex === 'male';
+  const isFemale = profile?.sex === 'female';
 
   const lines = [
     `Inicializando ${assistantName}...`,
     'Conectando a inteligencia artificial...',
     'Sistemas online.',
-    `Olá, ${profile?.name || (isMale ? 'usuário' : 'usuária')}. Prazer em conhecer você.`,
+    `Olá, ${profile?.name || (isMale ? 'usuário' : isFemale ? 'usuária' : 'pessoa usuária')}. Prazer em conhecer você.`,
     'Sou sua assistente fitness pessoal.',
     'Estou aqui para tirar duvidas, dar dicas de treino, nutrição e motivação.',
     'Tudo baseado em ciência. Tudo adaptado a você.',
-    isMale ? 'Vamos juntos?' : 'Vamos juntas?',
+    isMale ? 'Vamos juntos?' : isFemale ? 'Vamos juntas?' : 'Vamos nessa?',
   ];
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export function AIIntro() {
               {line}
               {i === lines.length - 1 && (
                 <span className={isMale ? 'ml-2' : 'ml-2 text-primary-400 text-base'}>
-                  <MaterialIcon name={isMale ? 'fitness_center' : 'favorite'} className="text-primary-300" />
+                  <MaterialIcon name={isMale ? 'fitness_center' : isFemale ? 'favorite' : 'bolt'} className="text-primary-300" />
                 </span>
               )}
             </motion.p>

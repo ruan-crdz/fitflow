@@ -9,11 +9,13 @@ import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { useHealthIntegrationStore, type HealthPlatform } from '@/stores/useHealthIntegrationStore';
 import { ExportData } from '@/components/ui/ExportData';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { syncNativeHealth } from '@/utils/healthIntegration';
 import { getToday } from '@/utils/date';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
+import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingLocation } from '@/types';
 
 const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
@@ -65,7 +67,7 @@ export function Profile() {
   const [manualCalories, setManualCalories] = useState(String(healthSummary.activeCalories || ''));
 
   const [name, setName] = useState(profile?.name || '');
-  const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'female');
+  const [sex, setSex] = useState<BiologicalSex>(profile?.sex || 'undisclosed');
   const [age, setAge] = useState(String(profile?.age || ''));
   const [weight, setWeight] = useState(String(profile?.weight || ''));
   const [height, setHeight] = useState(String(profile?.height || ''));
@@ -93,11 +95,6 @@ export function Profile() {
     );
   };
 
-  const toList = (value: string) => value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-
   const handleSave = () => {
     updateProfile({
       name,
@@ -108,13 +105,13 @@ export function Profile() {
       goal,
       experienceLevel: experience,
       trainingDays: days,
-      sessionDurationMin: Number(sessionDurationMin) || 60,
+      sessionDurationMin: toPositiveIntOrFallback(sessionDurationMin, 60),
       trainingLocation,
       trainingAgeMonths: trainingAgeMonths ? Number(trainingAgeMonths) : undefined,
-      equipmentAccess: toList(equipmentAccess),
-      preferredExercises: toList(preferredExercises),
-      dislikedExercises: toList(dislikedExercises),
-      limitations: toList(limitations),
+      equipmentAccess: parseCsvList(equipmentAccess),
+      preferredExercises: parseCsvList(preferredExercises),
+      dislikedExercises: parseCsvList(dislikedExercises),
+      limitations: parseCsvList(limitations),
     });
     setEditing(false);
   };
@@ -165,12 +162,15 @@ export function Profile() {
           </div>
           <div>
             <label className="text-sm text-white/40 mb-2 block">Sexo biológico</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button onClick={() => setSex('female')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'female' ? 'bg-primary-500 text-black' : 'bg-dark-200 text-white/50'}`}>
                 <MaterialIcon name="female" className="text-primary-300" /> Feminino
               </button>
               <button onClick={() => setSex('male')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'male' ? 'bg-primary-500 text-black' : 'bg-dark-200 text-white/50'}`}>
                 <MaterialIcon name="male" className="text-primary-300" /> Masculino
+              </button>
+              <button onClick={() => setSex('undisclosed')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${sex === 'undisclosed' ? 'bg-primary-500 text-black' : 'bg-dark-200 text-white/50'}`}>
+                <MaterialIcon name="shield" className="text-primary-300" /> Não informar
               </button>
             </div>
           </div>
@@ -290,15 +290,15 @@ export function Profile() {
               </div>
               <div>
                 <label className="text-sm text-white/40 mb-1 block">Local</label>
-                <select
+                <CustomSelect
                   value={trainingLocation}
-                  onChange={(e) => setTrainingLocation(e.target.value as TrainingLocation)}
-                  className="input-field"
-                >
-                  <option value="academia">Academia</option>
-                  <option value="casa">Casa</option>
-                  <option value="hibrido">Híbrido</option>
-                </select>
+                  onChange={(value) => setTrainingLocation(value as TrainingLocation)}
+                  options={[
+                    { value: 'academia', label: 'Academia' },
+                    { value: 'casa', label: 'Casa' },
+                    { value: 'hibrido', label: 'Híbrido' },
+                  ]}
+                />
               </div>
               <div className="col-span-2">
                 <label className="text-sm text-white/40 mb-1 block">Training age (meses consistentes)</label>

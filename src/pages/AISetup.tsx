@@ -10,6 +10,7 @@ import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { buildEvidenceContext, getEvidenceForQuery } from '@/utils/evidence';
 import { AI_SETUP_SCHEMA } from '@/constants/aiSchemas';
+import { validateGeneratedPlan } from '@/utils/planValidator';
 
 type Phase = 'token' | 'generating' | 'summary';
 
@@ -109,10 +110,12 @@ export function AISetup() {
       ? '\nDIVISÃO PERSONALIZADA PELO USUÁRIO:\n' + Object.entries(profile.customSplit).map(([k, v]) => `- Treino ${k}: ${v}`).join('\n')
       : '';
 
+    const sexLabel = profile.sex === 'male' ? 'masculino' : profile.sex === 'female' ? 'feminino' : 'não informado';
+
     const prompt = `Você é um preparador físico esportivo com pós-graduação em fisiologia do exercício.
 
 PERFIL DO ALUNO:
-- Sexo biológico informado: ${profile.sex === 'male' ? 'masculino' : 'feminino'}
+  - Sexo biológico informado: ${sexLabel}
 - Idade: ${profile.age} anos
 - Peso: ${profile.weight}kg, Altura: ${profile.height}cm
 - Objetivo: ${goalLabel}
@@ -204,6 +207,13 @@ ${SCIENCE_GUARDRAILS}
         jsonSchema: AI_SETUP_SCHEMA,
       });
       const parsed = JSON.parse(response);
+      const planErrors = validateGeneratedPlan(parsed, trainingDays);
+      if (planErrors.length > 0) {
+        addMessage(planErrors[0]);
+        addMessage('Tente novamente para gerar um plano com segurança e consistência.');
+        setHasError(true);
+        return;
+      }
       if (parsed.workouts?.length > 0) {
         setWorkouts(parsed.workouts);
 

@@ -51,6 +51,7 @@ interface EditBaseline {
 export function WorkoutPlans() {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorkoutType>('A');
+  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
   const [editing, setEditing] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogFilter, setCatalogFilter] = useState<string>('');
@@ -98,10 +99,6 @@ export function WorkoutPlans() {
 
   const activeTypes = editing ? draftSlots : activeSlots;
 
-  useEffect(() => {
-    if (!editing) setDraftSlots(activeSlots);
-  }, [activeSlots, editing]);
-
   const cloneWorkouts = (workouts: Record<WorkoutType, CustomExercise[] | null>) =>
     Object.fromEntries(
       WORKOUT_TYPES.map((type) => [
@@ -111,6 +108,34 @@ export function WorkoutPlans() {
     ) as Record<WorkoutType, CustomExercise[] | null>;
 
   const hasDraftSlotChanges = draftSlots.join('|') !== activeSlots.join('|');
+
+  const loadWorkoutDay = (type: WorkoutType) => {
+    const store = useCustomWorkoutStore.getState();
+    const list = store.getExercises(type);
+    if (list.length > 0) {
+      setSelectedExercises(list.map((exercise) => ({ ...exercise })));
+      return;
+    }
+    const fallback = WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
+    setSelectedExercises(fallback.map((exercise) => ({ ...exercise })));
+  };
+
+  const selectWorkoutDay = (type: WorkoutType) => {
+    setSelected(type);
+    loadWorkoutDay(type);
+  };
+
+  useEffect(() => {
+    if (!editing) setDraftSlots(activeSlots);
+  }, [activeSlots, editing]);
+
+  useEffect(() => {
+    loadWorkoutDay(selected);
+  }, []);
+
+  useEffect(() => {
+    loadWorkoutDay(selected);
+  }, [selected, activeSlots, customWorkouts]);
 
   const enterEditMode = () => {
     setDraftSlots(activeSlots);
@@ -125,7 +150,9 @@ export function WorkoutPlans() {
     const nextSelectedIndex = draftSlots.indexOf(selected);
     if (hasDraftSlotChanges) {
       applySlotOrder(draftSlots);
-      setSelected(WORKOUT_TYPES[nextSelectedIndex] || 'A');
+      selectWorkoutDay(WORKOUT_TYPES[nextSelectedIndex] || 'A');
+    } else {
+      loadWorkoutDay(selected);
     }
     setEditing(false);
     setEditBaseline(null);
@@ -138,19 +165,18 @@ export function WorkoutPlans() {
       customWorkouts: cloneWorkouts(editBaseline.workouts),
     });
     setDraftSlots([...editBaseline.slots]);
-    if (!editBaseline.slots.includes(selected)) setSelected(editBaseline.slots[0] || 'A');
+    if (!editBaseline.slots.includes(selected)) selectWorkoutDay(editBaseline.slots[0] || 'A');
     toast('Alterações redefinidas', 'info');
   };
 
   const getVisibleExercises = (type: WorkoutType): Exercise[] => {
-    const custom = customWorkouts?.[type];
-    if (custom && custom.length > 0) {
-      return custom.map((exercise) => ({ ...exercise, info: '', source: '' }));
-    }
+    if (type === selected) return selectedExercises;
+    const list = useCustomWorkoutStore.getState().getExercises(type);
+    if (list.length > 0) return list;
     return WORKOUTS.find((workout) => workout.type === type)?.exercises || [];
   };
 
-  const exercises = getVisibleExercises(selected);
+  const exercises = selectedExercises;
 
   const summarizeWorkout = (workout: WorkoutImportItem | WorkoutType) => {
     const list = typeof workout === 'string' ? getVisibleExercises(workout) : workout.exercises;
@@ -208,7 +234,7 @@ export function WorkoutPlans() {
     setDraftSlots([...fresh.activeSlots]);
     setEditing(false);
     setEditBaseline(null);
-    setSelected(importedType);
+    selectWorkoutDay(importedType);
     toast(`Treino importado em ${importedType}!`, 'success');
     closeImportModal();
   };
@@ -224,7 +250,7 @@ export function WorkoutPlans() {
       setDraftSlots([...fresh.activeSlots]);
       setEditing(false);
       setEditBaseline(null);
-      setSelected(fresh.activeSlots[0] || 'A');
+      selectWorkoutDay(fresh.activeSlots[0] || 'A');
       toast('Todos os treinos foram importados!', 'success');
       closeImportModal();
     }
@@ -297,7 +323,7 @@ export function WorkoutPlans() {
     if (!moved) return;
     next.splice(targetIndex, 0, moved);
     setDraftSlots(next);
-    setSelected(moved);
+    selectWorkoutDay(moved);
   };
 
   const handleDelete = (id: string) => setDeleteTarget(id);
@@ -691,7 +717,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             <div key={type} className={`${editing ? 'min-w-[126px]' : 'flex-1 min-w-[52px]'}`}>
               <motion.button
                 whileTap={{ scale: 0.92 }}
-                onClick={() => setSelected(type)}
+                onClick={() => selectWorkoutDay(type)}
                 className={`w-full h-12 rounded-xl font-semibold transition-all ${
                   selected === type ? 'bg-primary-500 text-black shadow-md shadow-primary-500/20' : 'bg-dark-200 text-white/40'
                 }`}
@@ -739,7 +765,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
               if (slot) {
                 if (editing) setDraftSlots((slots) => [...slots, slot]);
                 toast(`Treino ${slot} adicionado!`, 'success');
-                setSelected(slot);
+                selectWorkoutDay(slot);
               }
             }}
             className="min-w-[52px] h-12 rounded-xl border-2 border-dashed border-white/15 text-white/30 font-bold text-lg flex items-center justify-center"
@@ -1368,7 +1394,7 @@ ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
             removeSlot(removeTarget);
             if (editing) setDraftSlots((slots) => slots.filter((type) => type !== removeTarget));
             toast(`Treino ${removeTarget} removido`, 'info');
-            if (selected === removeTarget) setSelected(remaining[0] || 'A');
+            if (selected === removeTarget) selectWorkoutDay(remaining[0] || 'A');
           }
           setRemoveTarget(null);
         }}
