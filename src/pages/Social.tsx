@@ -210,7 +210,6 @@ export function Social() {
 
   const [profile, setProfile] = useState<SocialProfile | null>(null);
   const [profiles, setProfiles] = useState<Record<string, SocialProfile>>({});
-  const [profileStats, setProfileStats] = useState<Record<string, SocialProfileStats>>({});
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [images, setImages] = useState<PostImage[]>([]);
@@ -232,6 +231,7 @@ export function Social() {
   const [loading, setLoading] = useState(false);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
   const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
+  const [profileEditMode, setProfileEditMode] = useState(false);
   const [deletedPostUndo, setDeletedPostUndo] = useState<Post | null>(null);
 
   const [postBody, setPostBody] = useState('');
@@ -538,17 +538,6 @@ export function Social() {
     setLoading(false);
   }
 
-  async function loadStats(ids: string[]) {
-    if (!supabase || ids.length === 0) return;
-    const unique = [...new Set(ids)].filter(Boolean);
-    const { data } = await supabase.from('social_profile_stats').select('*').in('user_id', unique);
-    setProfileStats((prev) => {
-      const next = { ...prev };
-      (data || []).forEach((item) => { next[item.user_id] = item as SocialProfileStats; });
-      return next;
-    });
-  }
-
   async function loadProfiles(ids: string[]) {
     if (!supabase || ids.length === 0) return;
     const unique = [...new Set(ids)].filter(Boolean);
@@ -558,7 +547,6 @@ export function Social() {
       (data || []).forEach((item) => { next[item.id] = item as SocialProfile; });
       return next;
     });
-    await loadStats(unique);
   }
 
   async function syncMyStats() {
@@ -580,7 +568,7 @@ export function Social() {
       today_workout: todayWorkout ? `Treino ${todayWorkout}` : 'Descanso',
     };
     const { error } = await supabase.from('social_profile_stats').upsert({ ...payload, updated_at: new Date().toISOString() });
-    if (!error) setProfileStats((prev) => ({ ...prev, [session.user.id]: payload }));
+    if (error) toast(ptSupabaseError(error.message), 'error');
   }
 
   async function refreshProfile() {
@@ -736,6 +724,7 @@ export function Social() {
     else {
       toast('Perfil salvo!', 'success');
       setAvatarFile(null);
+      setProfileEditMode(false);
       await Promise.all([refreshProfile(), syncMyStats()]);
     }
   }
@@ -1221,20 +1210,6 @@ export function Social() {
     await refreshShares();
   }
 
-  function visibleStats(target: SocialProfile) {
-    const stats = profileStats[target.id];
-    if (!stats) return [];
-    return [
-      target.show_consistency && { label: 'Consistência', value: `${stats.consistency_count} treinos` },
-      target.show_load_progression && { label: 'Progressão', value: stats.load_progression || 'Sem dados' },
-      target.show_daily_calories && { label: 'Calorias', value: `${stats.daily_calories}/${stats.daily_calorie_goal} kcal` },
-      target.show_water && { label: 'Água', value: `${stats.water_glasses} copos` },
-      target.show_bmi && stats.bmi && { label: 'IMC', value: String(stats.bmi) },
-      target.show_weight_progress && stats.weight_latest && { label: 'Peso', value: stats.weight_start ? `${stats.weight_start} -> ${stats.weight_latest}kg` : `${stats.weight_latest}kg` },
-      target.show_today_workout && { label: 'Hoje', value: stats.today_workout || 'Sem dados' },
-    ].filter(Boolean) as { label: string; value: string }[];
-  }
-
   async function confirmSignOut() {
     if (!supabase) return;
     const shouldSignOut = window.confirm('Sair da conta? Você vai precisar entrar novamente para usar o Social.');
@@ -1573,14 +1548,14 @@ export function Social() {
         </div>
 
         <div className="flex flex-col items-center text-center space-y-3">
-          <label className={isMine ? 'cursor-pointer' : ''}>
+          <label className={isMine && profileEditMode ? 'cursor-pointer' : ''}>
             <Avatar profile={selectedProfile} size="lg" />
-            {isMine && <input type="file" accept="image/*" className="hidden" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />}
+            {isMine && profileEditMode && <input type="file" accept="image/*" className="hidden" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />}
           </label>
           {avatarFile && <p className="text-xs text-primary-300">Foto nova selecionada. Salve o perfil.</p>}
           <div>
-            <h2 className="text-2xl font-black">{selectedProfile.display_name}</h2>
-            <p className="text-xs text-white/35">{selectedProfile.is_private ? 'Perfil privado' : 'Perfil público'}</p>
+            <p className="text-lg font-black">@{selectedProfile.username}</p>
+            <h2 className="text-sm font-semibold text-white/60">{selectedProfile.display_name}</h2>
             {selectedProfile.bio && <p className="text-sm text-white/60 mt-2 max-w-xs">{selectedProfile.bio}</p>}
           </div>
           {!isMine && (
@@ -1606,13 +1581,17 @@ export function Social() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => setProfileListMode(profileListMode === 'followers' ? null : 'followers')} className="rounded-2xl bg-white/5 border border-white/5 p-4 text-center">
-            <p className="text-2xl font-black text-primary-300">{profileFollowers.length}</p>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-2xl bg-white/5 border border-white/5 p-3">
+            <p className="text-xl font-black text-white">{ownProfilePosts.length}</p>
+            <p className="text-xs text-white/40">Posts</p>
+          </div>
+          <button onClick={() => setProfileListMode(profileListMode === 'followers' ? null : 'followers')} className="rounded-2xl bg-white/5 border border-white/5 p-3">
+            <p className="text-xl font-black text-white">{profileFollowers.length}</p>
             <p className="text-xs text-white/40">Seguidores</p>
           </button>
-          <button onClick={() => setProfileListMode(profileListMode === 'following' ? null : 'following')} className="rounded-2xl bg-white/5 border border-white/5 p-4 text-center">
-            <p className="text-2xl font-black text-primary-300">{profileFollowing.length}</p>
+          <button onClick={() => setProfileListMode(profileListMode === 'following' ? null : 'following')} className="rounded-2xl bg-white/5 border border-white/5 p-3">
+            <p className="text-xl font-black text-white">{profileFollowing.length}</p>
             <p className="text-xs text-white/40">Seguindo</p>
           </button>
         </div>
@@ -1635,16 +1614,16 @@ export function Social() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          {visibleStats(selectedProfile).map((stat) => (
-            <div key={stat.label} className="rounded-2xl bg-white/5 border border-white/5 p-4">
-              <p className="text-[10px] uppercase tracking-wide text-white/35">{stat.label}</p>
-              <p className="text-sm font-bold">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+        {isMine && (
+          <button
+            onClick={() => setProfileEditMode((prev) => !prev)}
+            className="w-full rounded-2xl bg-white/10 border border-white/10 py-3 text-sm font-black text-white/80"
+          >
+            {profileEditMode ? 'Fechar edição' : 'Editar perfil'}
+          </button>
+        )}
 
-        {isMine && profile && (
+        {isMine && profile && profileEditMode && (
           <div className="space-y-3">
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome" />
             <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} className="input-field text-sm" placeholder="username" />
@@ -1655,6 +1634,8 @@ export function Social() {
             >
               {profile.is_private ? 'Perfil privado' : 'Perfil público'}
             </button>
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-3 space-y-3">
+              <p className="text-xs font-black uppercase tracking-wide text-white/40">Exibir no perfil</p>
             <div className="grid grid-cols-2 gap-2">
               {visibilityFields.map((field) => (
                 <button
@@ -1665,6 +1646,7 @@ export function Social() {
                   {field.label}
                 </button>
               ))}
+            </div>
             </div>
             <button onClick={saveProfile} className="btn-primary text-sm py-3">Salvar perfil</button>
           </div>
