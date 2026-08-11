@@ -1567,10 +1567,10 @@ export function Social() {
 
       <button
         onClick={() => setShowPostModal(true)}
-        className="fixed left-1/2 -translate-x-1/2 bottom-[calc(92px+env(safe-area-inset-bottom))] z-40 w-16 h-16 rounded-full bg-primary-500 text-white text-4xl leading-none shadow-[0_12px_35px_rgba(0,0,0,0.45)] border border-white/15"
+        className="fixed left-1/2 -translate-x-1/2 bottom-[calc(92px+env(safe-area-inset-bottom))] z-40 w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] border border-white/15 flex items-center justify-center"
         aria-label="Criar postagem"
       >
-        +
+        <MaterialIcon name="add" className="text-3xl" />
       </button>
 
       <button
