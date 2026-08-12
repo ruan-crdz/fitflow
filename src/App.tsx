@@ -33,6 +33,16 @@ function RouteFallback() {
   );
 }
 
+function AppStatusBadge() {
+  return (
+    <div className="fixed top-3 right-3 z-[120] pointer-events-none">
+      <span className="inline-flex items-center rounded-full border border-amber-300/40 bg-amber-500/20 px-3 py-1 text-[10px] font-bold tracking-[0.16em] text-amber-200 backdrop-blur">
+        BETA
+      </span>
+    </div>
+  );
+}
+
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
   const [showSplash, setShowSplash] = useState(true);
@@ -86,6 +96,7 @@ export function App() {
         <AnimatePresence>
           <SplashScreen />
         </AnimatePresence>
+        <AppStatusBadge />
       </ThemeProvider>
     );
   }
@@ -105,6 +116,7 @@ export function App() {
             />
           </Routes>
         </HashRouter>
+        <AppStatusBadge />
       </ThemeProvider>
     );
   }
@@ -131,6 +143,7 @@ export function App() {
           </AppShell>
         </Suspense>
       </HashRouter>
+      <AppStatusBadge />
     </ThemeProvider>
   );
 }
