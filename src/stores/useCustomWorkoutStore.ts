@@ -90,7 +90,7 @@ function materializeActiveWorkouts(
 
   WORKOUT_TYPES.forEach((type) => {
     const existing = prev[type];
-    if (Array.isArray(existing) && existing.length > 0) {
+    if (Array.isArray(existing)) {
       next[type] = cloneExercises(existing);
     } else if (activeSlots.includes(type)) {
       next[type] = cloneDefaultWorkout(type);
@@ -125,7 +125,7 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
       getExercises: (type) => {
         const cw = get().customWorkouts || EMPTY_WORKOUTS;
         const custom = cw[type];
-        if (custom && custom.length > 0) {
+        if (Array.isArray(custom)) {
           return custom.map((e) => ({
             ...e,
             info: '',
@@ -383,9 +383,6 @@ export const useCustomWorkoutStore = create<CustomWorkoutState>()(
         const base = { A: null, B: null, C: null, D: null, E: null };
         if (state?.customWorkouts) {
           const cw = state.customWorkouts as Record<string, unknown[] | null>;
-          for (const key of Object.keys(cw)) {
-            if (Array.isArray(cw[key]) && cw[key]!.length === 0) cw[key] = null;
-          }
           state.customWorkouts = { ...base, ...cw };
         } else {
           state.customWorkouts = base;

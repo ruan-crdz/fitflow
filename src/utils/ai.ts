@@ -12,6 +12,7 @@ import { buildEvidenceContext, extractSourceIds, getEvidenceByIds, getEvidenceFo
 import { calculateWaterIntake } from '@/utils/water';
 import { buildProfilePromptLines } from '@/utils/promptContext';
 import type { Profile, WorkoutType } from '@/types';
+import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 
 const BASE_SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
 Você é direta, motivadora e científica. Responde em português brasileiro.
@@ -155,6 +156,267 @@ export interface ReplaceExerciseAction {
   toName: string;
 }
 
+export interface WorkoutPlanExerciseAction {
+  name: string;
+  sets: number;
+  repsMin: number;
+  repsMax: number;
+  muscleGroup: string;
+}
+
+export interface ApplyWorkoutPlanAction {
+  type: 'apply_workout_plan';
+  split: 'ABC' | 'ABCD' | 'ABCDE';
+  workouts: Array<{
+    type: WorkoutType;
+    focus?: string;
+    exercises: WorkoutPlanExerciseAction[];
+  }>;
+  recommendation?: string;
+}
+
+export type ChatAction = ReplaceExerciseAction | ApplyWorkoutPlanAction;
+
+const MIN_EXERCISES_PER_WORKOUT = 5;
+const TARGET_EXERCISES_PER_WORKOUT = 6;
+
+function normalizeName(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function splitToSlots(split: 'ABC' | 'ABCD' | 'ABCDE'): WorkoutType[] {
+  if (split === 'ABCDE') return ['A', 'B', 'C', 'D', 'E'];
+  if (split === 'ABCD') return ['A', 'B', 'C', 'D'];
+  return ['A', 'B', 'C'];
+}
+
+function extractGroupsFromText(text: string): string[] {
+  const normalized = normalizeName(text);
+  const groups: string[] = [];
+
+  const map: Array<{ keys: string[]; group: string }> = [
+    { keys: ['peito', 'peitoral'], group: 'Peitoral' },
+    { keys: ['costa', 'costas', 'dorsal'], group: 'Costas' },
+    { keys: ['biceps', 'bíceps', 'antebraco', 'antebraço'], group: 'Bíceps' },
+    { keys: ['triceps', 'tríceps'], group: 'Tríceps' },
+    { keys: ['ombro', 'ombros', 'deltoide'], group: 'Ombros' },
+    { keys: ['quadriceps', 'quadríceps'], group: 'Quadríceps' },
+    { keys: ['posterior', 'femoral', 'isquiotibiais'], group: 'Posterior de Coxa' },
+    { keys: ['gluteo', 'glúteo', 'gluteos', 'glúteos'], group: 'Glúteos' },
+    { keys: ['panturrilha', 'panturrilhas', 'gemeos', 'gêmeos'], group: 'Panturrilhas' },
+    { keys: ['abdomen', 'abdômen', 'core'], group: 'Abdômen' },
+    { keys: ['perna', 'pernas', 'membros inferiores'], group: 'Quadríceps' },
+  ];
+
+  for (const item of map) {
+    if (item.keys.some((key) => normalized.includes(key))) {
+      groups.push(item.group);
+    }
+  }
+
+  return Array.from(new Set(groups));
+}
+
+function completeWorkoutExercises(
+  exercises: WorkoutPlanExerciseAction[],
+  desiredGroups: string[],
+  usedGlobal: Set<string>,
+): WorkoutPlanExerciseAction[] {
+  const unique: WorkoutPlanExerciseAction[] = [];
+  const local = new Set<string>();
+
+  for (const exercise of exercises) {
+    if (!exercise.name?.trim()) continue;
+    const key = normalizeName(exercise.name);
+    if (local.has(key)) continue;
+    local.add(key);
+    usedGlobal.add(key);
+    unique.push({
+      ...exercise,
+      sets: Number.isFinite(exercise.sets) ? Math.max(1, Math.min(8, exercise.sets)) : 3,
+      repsMin: Number.isFinite(exercise.repsMin) ? Math.max(1, exercise.repsMin) : 8,
+      repsMax: Number.isFinite(exercise.repsMax) ? Math.max(Math.max(1, exercise.repsMin || 8), exercise.repsMax) : 12,
+      muscleGroup: exercise.muscleGroup || 'Geral',
+    });
+  }
+
+  const addFromCatalog = (groupFilter?: string) => {
+    for (const catalog of EXERCISE_CATALOG) {
+      const key = normalizeName(catalog.name);
+      if (groupFilter && catalog.muscleGroup !== groupFilter) continue;
+      if (local.has(key) || usedGlobal.has(key)) continue;
+      local.add(key);
+      usedGlobal.add(key);
+      unique.push({
+        name: catalog.name,
+        sets: 3,
+        repsMin: catalog.muscleGroup === 'Abdômen' ? 12 : 8,
+        repsMax: catalog.muscleGroup === 'Abdômen' ? 20 : 12,
+        muscleGroup: catalog.muscleGroup,
+      });
+      if (unique.length >= TARGET_EXERCISES_PER_WORKOUT) return;
+    }
+  };
+
+  const normalizedDesired = Array.from(new Set(desiredGroups));
+  for (const group of normalizedDesired) {
+    const hasGroup = unique.some((exercise) => exercise.muscleGroup === group);
+    if (!hasGroup) addFromCatalog(group);
+    if (unique.length >= TARGET_EXERCISES_PER_WORKOUT) break;
+  }
+
+  let guard = 0;
+  while (unique.length < TARGET_EXERCISES_PER_WORKOUT && guard < normalizedDesired.length) {
+    addFromCatalog(normalizedDesired[guard]);
+    guard += 1;
+  }
+
+  if (unique.length < TARGET_EXERCISES_PER_WORKOUT) {
+    addFromCatalog();
+  }
+
+  return unique;
+}
+
+function ensureCompleteWorkouts(
+  split: 'ABC' | 'ABCD' | 'ABCDE',
+  workouts: Array<{
+    type: WorkoutType;
+    focus?: string;
+    exercises: WorkoutPlanExerciseAction[];
+  }>,
+  userMessages: ChatMessage[],
+): Array<{
+  type: WorkoutType;
+  focus?: string;
+  exercises: WorkoutPlanExerciseAction[];
+}> {
+  const slotOrder = splitToSlots(split);
+  const byType = new Map<WorkoutType, { type: WorkoutType; focus?: string; exercises: WorkoutPlanExerciseAction[] }>();
+  workouts.forEach((workout) => byType.set(workout.type, workout));
+
+  const userText = userMessages.filter((message) => message.role === 'user').map((message) => message.content).join(' ');
+  const globalGroups = extractGroupsFromText(userText);
+  const usedGlobal = new Set<string>();
+
+  return slotOrder.map((slot) => {
+    const current = byType.get(slot);
+    const focusGroups = extractGroupsFromText(current?.focus || '');
+    const currentGroups = Array.from(new Set((current?.exercises || []).map((exercise) => exercise.muscleGroup).filter(Boolean)));
+    const desiredGroups = Array.from(new Set([...focusGroups, ...currentGroups, ...globalGroups]));
+
+    const completed = completeWorkoutExercises(current?.exercises || [], desiredGroups, usedGlobal);
+
+    return {
+      type: slot,
+      focus: current?.focus,
+      exercises: completed,
+    };
+  });
+}
+
+function pickExercisesByGroups(
+  groups: string[],
+  used: Set<string>,
+  amount: number,
+): WorkoutPlanExerciseAction[] {
+  const out: WorkoutPlanExerciseAction[] = [];
+
+  for (const group of groups) {
+    const matches = EXERCISE_CATALOG.filter((exercise) => exercise.muscleGroup === group);
+    for (const exercise of matches) {
+      if (used.has(exercise.name)) continue;
+      used.add(exercise.name);
+      out.push({
+        name: exercise.name,
+        sets: 3,
+        repsMin: group === 'Abdômen' ? 12 : 8,
+        repsMax: group === 'Abdômen' ? 20 : 12,
+        muscleGroup: group,
+      });
+      if (out.length >= amount) return out;
+    }
+  }
+
+  if (out.length < amount) {
+    for (const exercise of EXERCISE_CATALOG) {
+      if (used.has(exercise.name)) continue;
+      used.add(exercise.name);
+      out.push({
+        name: exercise.name,
+        sets: 3,
+        repsMin: 8,
+        repsMax: 12,
+        muscleGroup: exercise.muscleGroup,
+      });
+      if (out.length >= amount) break;
+    }
+  }
+
+  return out;
+}
+
+function buildFallbackPlan(
+  split: 'ABC' | 'ABCD' | 'ABCDE',
+  userMessages: ChatMessage[],
+): ApplyWorkoutPlanAction {
+  const slots = splitToSlots(split);
+  const userText = normalizeName(userMessages.map((message) => message.content).join(' '));
+  const classicABC = userText.includes('peito') && userText.includes('costa') && userText.includes('perna');
+
+  const templateBySplit: Record<'ABC' | 'ABCD' | 'ABCDE', Record<WorkoutType, string[]>> = {
+    ABC: classicABC
+      ? {
+          A: ['Peitoral', 'Ombros', 'Tríceps'],
+          B: ['Costas', 'Bíceps', 'Abdômen'],
+          C: ['Quadríceps', 'Posterior de Coxa', 'Glúteos', 'Panturrilhas'],
+          D: ['Abdômen'],
+          E: ['Abdômen'],
+        }
+      : {
+          A: ['Peitoral', 'Tríceps', 'Ombros'],
+          B: ['Costas', 'Bíceps', 'Abdômen'],
+          C: ['Quadríceps', 'Posterior de Coxa', 'Glúteos', 'Panturrilhas'],
+          D: ['Abdômen'],
+          E: ['Abdômen'],
+        },
+    ABCD: {
+      A: ['Peitoral', 'Tríceps'],
+      B: ['Costas', 'Bíceps'],
+      C: ['Quadríceps', 'Posterior de Coxa'],
+      D: ['Ombros', 'Glúteos', 'Panturrilhas', 'Abdômen'],
+      E: ['Abdômen'],
+    },
+    ABCDE: {
+      A: ['Peitoral', 'Tríceps'],
+      B: ['Costas', 'Bíceps'],
+      C: ['Quadríceps'],
+      D: ['Posterior de Coxa', 'Glúteos'],
+      E: ['Ombros', 'Panturrilhas', 'Abdômen'],
+    },
+  };
+
+  const template = templateBySplit[split];
+  const used = new Set<string>();
+
+  const workouts = slots.map((slot) => {
+    const groups = template[slot] || ['Peitoral', 'Costas', 'Quadríceps'];
+    const exercises = pickExercisesByGroups(groups, used, split === 'ABCDE' ? 5 : 6);
+    return {
+      type: slot,
+      focus: groups.slice(0, 2).join(' + '),
+      exercises,
+    };
+  });
+
+  return {
+    type: 'apply_workout_plan',
+    split,
+    workouts,
+    recommendation: `Montei um plano ${split} com base no seu perfil e no catálogo disponível.`,
+  };
+}
+
 export interface AskAIOptions {
   jsonSchema?: Record<string, unknown>;
   schemaName?: string;
@@ -219,7 +481,7 @@ export async function sendMessage(
 export async function sendMessageWithActions(
   apiKey: string,
   messages: ChatMessage[],
-): Promise<{ reply: string; action: ReplaceExerciseAction | null }> {
+): Promise<{ reply: string; action: ChatAction | null }> {
   const profile = useProfileStore.getState().profile;
   if (!profile) throw new Error('Perfil não encontrado');
 
@@ -231,7 +493,7 @@ export async function sendMessageWithActions(
     ? `\n\nINSTRUÇÕES DE EVIDÊNCIA:\n- Para recomendações científicas/prescritivas, cite apenas IDs do EVIDENCE_CONTEXT no formato [SRC:ID1,ID2].\n- Não invente fontes.\n- Se não houver evidência suficiente no contexto, responda explicitamente: "Não encontrei evidência suficiente para afirmar isso com segurança."`
     : '';
 
-  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nQuando o usuário pedir troca/substituição de exercício, use a função replace_exercise. Se não houver pedido claro de alteração, responda apenas em texto.`;
+  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 5-8 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
 
   const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -260,6 +522,53 @@ export async function sendMessageWithActions(
                 workoutType: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
                 fromName: { type: 'string' },
                 toName: { type: 'string' },
+              },
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'apply_workout_plan',
+            description: 'Substitui o treino completo do usuário com uma nova divisão e exercícios completos.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['split', 'workouts'],
+              properties: {
+                split: { type: 'string', enum: ['ABC', 'ABCD', 'ABCDE'] },
+                recommendation: { type: 'string' },
+                workouts: {
+                  type: 'array',
+                  minItems: 2,
+                  maxItems: 5,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['type', 'exercises'],
+                    properties: {
+                      type: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
+                      focus: { type: 'string' },
+                      exercises: {
+                        type: 'array',
+                        minItems: 5,
+                        maxItems: 10,
+                        items: {
+                          type: 'object',
+                          additionalProperties: false,
+                          required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
+                          properties: {
+                            name: { type: 'string' },
+                            sets: { type: 'number' },
+                            repsMin: { type: 'number' },
+                            repsMax: { type: 'number' },
+                            muscleGroup: { type: 'string' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -302,8 +611,63 @@ export async function sendMessageWithActions(
   const content = choice?.message?.content?.trim() || '';
   const toolCalls = choice?.message?.tool_calls as Array<{ function?: { name?: string; arguments?: string } }> | undefined;
 
-  let action: ReplaceExerciseAction | null = null;
+  let action: ChatAction | null = null;
   if (toolCalls?.length) {
+    const planCall = toolCalls.find((toolCall) => toolCall.function?.name === 'apply_workout_plan');
+    if (planCall?.function?.arguments) {
+      try {
+        const args = JSON.parse(planCall.function.arguments) as {
+          split?: 'ABC' | 'ABCD' | 'ABCDE';
+          recommendation?: string;
+          workouts?: Array<{
+            type?: WorkoutType;
+            focus?: string;
+            exercises?: WorkoutPlanExerciseAction[];
+          }>;
+        };
+
+        const workouts = (args.workouts || [])
+          .filter((workout) => ['A', 'B', 'C', 'D', 'E'].includes(String(workout.type)) && Array.isArray(workout.exercises) && workout.exercises.length > 0)
+          .map((workout) => ({
+            type: workout.type as WorkoutType,
+            focus: workout.focus,
+            exercises: (workout.exercises || []).map((exercise) => ({
+              name: exercise.name,
+              sets: exercise.sets,
+              repsMin: exercise.repsMin,
+              repsMax: exercise.repsMax,
+              muscleGroup: exercise.muscleGroup,
+            })),
+          }));
+
+        if (args.split && workouts.length > 0) {
+          const slots = splitToSlots(args.split);
+          const hasMissingSlots = slots.some((slot) => !workouts.find((workout) => workout.type === slot));
+
+          if (hasMissingSlots) {
+            action = buildFallbackPlan(args.split, messages);
+          } else {
+            const completed = ensureCompleteWorkouts(args.split, workouts, messages);
+            const invalidAfterComplete = completed.some((workout) => workout.exercises.length < MIN_EXERCISES_PER_WORKOUT);
+
+            action = invalidAfterComplete
+              ? buildFallbackPlan(args.split, messages)
+              : {
+                  type: 'apply_workout_plan',
+                  split: args.split,
+                  workouts: completed,
+                  recommendation: args.recommendation,
+                };
+          }
+        } else if (args.split) {
+          action = buildFallbackPlan(args.split, messages);
+        }
+      } catch {
+        action = null;
+      }
+    }
+
+    if (!action) {
     const replaceCall = toolCalls.find((toolCall) => toolCall.function?.name === 'replace_exercise');
     if (replaceCall?.function?.arguments) {
       try {
@@ -326,9 +690,14 @@ export async function sendMessageWithActions(
         action = null;
       }
     }
+    }
   }
 
-  let reply = content || (action ? 'Posso aplicar essa substituição no app. Quer que eu confirme agora?' : 'Não consegui responder com clareza. Tente reformular.');
+  let reply = content || (action
+    ? action.type === 'apply_workout_plan'
+      ? 'Montei seu plano. Quer que eu substitua seu treino completo por esse agora?'
+      : 'Posso aplicar essa substituição no app. Quer que eu confirme agora?'
+    : 'Não consegui responder com clareza. Tente reformular.');
 
   if (scientificQuery) {
     if (!evidenceItems.length) {

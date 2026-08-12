@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
+import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus, TrainingLocation } from '@/types';
 import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
@@ -24,6 +25,7 @@ function PrivacyHint({ text }: { text: string }) {
 export function Onboarding({ onBack }: OnboardingProps) {
   const navigate = useNavigate();
   const setProfile = useProfileStore((s) => s.setProfile);
+  const setCustomWorkoutState = useCustomWorkoutStore.setState;
 
   const [step, setStep] = useState<Step>('welcome');
   const [sex, setSex] = useState<BiologicalSex>('undisclosed');
@@ -84,6 +86,16 @@ export function Onboarding({ onBack }: OnboardingProps) {
 
   const handleFinishManual = () => {
     saveProfile();
+    setCustomWorkoutState({
+      activeSlots: ['A', 'B', 'C'],
+      customWorkouts: {
+        A: [],
+        B: [],
+        C: [],
+        D: null,
+        E: null,
+      },
+    });
     navigate('/dashboard');
   };
 

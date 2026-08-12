@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SplashScreen } from '@/components/ui/SplashScreen';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
+import { syncActiveWorkoutFromBackend } from '@/lib/workoutEngine';
 
 const Onboarding = lazy(() => import('@/pages/Onboarding').then((module) => ({ default: module.Onboarding })));
 const BackupRestore = lazy(() => import('@/pages/BackupRestore').then((module) => ({ default: module.BackupRestore })));
@@ -72,6 +73,11 @@ export function App() {
 
     const timeout = globalThis.setTimeout(prefetch, 1500);
     return () => globalThis.clearTimeout(timeout);
+  }, [isOnboarded]);
+
+  useEffect(() => {
+    if (!isOnboarded) return;
+    void syncActiveWorkoutFromBackend().catch(() => undefined);
   }, [isOnboarded]);
 
   if (showSplash) {
