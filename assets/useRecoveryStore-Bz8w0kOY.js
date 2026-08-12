@@ -1,1 +1,0 @@
-import{I as t,J as i}from"./index-FIoUnBzn.js";const o=t()(i((c,s)=>({checkins:{},saveCheckin:e=>c(r=>({checkins:{...r.checkins,[e.date]:e}})),getCheckin:e=>s().checkins[e]||null}),{name:"fitflow-recovery"}));export{o as u};
