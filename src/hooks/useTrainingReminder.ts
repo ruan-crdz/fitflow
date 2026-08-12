@@ -39,8 +39,8 @@ function sendReminder() {
   try {
     new Notification('GymPilot ', {
       body: 'Hoje é dia de treino! Bora se dedicar? ',
-      icon: '/fitflow/icons/icon-192.png',
-      badge: '/fitflow/icons/icon-192.png',
+      icon: '/gympilot/icons/icon-192.png',
+      badge: '/gympilot/icons/icon-192.png',
       tag: 'training-reminder',
     });
   } catch {}

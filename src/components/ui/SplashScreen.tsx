@@ -12,8 +12,8 @@ export function SplashScreen() {
         <div
           className="w-16 h-16 bg-gradient-to-br from-primary-200 via-primary-500 to-primary-700"
           style={{
-            WebkitMaskImage: 'url(/fitflow/icons/logo-mask.png)',
-            maskImage: 'url(/fitflow/icons/logo-mask.png)',
+            WebkitMaskImage: 'url(/gympilot/icons/logo-mask.png)',
+            maskImage: 'url(/gympilot/icons/logo-mask.png)',
             WebkitMaskRepeat: 'no-repeat',
             maskRepeat: 'no-repeat',
             WebkitMaskPosition: 'center',

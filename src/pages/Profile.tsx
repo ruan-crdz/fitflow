@@ -585,7 +585,7 @@ export function Profile() {
                   <button
                     onClick={() => {
                       clearGymPilotLocalData();
-                      window.location.href = '/fitflow/';
+                      window.location.href = '/gympilot/';
                     }}
                     className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 text-sm font-bold"
                   >

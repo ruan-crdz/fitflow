@@ -50,7 +50,7 @@ export function buildTrainingCalendarIcs(
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//FitFlow//Treinos//PT-BR',
+    'PRODID:-//GymPilot//Treinos//PT-BR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
   ];
@@ -66,12 +66,12 @@ export function buildTrainingCalendarIcs(
 
       const dateKey = toLocalDateStamp(start);
       lines.push('BEGIN:VEVENT');
-      lines.push(`UID:fitflow-${dayIndex}-${week}-${dateKey}@fitflow`);
+      lines.push(`UID:gympilot-${dayIndex}-${week}-${dateKey}@gympilot`);
       lines.push(`DTSTAMP:${dtStamp}`);
       lines.push(`DTSTART:${toUtcDateTime(start)}`);
       lines.push(`DTEND:${toUtcDateTime(end)}`);
-      lines.push('SUMMARY:Treino FitFlow');
-      lines.push(`DESCRIPTION:Treino programado no FitFlow para ${profile.name}.`);
+      lines.push('SUMMARY:Treino GymPilot');
+      lines.push(`DESCRIPTION:Treino programado no GymPilot para ${profile.name}.`);
       lines.push('END:VEVENT');
     }
   });
