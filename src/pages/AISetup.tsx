@@ -9,6 +9,7 @@ import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
 import { buildEvidenceContext, getEvidenceForQuery } from '@/utils/evidence';
 import { AI_SETUP_SCHEMA } from '@/constants/aiSchemas';
 import { validateGeneratedPlan } from '@/utils/planValidator';
+import type { Profile, WorkoutType } from '@/types';
 
 type Phase = 'generating' | 'summary';
 
@@ -18,6 +19,178 @@ interface GeneratedWorkout {
   cardio?: { type: string; durationMin: number; intensity: string };
   estimatedCalories?: number;
   exercises: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[];
+}
+
+const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
+const MIN_SETUP_EXERCISES = 6;
+const MAX_SETUP_EXERCISES = 10;
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function canonicalGroupFromText(value: string): string | null {
+  const normalized = normalizeText(value);
+  if (!normalized.trim()) return null;
+  if (normalized.includes('peito') || normalized.includes('peitoral')) return 'Peitoral';
+  if (normalized.includes('costa') || normalized.includes('dorsal')) return 'Costas';
+  if (normalized.includes('biceps') || normalized.includes('antebraco')) return 'Bíceps';
+  if (normalized.includes('triceps')) return 'Tríceps';
+  if (normalized.includes('ombro') || normalized.includes('deltoide')) return 'Ombros';
+  if (normalized.includes('quadriceps') || normalized.includes('coxa anterior')) return 'Quadríceps';
+  if (normalized.includes('posterior') || normalized.includes('isquiotib')) return 'Posterior de Coxa';
+  if (normalized.includes('gluteo')) return 'Glúteos';
+  if (normalized.includes('panturr')) return 'Panturrilhas';
+  if (normalized.includes('abdomen') || normalized.includes('core')) return 'Abdômen';
+  return null;
+}
+
+function extractFocusGroups(text?: string): string[] {
+  if (!text) return [];
+  const map: Array<{ keys: string[]; group: string }> = [
+    { keys: ['peito', 'peitoral'], group: 'Peitoral' },
+    { keys: ['costa', 'costas', 'dorsal'], group: 'Costas' },
+    { keys: ['biceps', 'antebraco'], group: 'Bíceps' },
+    { keys: ['triceps'], group: 'Tríceps' },
+    { keys: ['ombro', 'deltoide'], group: 'Ombros' },
+    { keys: ['quadriceps', 'coxa anterior'], group: 'Quadríceps' },
+    { keys: ['posterior', 'isquiotib'], group: 'Posterior de Coxa' },
+    { keys: ['gluteo'], group: 'Glúteos' },
+    { keys: ['panturrilha', 'gemeos'], group: 'Panturrilhas' },
+    { keys: ['abdomen', 'core'], group: 'Abdômen' },
+  ];
+
+  const normalized = normalizeText(text);
+  return Array.from(new Set(
+    map
+      .filter((item) => item.keys.some((key) => normalized.includes(key)))
+      .map((item) => item.group),
+  ));
+}
+
+function defaultReps(group: string) {
+  if (group === 'Abdômen') return { repsMin: 12, repsMax: 20 };
+  return { repsMin: 8, repsMax: 12 };
+}
+
+function findCatalogExercise(name: string) {
+  const normalized = normalizeText(name);
+  return EXERCISE_CATALOG.find((item) => normalizeText(item.name) === normalized)
+    || EXERCISE_CATALOG.find((item) => normalizeText(item.name).includes(normalized) || normalized.includes(normalizeText(item.name)));
+}
+
+function buildDesiredGroups(workout: GeneratedWorkout, profile: Profile, workoutType: WorkoutType): string[] {
+  const fromFocus = extractFocusGroups(workout.focus);
+  const fromCustom = extractFocusGroups(profile.customSplit?.[workoutType]);
+  const fromExercises = Array.from(new Set((workout.exercises || [])
+    .map((exercise) => canonicalGroupFromText(exercise.muscleGroup || ''))
+    .filter((group): group is string => Boolean(group))));
+
+  const merged = Array.from(new Set([...fromFocus, ...fromCustom, ...fromExercises]));
+  return merged;
+}
+
+function repairWorkout(workout: GeneratedWorkout, desiredGroups: string[]): GeneratedWorkout {
+  const seen = new Set<string>();
+  const repaired: GeneratedWorkout['exercises'] = [];
+
+  for (const exercise of workout.exercises || []) {
+    if (!exercise?.name?.trim()) continue;
+    const key = normalizeText(exercise.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const catalog = findCatalogExercise(exercise.name);
+    const canonicalGroup = canonicalGroupFromText(exercise.muscleGroup || '')
+      || canonicalGroupFromText(catalog?.muscleGroup || '')
+      || exercise.muscleGroup
+      || 'Geral';
+    const reps = defaultReps(canonicalGroup);
+
+    repaired.push({
+      name: catalog?.name || exercise.name,
+      sets: Number.isFinite(exercise.sets) ? Math.max(1, Math.min(8, exercise.sets)) : 3,
+      repsMin: Number.isFinite(exercise.repsMin) ? Math.max(1, exercise.repsMin) : reps.repsMin,
+      repsMax: Number.isFinite(exercise.repsMax)
+        ? Math.max(Number.isFinite(exercise.repsMin) ? Math.max(1, exercise.repsMin) : reps.repsMin, exercise.repsMax)
+        : reps.repsMax,
+      muscleGroup: catalog?.muscleGroup || canonicalGroup,
+    });
+  }
+
+  const countByGroup = (group: string) => repaired.filter((exercise) => exercise.muscleGroup === group).length;
+  const addFromCatalog = (group?: string): boolean => {
+    for (const catalog of EXERCISE_CATALOG) {
+      if (group && catalog.muscleGroup !== group) continue;
+      const key = normalizeText(catalog.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const reps = defaultReps(catalog.muscleGroup);
+      repaired.push({
+        name: catalog.name,
+        sets: 2,
+        repsMin: reps.repsMin,
+        repsMax: reps.repsMax,
+        muscleGroup: catalog.muscleGroup,
+      });
+      return true;
+    }
+    return false;
+  };
+
+  const focusedGroups = desiredGroups.filter(Boolean);
+  const minPerGroup = focusedGroups.length > 0 && focusedGroups.length <= 3 ? 3 : focusedGroups.length <= 5 ? 2 : 1;
+  const targetByFocus = focusedGroups.length > 0 ? focusedGroups.length * minPerGroup : MIN_SETUP_EXERCISES;
+  const targetExercises = Math.min(MAX_SETUP_EXERCISES, Math.max(MIN_SETUP_EXERCISES, targetByFocus));
+
+  for (const group of focusedGroups) {
+    while (countByGroup(group) < minPerGroup && repaired.length < MAX_SETUP_EXERCISES) {
+      if (!addFromCatalog(group)) break;
+    }
+  }
+
+  if (focusedGroups.length > 0) {
+    let advanced = true;
+    while (repaired.length < targetExercises && advanced) {
+      advanced = false;
+      for (const group of focusedGroups) {
+        if (repaired.length >= targetExercises) break;
+        if (addFromCatalog(group)) advanced = true;
+      }
+    }
+  }
+
+  while (repaired.length < targetExercises) {
+    if (!addFromCatalog()) break;
+  }
+
+  return {
+    ...workout,
+    exercises: repaired.slice(0, MAX_SETUP_EXERCISES),
+  };
+}
+
+function normalizeGeneratedWorkouts(rawWorkouts: unknown, profile: Profile): GeneratedWorkout[] {
+  if (!Array.isArray(rawWorkouts)) return [];
+
+  return rawWorkouts
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const workout = item as GeneratedWorkout;
+      const workoutType = WORKOUT_TYPES[index];
+      if (!workoutType) return null;
+
+      const base: GeneratedWorkout = {
+        ...workout,
+        type: workoutType,
+        focus: workout.focus || `Treino ${workoutType}`,
+        exercises: Array.isArray(workout.exercises) ? workout.exercises : [],
+      };
+
+      const desiredGroups = buildDesiredGroups(base, profile, workoutType);
+      return repairWorkout(base, desiredGroups);
+    })
+    .filter((workout): workout is GeneratedWorkout => Boolean(workout));
 }
 
 export function AISetup() {
@@ -187,15 +360,25 @@ ${SCIENCE_GUARDRAILS}
         jsonSchema: AI_SETUP_SCHEMA,
       }, 'workout_builder');
       const parsed = JSON.parse(response);
-      const planErrors = validateGeneratedPlan(parsed, trainingDays);
-      if (planErrors.length > 0) {
-        addMessage(planErrors[0]);
+      const normalizedWorkouts = normalizeGeneratedWorkouts(parsed.workouts, profile);
+      const normalizedPlan = { ...parsed, workouts: normalizedWorkouts };
+      const planErrors = validateGeneratedPlan(normalizedPlan, trainingDays);
+      const blockingErrors = planErrors.filter((error) => !error.includes('com foco em'));
+
+      if (blockingErrors.length > 0) {
+        addMessage(blockingErrors[0]);
         addMessage('Tente novamente para gerar um plano com segurança e consistência.');
         setHasError(true);
         return;
       }
-      if (parsed.workouts?.length > 0) {
-        setWorkouts(parsed.workouts);
+
+      if (normalizedWorkouts.length > 0) {
+        if (planErrors.length > 0) {
+          addMessage('Ajustei automaticamente o volume por grupamento para entregar um treino mais completo.');
+          await delay(500);
+        }
+
+        setWorkouts(normalizedWorkouts);
 
           // Show evaluation scores
           if (parsed.evaluation?.length) {
@@ -221,13 +404,11 @@ ${SCIENCE_GUARDRAILS}
           if (parsed.rotation) addMessage(`Rotação: ${parsed.rotation}`);
 
           // Save workouts to store and update activeSlots atomically
-          const typeLetters: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
           const generatedSlots: ('A' | 'B' | 'C' | 'D' | 'E')[] = [];
           const newCw: Record<string, unknown> = { A: null, B: null, C: null, D: null, E: null };
-          parsed.workouts.forEach((w: GeneratedWorkout, wi: number) => {
-            const type = typeLetters[wi];
+          normalizedWorkouts.forEach((w: GeneratedWorkout) => {
+            const type = w.type as WorkoutType;
             if (!type) return;
-            w.type = type;
             generatedSlots.push(type);
             newCw[type] = w.exercises.map((ex: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }, i: number) => {
               const catalogItem = EXERCISE_CATALOG.find(

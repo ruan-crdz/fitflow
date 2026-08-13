@@ -81,8 +81,13 @@ serve(async (req) => {
 
   const modelFree = Deno.env.get('OPENAI_MODEL_FREE') || 'gpt-4o-mini';
   const modelUltimate = Deno.env.get('OPENAI_MODEL_ULTIMATE') || 'gpt-4o';
-  const model = plan === 'ultimate' ? modelUltimate : modelFree;
-  const maxTokensCap = plan === 'ultimate' ? 4000 : 1200;
+  const workoutBuilderModel = Deno.env.get('OPENAI_MODEL_WORKOUT_BUILDER') || modelUltimate;
+  const model = feature === 'workout_builder'
+    ? workoutBuilderModel
+    : (plan === 'ultimate' ? modelUltimate : modelFree);
+  const maxTokensCap = feature === 'workout_builder'
+    ? 4000
+    : (plan === 'ultimate' ? 4000 : 1200);
 
   const requestedTokens = typeof payload.max_tokens === 'number'
     ? payload.max_tokens
