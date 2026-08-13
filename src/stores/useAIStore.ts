@@ -3,12 +3,10 @@ import { persist } from 'zustand/middleware';
 import type { ChatMessage } from '@/utils/ai';
 
 interface AIState {
-  apiKey: string | null;
   isEnabled: boolean;
   hasSeenIntro: boolean;
   messages: ChatMessage[];
-  setApiKey: (key: string) => void;
-  removeApiKey: () => void;
+  setEnabled: (enabled: boolean) => void;
   markIntroSeen: () => void;
   setMessages: (messages: ChatMessage[]) => void;
   clearMessages: () => void;
@@ -17,16 +15,25 @@ interface AIState {
 export const useAIStore = create<AIState>()(
   persist(
     (set) => ({
-      apiKey: null,
-      isEnabled: false,
+      isEnabled: true,
       hasSeenIntro: false,
       messages: [],
-      setApiKey: (key) => set({ apiKey: key, isEnabled: true }),
-      removeApiKey: () => set({ apiKey: null, isEnabled: false, hasSeenIntro: false, messages: [] }),
+      setEnabled: (enabled) => set({ isEnabled: enabled }),
       markIntroSeen: () => set({ hasSeenIntro: true }),
       setMessages: (messages) => set({ messages }),
       clearMessages: () => set({ messages: [] }),
     }),
-    { name: 'fitflow-ai' },
+    {
+      name: 'fitflow-ai',
+      version: 2,
+      migrate: (persistedState) => {
+        const state = (persistedState || {}) as Partial<AIState> & Record<string, unknown>;
+        return {
+          isEnabled: true,
+          hasSeenIntro: Boolean(state.hasSeenIntro),
+          messages: Array.isArray(state.messages) ? state.messages : [],
+        } as AIState;
+      },
+    },
   ),
 );

@@ -73,6 +73,7 @@ export function Onboarding({ onBack }: OnboardingProps) {
       name, age: Number(age), weight: Number(weight), height: Number(height),
       goal, trainingDays: days, sex, experienceLevel: experience,
       trainingFocus: focus,
+      aiPlan: 'free',
       sessionDurationMin: toPositiveIntOrFallback(sessionDurationNumber, 60),
       trainingLocation,
       equipmentAccess: parseCsvList(equipmentText),

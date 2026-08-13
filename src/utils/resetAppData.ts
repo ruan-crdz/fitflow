@@ -35,7 +35,7 @@ export function clearGymPilotLocalData() {
   useMealStore.setState({ shortcuts: [], recents: [] });
   useNotesStore.setState({ notes: {} });
   useCycleStore.setState({ phase: 'none', lastUpdated: null });
-  useAIStore.setState({ apiKey: null, isEnabled: false, hasSeenIntro: false, messages: [] });
+  useAIStore.setState({ isEnabled: true, hasSeenIntro: false, messages: [] });
   useAIConfigStore.setState({ assistantName: 'GymPilot AI', personality: 'balanced' });
   useDashboardStore.setState({ widgets: DEFAULT_DASHBOARD_WIDGETS });
   useHealthIntegrationStore.setState({ platform: 'none', isConnected: false, daily: {} });

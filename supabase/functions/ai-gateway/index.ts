@@ -1,0 +1,134 @@
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+
+type AIPlan = 'free' | 'ultimate';
+
+type AIFeature =
+  | 'chat'
+  | 'dashboard_insight'
+  | 'workout_tip'
+  | 'meal_calc'
+  | 'workout_builder'
+  | 'weekly_report'
+  | 'post_workout_feedback'
+  | 'meal_photo'
+  | 'plan_reeval';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const FREE_FEATURES = new Set<AIFeature>([
+  'chat',
+  'dashboard_insight',
+  'workout_tip',
+  'meal_calc',
+  'workout_builder',
+]);
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: { message: 'Método não permitido.' } }, 405);
+  }
+
+  const openAiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openAiKey) {
+    return jsonResponse({ error: { message: 'OPENAI_API_KEY não configurada nos secrets do Supabase.' } }, 500);
+  }
+
+  let body: {
+    plan?: AIPlan;
+    feature?: AIFeature;
+    payload?: Record<string, unknown>;
+  };
+
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: { message: 'Payload inválido.' } }, 400);
+  }
+
+  const plan: AIPlan = body.plan === 'ultimate' ? 'ultimate' : 'free';
+  const feature = body.feature || 'chat';
+
+  if (plan === 'free' && !FREE_FEATURES.has(feature)) {
+    return jsonResponse({
+      error: {
+        message: 'Esse recurso faz parte do GymPilot Ultimate.',
+      },
+    });
+  }
+
+  const payload = body.payload || {};
+  const messages = payload.messages;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return jsonResponse({ error: { message: 'Mensagens não informadas.' } }, 400);
+  }
+
+  const modelFree = Deno.env.get('OPENAI_MODEL_FREE') || 'gpt-4o-mini';
+  const modelUltimate = Deno.env.get('OPENAI_MODEL_ULTIMATE') || 'gpt-4o';
+  const model = plan === 'ultimate' ? modelUltimate : modelFree;
+  const maxTokensCap = plan === 'ultimate' ? 4000 : 1200;
+
+  const requestedTokens = typeof payload.max_tokens === 'number'
+    ? payload.max_tokens
+    : undefined;
+
+  const safePayload: Record<string, unknown> = {
+    ...payload,
+    model,
+    stream: false,
+  };
+
+  if (typeof requestedTokens === 'number') {
+    safePayload.max_tokens = Math.min(requestedTokens, maxTokensCap);
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(safePayload),
+    });
+
+    const raw = await response.text();
+    let parsed: Record<string, unknown>;
+
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return jsonResponse({ error: { message: 'Resposta inválida do provedor de IA.' } });
+    }
+
+    if (!response.ok) {
+      const providerError = (parsed.error as { message?: string } | undefined)?.message;
+      return jsonResponse({
+        error: {
+          message: providerError || `Falha no provedor de IA (${response.status}).`,
+        },
+      });
+    }
+
+    return jsonResponse(parsed);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao chamar provedor de IA.';
+    return jsonResponse({ error: { message } });
+  }
+});

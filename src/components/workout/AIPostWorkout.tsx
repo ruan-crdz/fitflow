@@ -6,6 +6,8 @@ import { useFoodStore } from '@/stores/useFoodStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
 import { getToday } from '@/utils/date';
+import { invokeAI } from '@/utils/ai';
+import { resolveAIPlan } from '@/constants/aiPlan';
 import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
@@ -17,10 +19,10 @@ interface AIPostWorkoutProps {
 }
 
 export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPostWorkoutProps) {
-  const apiKey = useAIStore((s) => s.apiKey);
   const isEnabled = useAIStore((s) => s.isEnabled);
   const assistantName = useAIConfigStore((s) => s.assistantName);
   const profile = useProfileStore((s) => s.profile);
+  const plan = resolveAIPlan(profile);
   const logs = useFoodStore((s) => s.logs);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [meal, setMeal] = useState<string | null>(null);
@@ -40,7 +42,14 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
   }, [logs]);
 
   useEffect(() => {
-    if (!apiKey || !isEnabled || !profile) {
+    if (!isEnabled || !profile) {
+      setLoading(false);
+      return;
+    }
+
+    if (plan === 'free') {
+      setFeedback('Ótimo treino. Continue consistente e aumente carga com técnica quando estiver confortável.');
+      setMeal('Pós-treino simples: 1 fonte de proteína + 1 fonte de carboidrato que você já consegue manter no dia a dia.');
       setLoading(false);
       return;
     }
@@ -53,20 +62,11 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
     const durationMin = Math.round(durationMs / 60000);
 
     const fetchAI = async (prompt: string) => {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: prompt }],
-          max_tokens: 120,
-          temperature: 0.8,
-        }),
-      });
-      const data = await res.json();
+      const data = await invokeAI({
+        messages: [{ role: 'system', content: prompt }],
+        max_tokens: 120,
+        temperature: 0.8,
+      }, { feature: 'post_workout_feedback' });
       return data.choices?.[0]?.message?.content?.trim() || '';
     };
 
@@ -92,7 +92,7 @@ Perfil: ${profile.name}, ${profile.weight}kg, objetivo ${profile.goal === 'lose'
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [apiKey, isEnabled, profile, workoutType, durationMs, setsCompleted]);
+  }, [isEnabled, profile, workoutType, durationMs, setsCompleted, plan]);
 
   if (!isEnabled) return null;
 

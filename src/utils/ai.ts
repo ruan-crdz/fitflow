@@ -13,6 +13,8 @@ import { calculateWaterIntake } from '@/utils/water';
 import { buildProfilePromptLines } from '@/utils/promptContext';
 import type { Profile, WorkoutType } from '@/types';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
+import { supabase } from '@/lib/supabase';
+import { getUpgradeMessage, isAIFeatureEnabled, resolveAIPlan, type AIFeature } from '@/constants/aiPlan';
 
 const BASE_SYSTEM_PROMPT = `Você é a GymPilot AI, assistente fitness pessoal integrada ao app GymPilot.
 Você é direta, motivadora e científica. Responde em português brasileiro.
@@ -424,8 +426,83 @@ export interface AskAIOptions {
   temperature?: number;
 }
 
+type AIMessageRole = 'system' | 'user' | 'assistant' | 'tool';
+
+export interface AIMessage {
+  role: AIMessageRole;
+  content: string | Array<Record<string, unknown>>;
+  name?: string;
+  tool_call_id?: string;
+}
+
+export interface InvokeAIParams {
+  messages: AIMessage[];
+  max_tokens?: number;
+  temperature?: number;
+  tools?: unknown[];
+  tool_choice?: 'none' | 'auto' | Record<string, unknown>;
+  response_format?: Record<string, unknown>;
+}
+
+interface InvokeAIOptions {
+  feature?: AIFeature;
+}
+
+interface OpenAIChoice {
+  finish_reason?: string;
+  message?: {
+    content?: string;
+    tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
+  };
+}
+
+interface OpenAIResponse {
+  choices?: OpenAIChoice[];
+  error?: { message?: string };
+}
+
+export async function invokeAI(
+  payload: InvokeAIParams,
+  options: InvokeAIOptions = {},
+): Promise<OpenAIResponse> {
+  if (!supabase) {
+    throw new Error('Integração IA indisponível: configure Supabase no ambiente.');
+  }
+
+  const profile = useProfileStore.getState().profile;
+  const plan = resolveAIPlan(profile);
+  const feature = options.feature || 'chat';
+
+  if (!isAIFeatureEnabled(plan, feature)) {
+    throw new Error(getUpgradeMessage(feature));
+  }
+
+  const { data, error } = await supabase.functions.invoke('ai-gateway', {
+    body: {
+      plan,
+      feature,
+      payload,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Erro ao chamar o gateway de IA.');
+  }
+
+  const response = data as OpenAIResponse | null;
+  if (!response) {
+    throw new Error('Gateway de IA retornou vazio.');
+  }
+
+  if (response.error?.message) {
+    throw new Error(response.error.message);
+  }
+
+  return response;
+}
+
 export async function sendMessage(
-  apiKey: string,
+  _apiKey: string | null,
   messages: ChatMessage[],
 ): Promise<string> {
   const profile = useProfileStore.getState().profile;
@@ -433,33 +510,18 @@ export async function sendMessage(
 
   const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
 
-  const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemMessage },
-        ...chatMessages,
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    }),
-  });
+  const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => invokeAI({
+    messages: [
+      { role: 'system', content: systemMessage },
+      ...chatMessages,
+    ],
+    max_tokens: maxTokens,
+    temperature: 0.7,
+  }, { feature: 'chat' });
 
-  const response = await requestChat(messages, 700);
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Erro na API');
-  }
-
-  const data = await response.json();
-  if (data.choices[0].finish_reason === 'length') {
-    const retryResponse = await requestChat([
+  const data = await requestChat(messages, 700);
+  if (data.choices?.[0]?.finish_reason === 'length') {
+    const retryData = await requestChat([
       ...messages,
       {
         role: 'user',
@@ -467,20 +529,15 @@ export async function sendMessage(
       },
     ], 300);
 
-    if (!retryResponse.ok) {
-      const err = await retryResponse.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Erro na API');
-    }
-
-    const retryData = await retryResponse.json();
-    return retryData.choices[0].message.content;
+    return retryData.choices?.[0]?.message?.content || '';
   }
-  return data.choices[0].message.content;
+  return data.choices?.[0]?.message?.content || '';
 }
 
 export async function sendMessageWithActions(
-  apiKey: string,
+  _apiKey: string | null,
   messages: ChatMessage[],
+  feature: AIFeature = 'chat',
 ): Promise<{ reply: string; action: ChatAction | null }> {
   const profile = useProfileStore.getState().profile;
   if (!profile) throw new Error('Perfil não encontrado');
@@ -495,75 +552,67 @@ export async function sendMessageWithActions(
 
   const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 5-8 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
 
-  const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemMessage },
-        ...chatMessages,
-      ],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'replace_exercise',
-            description: 'Solicita substituição de exercício no app quando o usuário pede para trocar/substituir exercício.',
-            parameters: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['scope', 'fromName', 'toName'],
-              properties: {
-                scope: { type: 'string', enum: ['all', 'workout'] },
-                workoutType: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
-                fromName: { type: 'string' },
-                toName: { type: 'string' },
-              },
+  const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => invokeAI({
+    messages: [
+      { role: 'system', content: systemMessage },
+      ...chatMessages,
+    ],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'replace_exercise',
+          description: 'Solicita substituição de exercício no app quando o usuário pede para trocar/substituir exercício.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['scope', 'fromName', 'toName'],
+            properties: {
+              scope: { type: 'string', enum: ['all', 'workout'] },
+              workoutType: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
+              fromName: { type: 'string' },
+              toName: { type: 'string' },
             },
           },
         },
-        {
-          type: 'function',
-          function: {
-            name: 'apply_workout_plan',
-            description: 'Substitui o treino completo do usuário com uma nova divisão e exercícios completos.',
-            parameters: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['split', 'workouts'],
-              properties: {
-                split: { type: 'string', enum: ['ABC', 'ABCD', 'ABCDE'] },
-                recommendation: { type: 'string' },
-                workouts: {
-                  type: 'array',
-                  minItems: 2,
-                  maxItems: 5,
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    required: ['type', 'exercises'],
-                    properties: {
-                      type: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
-                      focus: { type: 'string' },
-                      exercises: {
-                        type: 'array',
-                        minItems: 5,
-                        maxItems: 10,
-                        items: {
-                          type: 'object',
-                          additionalProperties: false,
-                          required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
-                          properties: {
-                            name: { type: 'string' },
-                            sets: { type: 'number' },
-                            repsMin: { type: 'number' },
-                            repsMax: { type: 'number' },
-                            muscleGroup: { type: 'string' },
-                          },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'apply_workout_plan',
+          description: 'Substitui o treino completo do usuário com uma nova divisão e exercícios completos.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['split', 'workouts'],
+            properties: {
+              split: { type: 'string', enum: ['ABC', 'ABCD', 'ABCDE'] },
+              recommendation: { type: 'string' },
+              workouts: {
+                type: 'array',
+                minItems: 2,
+                maxItems: 5,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['type', 'exercises'],
+                  properties: {
+                    type: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E'] },
+                    focus: { type: 'string' },
+                    exercises: {
+                      type: 'array',
+                      minItems: 5,
+                      maxItems: 10,
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        required: ['name', 'sets', 'repsMin', 'repsMax', 'muscleGroup'],
+                        properties: {
+                          name: { type: 'string' },
+                          sets: { type: 'number' },
+                          repsMin: { type: 'number' },
+                          repsMax: { type: 'number' },
+                          muscleGroup: { type: 'string' },
                         },
                       },
                     },
@@ -573,23 +622,16 @@ export async function sendMessageWithActions(
             },
           },
         },
-      ],
-      tool_choice: 'auto',
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    }),
-  });
+      },
+    ],
+    tool_choice: 'auto',
+    max_tokens: maxTokens,
+    temperature: 0.7,
+  }, { feature });
 
-  const response = await requestChat(messages, 700);
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'Erro na API');
-  }
-
-  const data = await response.json();
-  if (data.choices[0].finish_reason === 'length') {
-    const retryResponse = await requestChat([
+  const data = await requestChat(messages, 700);
+  if (data.choices?.[0]?.finish_reason === 'length') {
+    const retryData = await requestChat([
       ...messages,
       {
         role: 'user',
@@ -597,12 +639,6 @@ export async function sendMessageWithActions(
       },
     ], 300);
 
-    if (!retryResponse.ok) {
-      const err = await retryResponse.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Erro na API');
-    }
-
-    const retryData = await retryResponse.json();
     const retryContent = retryData.choices?.[0]?.message?.content?.trim() || '';
     return { reply: retryContent, action: null };
   }
@@ -720,10 +756,11 @@ export async function sendMessageWithActions(
 }
 
 export async function askAI(
-  apiKey: string,
+  _apiKey: string | null,
   profile: Profile,
   question: string,
   jsonModeOrOptions: boolean | AskAIOptions = false,
+  feature: AIFeature = 'chat',
 ): Promise<string> {
   const options: AskAIOptions = typeof jsonModeOrOptions === 'boolean' ? {} : jsonModeOrOptions;
   const useStructuredOutput = typeof jsonModeOrOptions === 'boolean' ? jsonModeOrOptions : Boolean(options.jsonSchema);
@@ -745,30 +782,18 @@ export async function askAI(
     : {};
 
   const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: question },
-      ],
-      max_tokens: options.maxTokens ?? 4000,
-      temperature: options.temperature ?? 0.7,
-      ...responseFormat,
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Erro ${response.status}`);
-  }
-  const data = await response.json();
-  if (data.choices[0].finish_reason === 'length') {
+  const data = await invokeAI({
+    messages: [
+      { role: 'system', content: systemMessage },
+      { role: 'user', content: question },
+    ],
+    max_tokens: options.maxTokens ?? 4000,
+    temperature: options.temperature ?? 0.7,
+    ...responseFormat,
+  }, { feature });
+
+  if (data.choices?.[0]?.finish_reason === 'length') {
     throw new Error('Resposta cortada — tente novamente');
   }
-  return data.choices[0].message.content;
+  return data.choices?.[0]?.message?.content || '';
 }

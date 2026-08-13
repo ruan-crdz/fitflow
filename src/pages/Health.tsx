@@ -4,11 +4,11 @@ import { useProfileStore } from '@/stores/useProfileStore';
 import { useFoodStore, FoodEntry } from '@/stores/useFoodStore';
 import { useWaterStore } from '@/stores/useWaterStore';
 import { useToastStore } from '@/stores/useToastStore';
-import { useAIStore } from '@/stores/useAIStore';
 import { useMealStore, SavedMeal } from '@/stores/useMealStore';
 import { WaterTracker } from '@/components/ui/WaterTracker';
 import { useHealthIntegrationStore } from '@/stores/useHealthIntegrationStore';
-import { askAI } from '@/utils/ai';
+import { askAI, invokeAI } from '@/utils/ai';
+import { getUpgradeMessage, isAIFeatureEnabled, resolveAIPlan } from '@/constants/aiPlan';
 import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { getToday } from '@/utils/date';
@@ -67,7 +67,7 @@ export function Health() {
   const waterGlasses = useWaterStore((s) => s.getToday());
   const addGlass = useWaterStore((s) => s.addGlass);
   const removeGlass = useWaterStore((s) => s.removeGlass);
-  const apiKey = useAIStore((s) => s.apiKey);
+  const aiPlan = resolveAIPlan(profile);
   const healthDaily = useHealthIntegrationStore((s) => s.daily);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -106,10 +106,6 @@ export function Health() {
 
   const handleAIMealCalc = async () => {
     if (validIngredients.length === 0) return;
-    if (needsAIForMeal && !apiKey) {
-      useToastStore.getState().show('Preencha as kcal ou configure a IA no Perfil.', 'error');
-      return;
-    }
     setMealLoading(true);
     setMealResult(null);
     const description = validIngredients.map((i) => `${i.amount ? `${i.amount} ${UNIT_LABEL[i.unit]} de ` : ''}${i.name.trim()}`).join(', ');
@@ -176,10 +172,10 @@ Regras:
 - confidence entre 0 e 1.
 - Não calcule macros, apenas mapeie.`;
 
-        const response = await askAI(apiKey!, profile, aiPrompt, {
+        const response = await askAI(null, profile, aiPrompt, {
           schemaName: 'health_unknown_food_mapping',
           jsonSchema: UNKNOWN_MAPPING_SCHEMA,
-        });
+        }, 'meal_calc');
         const parsed = JSON.parse(response) as { mappings: UnknownMapping[] };
 
         for (const mapping of parsed.mappings || []) {
@@ -264,8 +260,8 @@ Regras:
   };
 
   const handleCameraCapture = async (file: File, userHint = '') => {
-    if (!apiKey) {
-      useToastStore.getState().show('Configure sua chave IA no Perfil primeiro', 'error');
+    if (!isAIFeatureEnabled(aiPlan, 'meal_photo')) {
+      useToastStore.getState().show(getUpgradeMessage('meal_photo'), 'info');
       return;
     }
     cameraAbortRef.current?.abort();
@@ -289,26 +285,18 @@ Regras:
         ? `\n\nDESCRIÇÃO DO USUÁRIO PARA AJUDAR NA ANÁLISE:\n${userHint}\nUse essa descrição como contexto, mas ainda valide pela foto.`
         : '';
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: 'Você identifica alimentos em foto. Retorne apenas itens detectados e nível de confiança em JSON válido. Não calcule macros.',
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Analise esta foto de alimento/bebida.
+      const data = await invokeAI({
+        messages: [
+          {
+            role: 'system',
+            content: 'Você identifica alimentos em foto. Retorne apenas itens detectados e nível de confiança em JSON válido. Não calcule macros.',
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Analise esta foto de alimento/bebida.
 
 INSTRUÇÕES:
 1. Identifique TODOS os itens visíveis (comida, bebida, snack, doce, embalagem)
@@ -317,78 +305,26 @@ INSTRUÇÕES:
 4. Não calcule calorias/macros aqui.
 
 RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}]}${extraHint}`,
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'high' },
-                },
-              ],
-            },
-          ],
-          max_tokens: 300,
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'camera_detected_items',
-              strict: true,
-              schema: CAMERA_ITEMS_SCHEMA,
-            },
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => null);
-        const msg = err?.error?.message || `Status ${response.status}`;
-        // Fallback to gpt-4o-mini if model not available
-        if (response.status === 404 || msg.includes('model')) {
-          const fallback = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            signal: controller.signal,
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: 'Você identifica alimentos em imagem e retorna itens com confiança em JSON.' },
-                { role: 'user', content: [
-                  { type: 'text', text: `Identifique itens da imagem e porção estimada. JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.7}]}${extraHint}` },
-                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' } },
-                ] },
-              ],
-              max_tokens: 200,
-              response_format: {
-                type: 'json_schema',
-                json_schema: {
-                  name: 'camera_detected_items_fallback',
-                  strict: true,
-                  schema: CAMERA_ITEMS_SCHEMA,
-                },
               },
-            }),
-          });
-          if (!fallback.ok) throw new Error(msg);
-          const fallbackData = await fallback.json();
-          const content = fallbackData.choices[0].message.content;
-          const parsed = JSON.parse(content) as { items?: CameraDetectedItem[] };
-          const items = parsed.items || [];
-          if (items.length === 0) {
-            toast('Não identificado. Tente foto mais nítida.', 'error');
-            return;
-          }
-          setIngredients(items.slice(0, 6).map((item) => ({
-            name: item.name,
-            amount: item.amount ? String(Math.round(item.amount)) : '',
-            unit: item.unit || 'g',
-          })));
-          setShowAddModal(true);
-          toast('Revise os itens detectados e confirme para calcular os macros.', 'info');
-          return;
-        }
-        throw new Error(msg);
-      }
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'high' },
+              },
+            ],
+          },
+        ],
+        max_tokens: 300,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'camera_detected_items',
+            strict: true,
+            schema: CAMERA_ITEMS_SCHEMA,
+          },
+        },
+      }, { feature: 'meal_photo' });
 
-      const data = await response.json();
-      const content = data.choices[0].message.content;
+      const content = data.choices?.[0]?.message?.content || '';
       const parsed = JSON.parse(content) as { items?: CameraDetectedItem[] };
       const items = parsed.items || [];
       if (items.length === 0) {
@@ -501,16 +437,21 @@ RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}
             Refeições
           </h2>
           <div className="flex gap-2">
-            {apiKey && (
-              <motion.button
-                whileTap={{ scale: 0.85 }}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={cameraLoading}
-                className="px-3 py-2 rounded-xl bg-primary-500/15 border border-primary-500/25 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
-              >
-                <MaterialIcon name="photo_camera" /> {cameraLoading ? 'Analisando...' : 'Foto IA'}
-              </motion.button>
-            )}
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={() => {
+                if (!isAIFeatureEnabled(aiPlan, 'meal_photo')) {
+                  useToastStore.getState().show(getUpgradeMessage('meal_photo'), 'info');
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              disabled={cameraLoading}
+              className="px-3 py-2 rounded-xl bg-primary-500/15 border border-primary-500/25 text-primary-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40"
+            >
+              <MaterialIcon name={isAIFeatureEnabled(aiPlan, 'meal_photo') ? 'photo_camera' : 'workspace_premium'} />
+              {cameraLoading ? 'Analisando...' : isAIFeatureEnabled(aiPlan, 'meal_photo') ? 'Foto IA' : 'Foto IA (Ultimate)'}
+            </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setShowAddModal(true)}
@@ -764,7 +705,7 @@ RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   className="btn-primary w-full flex items-center justify-center gap-2"
-                  disabled={!hasAnyIngredient || mealLoading || (needsAIForMeal && !apiKey)}
+                  disabled={!hasAnyIngredient || mealLoading}
                   onClick={handleAIMealCalc}
                 >
                   {mealLoading ? (
@@ -775,7 +716,6 @@ RESPONDA JSON: {"items":[{"name":"...","amount":120,"unit":"g","confidence":0.8}
                     <><MaterialIcon name="psychology" /> Calcular com IA</>
                   )}
                 </motion.button>
-                {needsAIForMeal && !apiKey && <p className="text-[10px] text-red-400/60 text-center mt-2">Preencha kcal em todos os itens ou configure sua chave IA no Perfil</p>}
               </div>
             )}
           </motion.div>

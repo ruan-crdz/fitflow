@@ -11,7 +11,6 @@ interface VoiceCallTurn {
 interface VoiceCallModalProps {
   open: boolean;
   assistantName: string;
-  apiKey: string | null;
   onClose: () => void;
   onUserTurn: (text: string) => Promise<string | null>;
   primaryActionLabel?: string;
@@ -44,7 +43,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string)
 export function VoiceCallModal({
   open,
   assistantName,
-  apiKey,
   onClose,
   onUserTurn,
   primaryActionLabel,
@@ -67,12 +65,6 @@ export function VoiceCallModal({
     speak,
     stopSpeaking,
   } = useVoiceAssistant({
-    cloudTts: {
-      enabled: true,
-      apiKey,
-      model: 'gpt-4o-mini-tts',
-      voice: 'nova',
-    },
     onTranscript: (text, isFinal) => {
       setError('');
       if (!isFinal) {

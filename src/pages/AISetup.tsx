@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { askAI } from '@/utils/ai';
 import { SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { buildEvidenceContext, getEvidenceForQuery } from '@/utils/evidence';
 import { AI_SETUP_SCHEMA } from '@/constants/aiSchemas';
 import { validateGeneratedPlan } from '@/utils/planValidator';
 
-type Phase = 'token' | 'generating' | 'summary';
+type Phase = 'generating' | 'summary';
 
 interface GeneratedWorkout {
   type: string;
@@ -25,11 +23,8 @@ interface GeneratedWorkout {
 export function AISetup() {
   const navigate = useNavigate();
   const profile = useProfileStore((s) => s.profile)!;
-  const { setApiKey, apiKey } = useAIStore();
 
-  const [phase, setPhase] = useState<Phase>(apiKey ? 'generating' : 'token');
-  const [tokenInput, setTokenInput] = useState('');
-  const [tokenError, setTokenError] = useState('');
+  const [phase, setPhase] = useState<Phase>('generating');
   const [messages, setMessages] = useState<string[]>([]);
   const [workouts, setWorkouts] = useState<GeneratedWorkout[]>([]);
 
@@ -38,39 +33,17 @@ export function AISetup() {
   const levelLabel = profile.experienceLevel === 'advanced' ? 'avançado' : profile.experienceLevel === 'intermediate' ? 'intermediário' : 'iniciante';
 
   useEffect(() => {
-    if (apiKey && phase === 'generating') generateWorkout(apiKey);
+    if (phase === 'generating') void generateWorkout();
   }, []);
-
-  const handleTokenSubmit = async () => {
-    const key = tokenInput.trim();
-    if (!key.startsWith('sk-')) {
-      setTokenError('Token inválido. Deve começar com "sk-"');
-      return;
-    }
-    setTokenError('');
-    setApiKey(key);
-    setPhase('generating');
-    await generateWorkout(key);
-  };
-
-  const handleSkip = () => {
-    generateDefaults();
-    navigate('/plans');
-  };
 
   const addMessage = (msg: string) => {
     setMessages((prev) => [...prev, msg]);
   };
 
-  const generateDefaults = () => {
-    // Smart defaults based on training days - already handled by default workouts in store
-    // No need to do anything, the store falls back to WORKOUTS constant
-  };
-
   const [retryCount, setRetryCount] = useState(0);
   const [hasError, setHasError] = useState(false);
 
-  const generateWorkout = async (key: string) => {
+  const generateWorkout = async () => {
     setHasError(false);
     if (messages.length === 0) {
       addMessage(`Olá, ${profile.name}! `);
@@ -202,10 +175,10 @@ ${SCIENCE_GUARDRAILS}
         return;
       }
       const groundedPrompt = `${prompt}\n\n${buildEvidenceContext(evidence)}\n\nUse APENAS sourceIds do EVIDENCE_CONTEXT no campo evidenceIds.`;
-      const response = await askAI(key, profile, groundedPrompt, {
+      const response = await askAI(null, profile, groundedPrompt, {
         schemaName: 'ai_setup_plan',
         jsonSchema: AI_SETUP_SCHEMA,
-      });
+      }, 'workout_builder');
       const parsed = JSON.parse(response);
       const planErrors = validateGeneratedPlan(parsed, trainingDays);
       if (planErrors.length > 0) {
@@ -274,18 +247,14 @@ ${SCIENCE_GUARDRAILS}
         }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      if (msg.includes('401') || msg.includes('Incorrect API')) {
-        addMessage(' Token inválido ou expirado. Verifique no site da OpenAI.');
-      } else if (msg.includes('429') || msg.includes('Rate limit')) {
+      if (msg.includes('429') || msg.includes('Rate limit')) {
         addMessage('Muitas requisições. Águarde 1 minuto e tente novamente.');
-      } else if (msg.includes('insufficient_quota')) {
-        addMessage('Sem créditos na conta OpenAI. Adicione saldo em platform.openai.com.');
       } else if (msg.includes('cortada')) {
         if (retryCount < 1) {
           addMessage('Resposta cortada pela API. Tentando novamente...');
           setRetryCount((c) => c + 1);
           await delay(1000);
-          return generateWorkout(key);
+          return generateWorkout();
         }
         addMessage('Resposta cortada duas vezes. Tente novamente mais tarde.');
       } else {
@@ -300,56 +269,6 @@ ${SCIENCE_GUARDRAILS}
   return (
     <div className="min-h-[100dvh] flex flex-col px-6 py-12">
       <AnimatePresence mode="wait">
-        {/* Token Input */}
-        {phase === 'token' && (
-          <motion.div
-            key="token"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="flex-1 flex flex-col justify-center space-y-6"
-          >
-            <div className="text-center">
-              <MaterialIcon name="smart_toy" className="text-5xl block mb-4 text-primary-300 mx-auto" />
-              <h1 className="text-2xl font-bold mb-2">Inteligência Artificial</h1>
-              <p className="text-white/50 text-sm leading-relaxed">
-                Para montar seu treino personalizado, precisamos de um token da OpenAI (ChatGPT).
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="sk-..."
-                className="input-field text-sm"
-                autoFocus
-              />
-              {tokenError && <p className="text-red-400 text-xs">{tokenError}</p>}
-              <p className="text-[11px] text-white/30 leading-relaxed">
-                Acesse platform.openai.com → API Keys → Create new key.
-                Seu token fica salvo apenas no seu celular.
-              </p>
-            </div>
-
-            <button
-              className="btn-primary"
-              disabled={!tokenInput.trim()}
-              onClick={handleTokenSubmit}
-            >
-              Gerar meu treino
-            </button>
-
-            <button
-              onClick={handleSkip}
-              className="text-white/40 text-sm py-2"
-            >
-              Não tenho token — montar manualmente
-            </button>
-          </motion.div>
-        )}
-
         {/* Generating */}
         {phase === 'generating' && (
           <motion.div
@@ -380,7 +299,7 @@ ${SCIENCE_GUARDRAILS}
               {hasError && (
                 <div className="flex gap-3 mt-4">
                   <button
-                    onClick={() => { setRetryCount(0); generateWorkout(apiKey!); }}
+                    onClick={() => { setRetryCount(0); void generateWorkout(); }}
                     className="btn-primary flex-1 py-3 text-sm"
                   >
                     Rotação: Tentar novamente

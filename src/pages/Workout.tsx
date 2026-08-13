@@ -19,6 +19,7 @@ import { WORKOUT_MAP } from '@/constants/workouts';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
+import { invokeAI } from '@/utils/ai';
 
 interface InlineSwapAction {
   sourceExerciseId: string;
@@ -48,7 +49,6 @@ export function Workout() {
     useSessionStore();
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const assistantName = useAIConfigStore((s) => s.assistantName);
-  const apiKey = useAIStore((s) => s.apiKey);
   const profile = useProfileStore((s) => s.profile);
   const goal = useProfileStore((s) => s.profile?.goal || 'maintain');
   const { notes, setNote } = useNotesStore();
@@ -150,7 +150,7 @@ export function Workout() {
   };
 
   const handleAskAI = async () => {
-    if (!aiQuestion.trim() || !apiKey || !profile) return;
+    if (!aiQuestion.trim() || !profile) return;
     setAILoading(true);
     setAIAnswer('');
     try {
@@ -163,25 +163,18 @@ export function Workout() {
       }));
       const catalogById = new Map(catalogOptions.map((item) => [item.id, item]));
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `Você é um assistente de treino baseado em evidências.
+      const data = await invokeAI({
+        messages: [
+          {
+            role: 'system',
+            content: `Você é um assistente de treino baseado em evidências.
 Se a usuária pedir para trocar/substituir o exercício atual, use a função replace_workout_exercise com IDs válidos da lista fornecida.
 Se faltarem dados de equipamento/disponibilidade/dor para decidir com segurança, faça pergunta curta antes de sugerir troca.
 Não invente IDs e não use exercícios fora da lista.`,
-            },
-            {
-              role: 'user',
-              content: `Exercício atual:
+          },
+          {
+            role: 'user',
+            content: `Exercício atual:
 - id: ${exercise.id}
 - nome: ${exercise.name}
 - grupo: ${exercise.muscleGroup}
@@ -194,39 +187,31 @@ Exercícios válidos para substituição (id | nome | grupo):
 ${catalogOptions.map((item) => `- ${item.id} | ${item.name} | ${item.muscleGroup}`).join('\n')}
 
 Pergunta da usuária: ${aiQuestion}`,
-            },
-          ],
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'replace_workout_exercise',
-                description: 'Solicita substituição do exercício atual por outro do catálogo.',
-                parameters: {
-                  type: 'object',
-                  additionalProperties: false,
-                  required: ['sourceExerciseId', 'replacementExerciseId'],
-                  properties: {
-                    sourceExerciseId: { type: 'string' },
-                    replacementExerciseId: { type: 'string' },
-                    reason: { type: 'string' },
-                  },
+          },
+        ],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'replace_workout_exercise',
+              description: 'Solicita substituição do exercício atual por outro do catálogo.',
+              parameters: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['sourceExerciseId', 'replacementExerciseId'],
+                properties: {
+                  sourceExerciseId: { type: 'string' },
+                  replacementExerciseId: { type: 'string' },
+                  reason: { type: 'string' },
                 },
               },
             },
-          ],
-          tool_choice: 'auto',
-          temperature: 0.7,
-          max_tokens: 500,
-        }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Erro na API');
-      }
-
-      const data = await response.json();
+          },
+        ],
+        tool_choice: 'auto',
+        temperature: 0.7,
+        max_tokens: 500,
+      }, { feature: 'chat' });
       const choice = data.choices?.[0];
       const answer = (choice?.message?.content || '').trim();
       const toolCalls = choice?.message?.tool_calls as Array<{ function?: { name?: string; arguments?: string } }> | undefined;

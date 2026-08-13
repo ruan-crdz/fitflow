@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { getAIConfigPrompt, SCIENCE_GUARDRAILS } from '@/stores/useAIConfigStore';
+import { invokeAI } from '@/utils/ai';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 interface AIWorkoutTipProps {
@@ -13,41 +13,31 @@ interface AIWorkoutTipProps {
 const TIPS_CACHE: Record<string, string> = {};
 
 export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
-  const apiKey = useAIStore((s) => s.apiKey);
   const profile = useProfileStore((s) => s.profile);
   const [tip, setTip] = useState<string | null>(TIPS_CACHE[exerciseName] || null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!apiKey || !profile || TIPS_CACHE[exerciseName]) return;
+    if (!profile || TIPS_CACHE[exerciseName]) return;
 
     setLoading(true);
     setTip(null);
     const aiConfig = getAIConfigPrompt();
 
-    fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `Você é ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Dê UMA dica curta (max 15 palavras) de execução segura ou motivação para o exercício. Só a dica, sem explicação. ${SCIENCE_GUARDRAILS}`,
-          },
-          {
-            role: 'user',
-            content: `Exercício: ${exerciseName} (${muscleGroup}). Objetivo: ${profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa' : 'manter'}`,
-          },
-        ],
-        max_tokens: 60,
-        temperature: 0.9,
-      }),
-    })
-      .then((r) => r.json())
+    invokeAI({
+      messages: [
+        {
+          role: 'system',
+          content: `Você é ${aiConfig.assistantName}. ${aiConfig.personalityPrompt} Dê UMA dica curta (max 15 palavras) de execução segura ou motivação para o exercício. Só a dica, sem explicação. ${SCIENCE_GUARDRAILS}`,
+        },
+        {
+          role: 'user',
+          content: `Exercício: ${exerciseName} (${muscleGroup}). Objetivo: ${profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa' : 'manter'}`,
+        },
+      ],
+      max_tokens: 60,
+      temperature: 0.9,
+    }, { feature: 'workout_tip' })
       .then((data) => {
         const text = data.choices?.[0]?.message?.content?.trim() || '';
         if (text) {
@@ -57,9 +47,7 @@ export function AIWorkoutTip({ exerciseName, muscleGroup }: AIWorkoutTipProps) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [exerciseName, apiKey, profile, muscleGroup]);
-
-  if (!apiKey) return null;
+  }, [exerciseName, profile, muscleGroup]);
 
   return (
     <AnimatePresence mode="wait">

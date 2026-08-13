@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAIStore } from '@/stores/useAIStore';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
+import { useProfileStore } from '@/stores/useProfileStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { sendMessageWithActions, type ChatMessage, type ChatAction, type ApplyWorkoutPlanAction } from '@/utils/ai';
 import { useVoiceAssistant } from '@/hooks/useVoiceAssistant';
 import { VoiceCallModal } from '@/components/ui/VoiceCallModal';
+import { resolveAIPlan } from '@/constants/aiPlan';
 import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
@@ -25,8 +26,9 @@ const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
 
 export function AIReeval() {
   const navigate = useNavigate();
-  const apiKey = useAIStore((s) => s.apiKey);
   const assistantName = useAIConfigStore((s) => s.assistantName);
+  const profile = useProfileStore((s) => s.profile);
+  const aiPlan = resolveAIPlan(profile);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -53,12 +55,6 @@ export function AIReeval() {
     speak,
     toggleListening,
   } = useVoiceAssistant({
-    cloudTts: {
-      enabled: true,
-      apiKey,
-      model: 'gpt-4o-mini-tts',
-      voice: 'nova',
-    },
     onTranscript: (text, isFinal) => {
       setVoiceError('');
       if (!isFinal) {
@@ -78,11 +74,6 @@ export function AIReeval() {
   }, [messages, pendingAction]);
 
   useEffect(() => {
-    if (!apiKey) {
-      setMessages([{ role: 'assistant', content: 'Configure sua chave IA no Perfil para usar a reavaliação.' }]);
-      return;
-    }
-
     if (messages.length === 0) {
       setMessages([
         {
@@ -91,7 +82,7 @@ export function AIReeval() {
         },
       ]);
     }
-  }, [apiKey, assistantName, messages.length]);
+  }, [assistantName, messages.length]);
 
   const normalizeName = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -259,7 +250,7 @@ export function AIReeval() {
 
   const handleSend = async (text?: string) => {
     const msg = text || inputText.trim();
-    if (!msg || !apiKey || loading) return;
+    if (!msg || loading) return;
 
     if (tryResolvePendingFromUserText(msg)) {
       setInputText('');
@@ -277,7 +268,7 @@ export function AIReeval() {
     setLoading(true);
 
     try {
-      const { reply, action } = await sendMessageWithActions(apiKey, newMessages);
+      const { reply, action } = await sendMessageWithActions(null, newMessages, 'plan_reeval');
       syncPendingWorkoutDraft(action);
       setPendingAction(action);
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
@@ -289,7 +280,7 @@ export function AIReeval() {
   };
 
   const handleVoiceCallTurn = async (text: string): Promise<string | null> => {
-    if (!apiKey || loading) return null;
+    if (loading) return null;
     const trimmed = text.trim();
     if (!trimmed) return null;
 
@@ -307,7 +298,7 @@ export function AIReeval() {
     setError('');
 
     try {
-      const { reply, action } = await sendMessageWithActions(apiKey, newMessages);
+      const { reply, action } = await sendMessageWithActions(null, newMessages, 'plan_reeval');
       syncPendingWorkoutDraft(action);
       setPendingAction(action);
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
@@ -320,6 +311,30 @@ export function AIReeval() {
       setLoading(false);
     }
   };
+
+  if (aiPlan !== 'ultimate') {
+    return (
+      <div className="fixed inset-0 z-50 bg-[rgb(var(--color-bg-rgb))] flex items-center justify-center px-6">
+        <div className="card max-w-md w-full space-y-4 border border-primary-500/25">
+          <div className="flex items-center gap-2">
+            <MaterialIcon name="workspace_premium" className="text-primary-300 text-2xl" />
+            <h1 className="text-lg font-bold">Reavaliação IA é Ultimate</h1>
+          </div>
+          <p className="text-sm text-white/60 leading-relaxed">
+            No plano Free, você recebe chat e dicas rápidas. A reavaliação completa com ajuste inteligente de treino fica no Ultimate.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => navigate('/plans')} className="btn-secondary flex-1 py-3 text-sm">
+              Voltar para treinos
+            </button>
+            <button onClick={() => navigate('/profile')} className="btn-primary flex-1 py-3 text-sm">
+              Ver upgrade
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-[rgb(var(--color-bg-rgb))] flex flex-col">
@@ -529,7 +544,6 @@ export function AIReeval() {
       <VoiceCallModal
         open={callOpen}
         assistantName="Reavaliação IA"
-        apiKey={apiKey}
         onClose={() => setCallOpen(false)}
         onUserTurn={handleVoiceCallTurn}
         primaryActionLabel={saved ? 'Treino salvo! Ver meus treinos' : undefined}

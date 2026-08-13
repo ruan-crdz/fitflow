@@ -6,11 +6,11 @@ import { useHistoryStore } from '@/stores/useHistoryStore';
 import { useWeightStore } from '@/stores/useWeightStore';
 import { getAIConfigPrompt, SCIENCE_GUARDRAILS, useAIConfigStore } from '@/stores/useAIConfigStore';
 import { getToday } from '@/utils/date';
+import { invokeAI } from '@/utils/ai';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
 
 export function AIDashInsight() {
-  const apiKey = useAIStore((s) => s.apiKey);
   const isEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
   const assistantName = useAIConfigStore((s) => s.assistantName);
@@ -21,7 +21,7 @@ export function AIDashInsight() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!apiKey || !isEnabled || !profile) return;
+    if (!isEnabled || !profile) return;
 
     const completedSessions = sessions.filter((s) => s.completedAt);
     if (completedSessions.length === 0) return;
@@ -41,29 +41,20 @@ export function AIDashInsight() {
       : 'Sem dados de peso suficientes';
     const aiConfig = getAIConfigPrompt();
 
-    fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `Você é ${aiConfig.assistantName}. Sempre use esse nome se falar de você. ${aiConfig.personalityPrompt} Dê UM insight personalizado e motivador, máximo 2 frases curtas, baseado apenas nos dados reais. ${SCIENCE_GUARDRAILS}`,
-          },
-          {
-            role: 'user',
-            content: `Perfil: ${profile.name}, ${profile.age} anos, ${profile.weight}kg, objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}. Treinos completos: ${completedSessions.length} total. ${weightTrend}`,
-          },
-        ],
-        max_tokens: 100,
-        temperature: 0.75,
-      }),
-    })
-      .then((r) => r.json())
+    invokeAI({
+      messages: [
+        {
+          role: 'system',
+          content: `Você é ${aiConfig.assistantName}. Sempre use esse nome se falar de você. ${aiConfig.personalityPrompt} Dê UM insight personalizado e motivador, máximo 2 frases curtas, baseado apenas nos dados reais. ${SCIENCE_GUARDRAILS}`,
+        },
+        {
+          role: 'user',
+          content: `Perfil: ${profile.name}, ${profile.age} anos, ${profile.weight}kg, objetivo: ${profile.goal === 'lose' ? 'emagrecer' : profile.goal === 'gain' ? 'hipertrofia' : 'manter'}. Treinos completos: ${completedSessions.length} total. ${weightTrend}`,
+        },
+      ],
+      max_tokens: 100,
+      temperature: 0.75,
+    }, { feature: 'dashboard_insight' })
       .then((data) => {
         const text = data.choices?.[0]?.message?.content?.trim() || '';
         if (text) {
@@ -73,7 +64,7 @@ export function AIDashInsight() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [apiKey, isEnabled, profile, sessions, weightEntries, assistantName, personality]);
+  }, [isEnabled, profile, sessions, weightEntries, assistantName, personality]);
 
   if (!isEnabled) return null;
 

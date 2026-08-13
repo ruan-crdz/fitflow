@@ -26,7 +26,6 @@ const SUGGESTIONS = [
 const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
 
 export function AIChat() {
-  const apiKey = useAIStore((s) => s.apiKey);
   const messages = useAIStore((s) => s.messages);
   const setMessages = useAIStore((s) => s.setMessages);
   const clearMessages = useAIStore((s) => s.clearMessages);
@@ -54,12 +53,6 @@ export function AIChat() {
     toggleListening,
     speak,
   } = useVoiceAssistant({
-    cloudTts: {
-      enabled: true,
-      apiKey,
-      model: 'gpt-4o-mini-tts',
-      voice: 'nova',
-    },
     onTranscript: (text, isFinal) => {
       if (!isFinal) {
         setVoicePreview(text);
@@ -241,7 +234,7 @@ export function AIChat() {
 
   const handleSend = async (text?: string) => {
     const msg = text || input.trim();
-    if (!msg || !apiKey || loading) return;
+    if (!msg || loading) return;
 
     if (tryResolvePendingFromUserText(msg)) {
       setInput('');
@@ -255,7 +248,7 @@ export function AIChat() {
     setLoading(true);
 
     try {
-      const { reply, action } = await sendMessageWithActions(apiKey, newMessages);
+      const { reply, action } = await sendMessageWithActions(null, newMessages);
       syncPendingWorkoutDraft(action);
       setPendingAction(action);
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
@@ -268,7 +261,7 @@ export function AIChat() {
 
   const handleMessageFeedback = async (index: number, value: 'up' | 'down') => {
     setFeedbackByIndex((prev) => ({ ...prev, [index]: value }));
-    if (value === 'up' || !apiKey || loading) return;
+    if (value === 'up' || loading) return;
 
     setLoading(true);
     setError('');
@@ -280,7 +273,7 @@ export function AIChat() {
           content: 'Feedback negativo: o usuario nao gostou da ultima resposta. Refaça a resposta anterior com mais precisao, mais alinhada ao perfil, sem inventar dados, usando base cientifica e respeitando a personalidade configurada.',
         },
       ];
-      const { reply, action } = await sendMessageWithActions(apiKey, retryMessages);
+      const { reply, action } = await sendMessageWithActions(null, retryMessages);
       syncPendingWorkoutDraft(action);
       setPendingAction(action);
       setMessages([...messages, { role: 'assistant', content: reply }]);
@@ -292,7 +285,7 @@ export function AIChat() {
   };
 
   const handleVoiceCallTurn = async (text: string): Promise<string | null> => {
-    if (!apiKey || loading) return null;
+    if (loading) return null;
     const trimmed = text.trim();
     if (!trimmed) return null;
 
@@ -306,7 +299,7 @@ export function AIChat() {
     setError('');
 
     try {
-      const { reply, action } = await sendMessageWithActions(apiKey, newMessages);
+      const { reply, action } = await sendMessageWithActions(null, newMessages);
       syncPendingWorkoutDraft(action);
       setPendingAction(action);
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
@@ -526,7 +519,6 @@ export function AIChat() {
       <VoiceCallModal
         open={callOpen}
         assistantName={assistantName}
-        apiKey={apiKey}
         onClose={() => setCallOpen(false)}
         onUserTurn={handleVoiceCallTurn}
       />

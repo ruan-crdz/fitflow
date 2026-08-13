@@ -100,7 +100,6 @@ export function WorkoutPlans() {
 
   const { setExercises, reorderExercises, resetWorkout, swapExercise, activeSlots, addSlot, removeSlot, applySlotOrder, exportWorkout, exportAll, previewImport, importSingleWorkout, importAllWorkouts } = useCustomWorkoutStore();
   const customWorkouts = useCustomWorkoutStore((s) => s.customWorkouts);
-  const apiKey = useAIStore((s) => s.apiKey);
   const aiEnabled = useAIStore((s) => s.isEnabled);
   const profile = useProfileStore((s) => s.profile);
   const toast = useToastStore((s) => s.show);
@@ -416,7 +415,7 @@ export function WorkoutPlans() {
   };
 
   const handleAIBuild = async () => {
-    if (!apiKey || !profile) return;
+    if (!profile) return;
     setAILoading(true);
     setShowAIBuilder(true);
     setAIAddSuggestion(null);
@@ -463,10 +462,10 @@ Exercícios disponíveis: ${availableNames}
 
 Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
 
-      const response = await askAI(apiKey, profile, prompt, {
+      const response = await askAI(null, profile, prompt, {
         schemaName: 'workout_builder_action',
         jsonSchema: WORKOUT_BUILDER_SCHEMA,
-      });
+      }, 'workout_builder');
       const match = response.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -552,7 +551,7 @@ Responda APENAS JSON puro (sem markdown, sem \`\`\`).`;
   };
 
   const handleExerciseAISwap = async (exerciseId: string) => {
-    if (!apiKey || !profile) return;
+    if (!profile) return;
     setSwapTargetId(exerciseId);
     setSwapTargetLoading(true);
     setSwapTargetSuggestion(null);
@@ -590,10 +589,10 @@ NÃO troque puxada vertical por horizontal ou vice-versa. NÃO troque empurrar p
 Responda APENAS JSON: {"name":"NOME EXATO da lista","reason":"frase curta biomecânica"}
 ESCOLHA OBRIGATORIAMENTE um destes: ${available.join(', ')}`;
 
-      const response = await askAI(apiKey, profile, prompt, {
+      const response = await askAI(null, profile, prompt, {
         schemaName: 'workout_single_swap',
         jsonSchema: WORKOUT_SWAP_SCHEMA,
-      });
+      }, 'workout_builder');
       const match = response.match(/\{[^}]+\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);

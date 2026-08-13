@@ -18,6 +18,8 @@ export type TrainingFocus = 'upper' | 'lower' | 'balanced' | 'custom';
 
 export type TrainingLocation = 'academia' | 'casa' | 'hibrido';
 
+export type AIPlan = 'free' | 'ultimate';
+
 export interface CustomSplit {
   [key: string]: string; // e.g. "A": "Peito e Tríceps", "B": "Costas e Bíceps"
 }
@@ -40,6 +42,7 @@ export interface Profile {
   preferredExercises?: string[];
   dislikedExercises?: string[];
   limitations?: string[];
+  aiPlan?: AIPlan;
 }
 
 export interface Exercise {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useAIConfigStore, AI_PERSONALITIES, type AIPersonality } from '@/stores/useAIConfigStore';
+import { planLabel, resolveAIPlan } from '@/constants/aiPlan';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
@@ -24,8 +25,9 @@ const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
 export function Profile() {
   const navigate = useNavigate();
   const { profile, updateProfile } = useProfileStore();
-  const { isEnabled, setApiKey, removeApiKey, hasSeenIntro } = useAIStore();
+  const { isEnabled, hasSeenIntro } = useAIStore();
   const { assistantName, personality, setAssistantName, setPersonality, resetAIConfig } = useAIConfigStore();
+  const aiPlan = resolveAIPlan(profile);
   const { themeId, setTheme } = useThemeStore();
   const {
     fontScale,
@@ -41,7 +43,6 @@ export function Profile() {
   const { phase, setPhase } = useCycleStore();
   const [editing, setEditing] = useState(false);
   const [showReset, setShowReset] = useState(false);
-  const [aiKeyInput, setAiKeyInput] = useState('');
   const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
 
   const [name, setName] = useState(profile?.name || '');
@@ -518,49 +519,43 @@ export function Profile() {
                 Restaurar IA padrão
               </button>
             </div>
-            {isEnabled ? (
-              <div className="space-y-3">
- <p className="text-sm text-success">Ativa </p>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                <p className="text-xs text-white/45">Plano atual de IA</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white/85">{planLabel(aiPlan)}</p>
+                  {aiPlan === 'ultimate' ? (
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30">
+                      Ultimate ativo
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-white/10 text-white/60 border border-white/15">
+                      Free
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-white/40 leading-relaxed">
+                  O plano Free inclui chat e dicas rápidas. Ultimate libera reavaliação avançada, relatório semanal e foto IA para refeições.
+                </p>
+                {aiPlan === 'free' && (
+                  <button
+                    onClick={() => updateProfile({ aiPlan: 'ultimate' })}
+                    className="btn-primary py-2.5 text-xs"
+                  >
+                    <MaterialIcon name="workspace_premium" /> Fazer upgrade para Ultimate
+                  </button>
+                )}
+              </div>
+
+              {isEnabled && (
                 <button
                   onClick={() => navigate(hasSeenIntro ? '/ai' : '/ai/intro')}
                   className="btn-primary py-3 text-sm"
                 >
                   <MaterialIcon name="smart_toy" /> Abrir assistente
                 </button>
-                <button
-                  onClick={removeApiKey}
-                  className="w-full text-xs text-white/30 py-2"
-                >
-                  Remover token
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs text-white/40">
-                  Cole seu token OpenAI para ativar a assistente de IA
-                </p>
-                <input
-                  type="password"
-                  value={aiKeyInput}
-                  onChange={(e) => setAiKeyInput(e.target.value)}
-                  placeholder="sk-proj-..."
-                  className="input-field text-sm"
-                />
-                <button
-                  onClick={() => {
-                    if (aiKeyInput.startsWith('sk-')) {
-                      setApiKey(aiKeyInput);
-                      setAiKeyInput('');
-                      navigate('/ai/intro');
-                    }
-                  }}
-                  disabled={!aiKeyInput.startsWith('sk-')}
-                  className="btn-primary py-3 text-sm"
-                >
-                  <MaterialIcon name="bolt" /> Ativar GymPilot AI
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Export Data */}
