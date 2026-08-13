@@ -132,13 +132,14 @@ IMPORTANTE: O número de treinos distintos NÃO precisa ser igual ao número de 
 
 REGRAS DE MONTAGEM:
 1. Após escolher o split vencedor, monte os treinos
-2. Use o menor número de exercícios necessário para cumprir volume semanal alvo, objetivo, tempo disponível por sessão e recuperação.
-3. Respeite a preferência do aluno: ${focusLabel}
-${profile.trainingFocus === 'custom' ? '4. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : '4. Priorize músculos e padrões de movimento com base em objetivo declarado, preferências, histórico, limitações e aderência. Nunca inferir preferência muscular por sexo biológico.'}
-5. Cada exercício DEVE vir da lista abaixo (nome exato)
-6. Explique a rotação semanal
-7. Cardio é opcional e deve ser distribuído pela semana conforme objetivo, recuperação, preferência, disponibilidade e possível interferência com musculação.
-8. Não retorne calorias exatas de treino como fato; se citar gasto, trate como estimativa ampla e com baixa precisão.
+2. Cada treino de musculação deve ter entre 5 e 10 exercícios.
+3. Se o foco de um treino tiver até 3 grupamentos principais (ex.: peito + tríceps + ombros), distribua no mínimo 2 exercícios por grupamento (evite 1 exercício isolado por grupo).
+4. Respeite a preferência do aluno: ${focusLabel}
+${profile.trainingFocus === 'custom' ? '5. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : '5. Priorize músculos e padrões de movimento com base em objetivo declarado, preferências, histórico, limitações e aderência. Nunca inferir preferência muscular por sexo biológico.'}
+6. Cada exercício DEVE vir da lista abaixo (nome exato)
+7. Explique a rotação semanal
+8. Cardio é opcional e deve ser distribuído pela semana conforme objetivo, recuperação, preferência, disponibilidade e possível interferência com musculação.
+9. Não retorne calorias exatas de treino como fato; se citar gasto, trate como estimativa ampla e com baixa precisão.
 
 Exercícios disponíveis (use nomes EXATOS):
 ${catalogCompact}
@@ -161,7 +162,13 @@ ${SCIENCE_GUARDRAILS}
       "type": "A",
       "focus": "foco do treino",
       "cardio": {"type": "Esteira", "durationMin": 20, "intensity": "moderado"},
-      "exercises": [{"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}]
+      "exercises": [
+        {"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"},
+        {"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"},
+        {"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"},
+        {"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"},
+        {"name": "NOME EXATO", "sets": 3, "repsMin": 8, "repsMax": 12, "muscleGroup": "grupo"}
+      ]
     }
   ],
   "evidenceIds": ["SRC-ACSM-RT-2026"]

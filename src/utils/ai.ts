@@ -181,6 +181,8 @@ export type ChatAction = ReplaceExerciseAction | ApplyWorkoutPlanAction;
 
 const MIN_EXERCISES_PER_WORKOUT = 5;
 const TARGET_EXERCISES_PER_WORKOUT = 6;
+const TARGET_EXERCISES_FOR_FOCUSED_SPLIT = 7;
+const MIN_EXERCISES_PER_FOCUSED_GROUP = 2;
 
 function normalizeName(value: string): string {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -226,6 +228,11 @@ function completeWorkoutExercises(
 ): WorkoutPlanExerciseAction[] {
   const unique: WorkoutPlanExerciseAction[] = [];
   const local = new Set<string>();
+  const normalizedDesired = Array.from(new Set(desiredGroups.filter(Boolean)));
+  const isFocusedSplit = normalizedDesired.length > 0 && normalizedDesired.length <= 3;
+  const targetExercises = isFocusedSplit ? TARGET_EXERCISES_FOR_FOCUSED_SPLIT : TARGET_EXERCISES_PER_WORKOUT;
+
+  const countByGroup = (group: string) => unique.filter((exercise) => exercise.muscleGroup === group).length;
 
   for (const exercise of exercises) {
     if (!exercise.name?.trim()) continue;
@@ -242,7 +249,8 @@ function completeWorkoutExercises(
     });
   }
 
-  const addFromCatalog = (groupFilter?: string) => {
+  const addFromCatalog = (groupFilter?: string, limit = Number.POSITIVE_INFINITY): number => {
+    let added = 0;
     for (const catalog of EXERCISE_CATALOG) {
       const key = normalizeName(catalog.name);
       if (groupFilter && catalog.muscleGroup !== groupFilter) continue;
@@ -256,24 +264,34 @@ function completeWorkoutExercises(
         repsMax: catalog.muscleGroup === 'Abdômen' ? 20 : 12,
         muscleGroup: catalog.muscleGroup,
       });
-      if (unique.length >= TARGET_EXERCISES_PER_WORKOUT) return;
+      added += 1;
+      if (unique.length >= targetExercises || added >= limit) return added;
     }
+    return added;
   };
 
-  const normalizedDesired = Array.from(new Set(desiredGroups));
+  const minPerGroup = isFocusedSplit ? MIN_EXERCISES_PER_FOCUSED_GROUP : 1;
+
   for (const group of normalizedDesired) {
-    const hasGroup = unique.some((exercise) => exercise.muscleGroup === group);
-    if (!hasGroup) addFromCatalog(group);
-    if (unique.length >= TARGET_EXERCISES_PER_WORKOUT) break;
+    while (countByGroup(group) < minPerGroup && unique.length < targetExercises) {
+      const added = addFromCatalog(group, 1);
+      if (added === 0) break;
+    }
   }
 
-  let guard = 0;
-  while (unique.length < TARGET_EXERCISES_PER_WORKOUT && guard < normalizedDesired.length) {
-    addFromCatalog(normalizedDesired[guard]);
-    guard += 1;
+  if (normalizedDesired.length > 0) {
+    let progressed = true;
+    while (unique.length < targetExercises && progressed) {
+      progressed = false;
+      for (const group of normalizedDesired) {
+        if (unique.length >= targetExercises) break;
+        const added = addFromCatalog(group, 1);
+        if (added > 0) progressed = true;
+      }
+    }
   }
 
-  if (unique.length < TARGET_EXERCISES_PER_WORKOUT) {
+  if (unique.length < targetExercises) {
     addFromCatalog();
   }
 
@@ -324,18 +342,34 @@ function pickExercisesByGroups(
 ): WorkoutPlanExerciseAction[] {
   const out: WorkoutPlanExerciseAction[] = [];
 
-  for (const group of groups) {
-    const matches = EXERCISE_CATALOG.filter((exercise) => exercise.muscleGroup === group);
-    for (const exercise of matches) {
-      if (used.has(exercise.name)) continue;
-      used.add(exercise.name);
+  const orderedGroups = Array.from(new Set(groups.filter(Boolean)));
+  const groupEntries = orderedGroups.map((group) => ({
+    group,
+    cursor: 0,
+    matches: EXERCISE_CATALOG.filter((exercise) => exercise.muscleGroup === group),
+  }));
+
+  let progressed = true;
+  while (out.length < amount && progressed && groupEntries.length > 0) {
+    progressed = false;
+    for (const entry of groupEntries) {
+      while (entry.cursor < entry.matches.length && used.has(entry.matches[entry.cursor].name)) {
+        entry.cursor += 1;
+      }
+
+      const match = entry.matches[entry.cursor];
+      if (!match) continue;
+
+      used.add(match.name);
       out.push({
-        name: exercise.name,
+        name: match.name,
         sets: 3,
-        repsMin: group === 'Abdômen' ? 12 : 8,
-        repsMax: group === 'Abdômen' ? 20 : 12,
-        muscleGroup: group,
+        repsMin: entry.group === 'Abdômen' ? 12 : 8,
+        repsMax: entry.group === 'Abdômen' ? 20 : 12,
+        muscleGroup: entry.group,
       });
+      entry.cursor += 1;
+      progressed = true;
       if (out.length >= amount) return out;
     }
   }
@@ -550,7 +584,7 @@ export async function sendMessageWithActions(
     ? `\n\nINSTRUÇÕES DE EVIDÊNCIA:\n- Para recomendações científicas/prescritivas, cite apenas IDs do EVIDENCE_CONTEXT no formato [SRC:ID1,ID2].\n- Não invente fontes.\n- Se não houver evidência suficiente no contexto, responda explicitamente: "Não encontrei evidência suficiente para afirmar isso com segurança."`
     : '';
 
-  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 5-8 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
+  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 6-10 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Se o foco do treino tiver até 3 grupamentos principais (ex.: peito, tríceps e ombros), inclua no mínimo 2 exercícios por grupamento.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
 
   const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => invokeAI({
     messages: [
@@ -601,7 +635,7 @@ export async function sendMessageWithActions(
                     focus: { type: 'string' },
                     exercises: {
                       type: 'array',
-                      minItems: 5,
+                      minItems: 6,
                       maxItems: 10,
                       items: {
                         type: 'object',

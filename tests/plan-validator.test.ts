@@ -39,6 +39,39 @@ describe('plan validator and payload guards', () => {
     expect(errors).toEqual([]);
   });
 
+  it('bloqueia treino focado com apenas 1 exercício por grupamento principal', () => {
+    const errors = validateGeneratedPlan({
+      workouts: [
+        {
+          type: 'A',
+          focus: 'Peitoral + Tríceps + Ombros',
+          exercises: [
+            { name: 'Supino Reto', sets: 3, repsMin: 8, repsMax: 12, muscleGroup: 'Peitoral' },
+            { name: 'Tríceps Corda', sets: 3, repsMin: 10, repsMax: 15, muscleGroup: 'Tríceps' },
+            { name: 'Elevação Lateral', sets: 3, repsMin: 12, repsMax: 15, muscleGroup: 'Ombros' },
+            { name: 'Abdominal Máquina', sets: 2, repsMin: 12, repsMax: 15, muscleGroup: 'Abdômen' },
+            { name: 'Prancha', sets: 2, repsMin: 30, repsMax: 45, muscleGroup: 'Abdômen' },
+          ],
+        },
+        {
+          type: 'B',
+          focus: 'Costas + Bíceps',
+          exercises: [
+            { name: 'Remada Curvada', sets: 3, repsMin: 8, repsMax: 12, muscleGroup: 'Costas' },
+            { name: 'Puxada Aberta', sets: 3, repsMin: 8, repsMax: 12, muscleGroup: 'Costas' },
+            { name: 'Rosca Direta', sets: 3, repsMin: 8, repsMax: 12, muscleGroup: 'Bíceps' },
+            { name: 'Rosca Martelo', sets: 3, repsMin: 10, repsMax: 12, muscleGroup: 'Bíceps' },
+            { name: 'Face Pull', sets: 2, repsMin: 12, repsMax: 15, muscleGroup: 'Ombros' },
+          ],
+        },
+      ],
+    }, 4);
+
+    expect(errors.some((error) => error.includes('foco em Peitoral'))).toBe(true);
+    expect(errors.some((error) => error.includes('foco em Tríceps'))).toBe(true);
+    expect(errors.some((error) => error.includes('foco em Ombros'))).toBe(true);
+  });
+
   it('bloqueia payload com dia inválido', () => {
     const errors = validateReevalPayload({
       removeDays: ['Z'],

@@ -19,6 +19,53 @@ type PlanCandidate = {
 };
 
 const VALID_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
+const MIN_EXERCISES_PER_WORKOUT = 5;
+const MAX_EXERCISES_PER_WORKOUT = 10;
+const MIN_EXERCISES_PER_FOCUSED_GROUP = 2;
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function mapToCanonicalGroup(value: string): string | null {
+  const normalized = normalizeText(value);
+  if (!normalized.trim()) return null;
+  if (normalized.includes('peito') || normalized.includes('peitoral')) return 'Peitoral';
+  if (normalized.includes('costa') || normalized.includes('dorsal')) return 'Costas';
+  if (normalized.includes('biceps') || normalized.includes('antebraco')) return 'Bíceps';
+  if (normalized.includes('triceps')) return 'Tríceps';
+  if (normalized.includes('ombro') || normalized.includes('deltoide')) return 'Ombros';
+  if (normalized.includes('quadriceps') || normalized.includes('coxa anterior')) return 'Quadríceps';
+  if (normalized.includes('posterior') || normalized.includes('isquiotib')) return 'Posterior de Coxa';
+  if (normalized.includes('gluteo')) return 'Glúteos';
+  if (normalized.includes('panturr')) return 'Panturrilhas';
+  if (normalized.includes('abdomen') || normalized.includes('core')) return 'Abdômen';
+  return null;
+}
+
+function extractFocusGroups(focus?: string): string[] {
+  if (!focus) return [];
+  const normalized = normalizeText(focus);
+
+  const map: Array<{ keys: string[]; group: string }> = [
+    { keys: ['peito', 'peitoral'], group: 'Peitoral' },
+    { keys: ['costa', 'costas', 'dorsal'], group: 'Costas' },
+    { keys: ['biceps', 'antebraco'], group: 'Bíceps' },
+    { keys: ['triceps'], group: 'Tríceps' },
+    { keys: ['ombro', 'deltoide'], group: 'Ombros' },
+    { keys: ['quadriceps', 'coxa anterior'], group: 'Quadríceps' },
+    { keys: ['posterior', 'isquiotib'], group: 'Posterior de Coxa' },
+    { keys: ['gluteo'], group: 'Glúteos' },
+    { keys: ['panturrilha', 'gemeos'], group: 'Panturrilhas' },
+    { keys: ['abdomen', 'core'], group: 'Abdômen' },
+  ];
+
+  const groups = map
+    .filter((item) => item.keys.some((key) => normalized.includes(key)))
+    .map((item) => item.group);
+
+  return Array.from(new Set(groups));
+}
 
 export function validateGeneratedPlan(plan: PlanCandidate, trainingDaysPerWeek: number): string[] {
   const errors: string[] = [];
@@ -36,11 +83,12 @@ export function validateGeneratedPlan(plan: PlanCandidate, trainingDaysPerWeek: 
 
   workouts.forEach((workout, wi) => {
     const exercises = workout.exercises || [];
-    if (exercises.length < 3 || exercises.length > 10) {
-      errors.push(`Plano inválido: treino ${wi + 1} deve ter entre 3 e 10 exercícios.`);
+    if (exercises.length < MIN_EXERCISES_PER_WORKOUT || exercises.length > MAX_EXERCISES_PER_WORKOUT) {
+      errors.push(`Plano inválido: treino ${wi + 1} deve ter entre ${MIN_EXERCISES_PER_WORKOUT} e ${MAX_EXERCISES_PER_WORKOUT} exercícios.`);
     }
 
     let workoutSetSum = 0;
+    const groupedExerciseCount = new Map<string, number>();
     exercises.forEach((exercise, ei) => {
       if (!exercise.name?.trim()) errors.push(`Plano inválido: exercício ${ei + 1} do treino ${wi + 1} sem nome.`);
       if (!exercise.muscleGroup?.trim()) errors.push(`Plano inválido: exercício ${exercise.name || ei + 1} sem grupo muscular.`);
@@ -56,8 +104,25 @@ export function validateGeneratedPlan(plan: PlanCandidate, trainingDaysPerWeek: 
         const appearances = baseAppearances + (wi < extraAppearances ? 1 : 0);
         const prev = weeklySetsByMuscle.get(exercise.muscleGroup) || 0;
         weeklySetsByMuscle.set(exercise.muscleGroup, prev + (exercise.sets || 0) * appearances);
+
+        const canonical = mapToCanonicalGroup(exercise.muscleGroup);
+        if (canonical) {
+          groupedExerciseCount.set(canonical, (groupedExerciseCount.get(canonical) || 0) + 1);
+        }
       }
     });
+
+    const focusGroups = extractFocusGroups(workout.focus);
+    if (focusGroups.length > 0 && focusGroups.length <= 3) {
+      focusGroups.forEach((group) => {
+        const count = groupedExerciseCount.get(group) || 0;
+        if (count < MIN_EXERCISES_PER_FOCUSED_GROUP) {
+          errors.push(
+            `Plano inválido: treino ${wi + 1} com foco em ${group} precisa de ao menos ${MIN_EXERCISES_PER_FOCUSED_GROUP} exercícios desse grupamento.`,
+          );
+        }
+      });
+    }
 
     if (workoutSetSum < 8 || workoutSetSum > 40) {
       errors.push(`Plano inválido: treino ${wi + 1} com volume total fora do limite (8-40 séries).`);

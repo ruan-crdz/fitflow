@@ -34,6 +34,15 @@ import { CustomDatePicker } from '@/components/ui/CustomDatePicker';
 
 type DashboardHistory = 'consistency' | 'load' | 'calories' | 'water' | 'bmi' | 'weight' | null;
 
+function getWorkoutMeta(type?: string | null): { label: string; focus: string } {
+  const normalized = typeof type === 'string' ? type.toUpperCase() : '';
+  const mapped = (WORKOUT_MAP as Record<string, { label: string; focus: string } | undefined>)[normalized];
+  return {
+    label: mapped?.label || `Treino ${normalized || 'A'}`,
+    focus: mapped?.focus || 'Treino personalizado',
+  };
+}
+
 export function Dashboard() {
   useTrainingReminder();
   const navigate = useNavigate();
@@ -104,6 +113,8 @@ export function Dashboard() {
   const weeklyCompleted = sessions.filter((session) => session.completedAt && new Date(session.date) >= weekAgo).length;
   const weeklyProgress = Math.min(weeklyCompleted / targetWeeklySessions, 1);
   const nextWorkoutType = activeSlots[structuredSessions.length % Math.max(activeSlots.length, 1)] || 'A';
+  const activeWorkoutMeta = getWorkoutMeta(activeSession?.workoutType);
+  const todayWorkoutMeta = getWorkoutMeta(todayWorkout);
   const todayCheckin = checkins[today];
   const readiness = computeReadiness(todayCheckin || null);
   const readinessScore = readiness?.score ?? null;
@@ -173,7 +184,7 @@ export function Dashboard() {
             <div>
               <p className="text-sm text-black/60 font-bold">Treino em andamento</p>
               <p className="text-xl font-bold mt-1">
-                Continuar {WORKOUT_MAP[activeSession.workoutType].label}
+                Continuar {activeWorkoutMeta.label}
               </p>
             </div>
             <motion.span
@@ -195,9 +206,9 @@ export function Dashboard() {
                 <div className="flex-1">
                   <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold">Treino de hoje</p>
                   <p className="text-lg font-bold mt-0.5">
-                    {todayWorkout && WORKOUT_MAP[todayWorkout].label}
+                    {todayWorkout && todayWorkoutMeta.label}
                   </p>
-                  <p className="text-sm text-primary-400">{todayWorkout && WORKOUT_MAP[todayWorkout].focus}</p>
+                  <p className="text-sm text-primary-400">{todayWorkout && todayWorkoutMeta.focus}</p>
                 </div>
               </div>
               <motion.button

@@ -42,7 +42,8 @@ export const AI_SETUP_SCHEMA: Record<string, unknown> = {
           },
           exercises: {
             type: 'array',
-            minItems: 1,
+            minItems: 5,
+            maxItems: 10,
             items: {
               type: 'object',
               additionalProperties: false,
