@@ -12,6 +12,7 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { supabase } from '@/lib/supabase';
+import { pushLocalStateToCloud } from '@/lib/accountState';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
@@ -47,6 +48,8 @@ export function Profile() {
   const [editing, setEditing] = useState(false);
   const [accountAction, setAccountAction] = useState<'signout' | 'delete' | null>(null);
   const [processingAccountAction, setProcessingAccountAction] = useState(false);
+  const [showUltimateModal, setShowUltimateModal] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState(false);
   const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
 
   const [name, setName] = useState(profile?.name || '');
@@ -150,6 +153,32 @@ export function Profile() {
     } finally {
       setProcessingAccountAction(false);
       setAccountAction(null);
+    }
+  };
+
+  const handleUpgradeToUltimate = async () => {
+    if (upgradingPlan) return;
+
+    setUpgradingPlan(true);
+    try {
+      updateProfile({ aiPlan: 'ultimate' });
+
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        const userId = data.session?.user.id;
+        if (userId) {
+          await pushLocalStateToCloud(userId);
+        }
+      }
+
+      toast('Ultimate ativado. Obrigado por testar a fase beta gratuita.', 'success');
+      setShowUltimateModal(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não consegui salvar seu plano agora.';
+      toast(`Ultimate ativado localmente, mas falhou sincronizar na nuvem: ${message}`, 'error');
+      setShowUltimateModal(false);
+    } finally {
+      setUpgradingPlan(false);
     }
   };
 
@@ -597,7 +626,7 @@ export function Profile() {
                 </p>
                 {aiPlan === 'free' && (
                   <button
-                    onClick={() => updateProfile({ aiPlan: 'ultimate' })}
+                    onClick={() => setShowUltimateModal(true)}
                     className="btn-primary py-2.5 text-xs"
                   >
                     <MaterialIcon name="workspace_premium" /> Fazer upgrade para Ultimate
@@ -656,6 +685,23 @@ export function Profile() {
                 return;
               }
               void handleSignOut();
+            }}
+          />
+
+          <ConfirmModal
+            open={showUltimateModal}
+            title="Ativar Ultimate (beta gratuito)?"
+            message={[
+              'Com o Ultimate você libera: reavaliação avançada, relatório semanal completo e análise de foto para refeições.',
+              'Durante o beta, o Ultimate está gratuito. Obrigado por testar e ajudar a evoluir o GymPilot.',
+            ].join(' ')}
+            confirmText={upgradingPlan ? 'Ativando...' : 'Ativar Ultimate'}
+            cancelText="Agora não"
+            onCancel={() => {
+              if (!upgradingPlan) setShowUltimateModal(false);
+            }}
+            onConfirm={() => {
+              void handleUpgradeToUltimate();
             }}
           />
         </div>
