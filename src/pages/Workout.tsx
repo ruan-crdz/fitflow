@@ -363,7 +363,7 @@ Pergunta da usuária: ${aiQuestion}`,
           onClick={handleQuit}
           className="text-white/40 text-sm font-medium px-3 py-1"
         >
-          ← Sair
+          ← Voltar
         </button>
         <span className="text-white/30 text-sm font-mono">{formatted}</span>
         <div className="flex items-center gap-2">
@@ -677,7 +677,7 @@ Pergunta da usuária: ${aiQuestion}`,
       <ConfirmModal
         open={showQuitModal}
         title="Desistir do treino?"
-        message="Isso vai zerar o progresso desse treino. Pra só pausar, use o botão ← Sair."
+        message="Isso vai zerar o progresso desse treino. Pra só pausar, use o botão ← Voltar."
         confirmText="Desistir"
         cancelText="Voltar"
         danger
