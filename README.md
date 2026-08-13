@@ -204,8 +204,8 @@ public/
 
 If this project aligns with your team standards, I would love to talk.
 
-- LinkedIn: add-your-link
-- Email: add-your-email
+- LinkedIn: https://www.linkedin.com/in/ruan-cardozo-montanari/
+- Email: ruancrdz2004@gmail.com
 
 ---
 
