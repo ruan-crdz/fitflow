@@ -1,15 +1,17 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { AppShell } from '@/components/layout/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { SplashScreen } from '@/components/ui/SplashScreen';
-import { clearGymPilotLocalData } from '@/utils/resetAppData';
 import { syncActiveWorkoutFromBackend } from '@/lib/workoutEngine';
+import { Auth } from '@/pages/Auth';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { pushLocalStateToCloud, replaceLocalStateFromCloud } from '@/lib/accountState';
 
 const Onboarding = lazy(() => import('@/pages/Onboarding').then((module) => ({ default: module.Onboarding })));
-const BackupRestore = lazy(() => import('@/pages/BackupRestore').then((module) => ({ default: module.BackupRestore })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Workout = lazy(() => import('@/pages/Workout').then((module) => ({ default: module.Workout })));
 const WorkoutComplete = lazy(() => import('@/pages/WorkoutComplete').then((module) => ({ default: module.WorkoutComplete })));
@@ -45,13 +47,12 @@ function AppStatusBadge() {
 
 export function App() {
   const isOnboarded = useProfileStore((s) => s.isOnboarded);
+  const syncMarkerKey = 'gympilot-auth-sync-marker';
   const [showSplash, setShowSplash] = useState(true);
-  const [startOnboarding, setStartOnboarding] = useState(false);
-
-  const startFreshOnboarding = () => {
-    clearGymPilotLocalData();
-    setStartOnboarding(true);
-  };
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured || !supabase);
+  const [session, setSession] = useState<Session | null>(null);
+  const [syncingAccount, setSyncingAccount] = useState(false);
+  const [syncError, setSyncError] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1800);
@@ -59,7 +60,63 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!isOnboarded) return;
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthReady(true);
+      return;
+    }
+
+    let active = true;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session);
+      setAuthReady(true);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_, next) => {
+      setSession(next);
+      setSyncError('');
+      if (!next) {
+        sessionStorage.removeItem(syncMarkerKey);
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id || !session.access_token) return;
+
+    const markerValue = session.user.id;
+    if (sessionStorage.getItem(syncMarkerKey) === markerValue) return;
+
+    let active = true;
+    setSyncingAccount(true);
+    setSyncError('');
+
+    void replaceLocalStateFromCloud(session.user.id)
+      .then(() => {
+        if (!active) return;
+        sessionStorage.setItem(syncMarkerKey, markerValue);
+        window.location.reload();
+      })
+      .catch((error) => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : 'Falha ao sincronizar conta.';
+        setSyncError(message);
+        setSyncingAccount(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session?.access_token, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session || !isOnboarded) return;
     const browserWindow = window as Window & {
       requestIdleCallback?: (cb: () => void) => number;
       cancelIdleCallback?: (id: number) => void;
@@ -83,12 +140,41 @@ export function App() {
 
     const timeout = globalThis.setTimeout(prefetch, 1500);
     return () => globalThis.clearTimeout(timeout);
-  }, [isOnboarded]);
+  }, [isOnboarded, session?.user?.id]);
 
   useEffect(() => {
-    if (!isOnboarded) return;
+    if (!session || !isOnboarded) return;
     void syncActiveWorkoutFromBackend().catch(() => undefined);
-  }, [isOnboarded]);
+  }, [isOnboarded, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session || !isOnboarded) return;
+
+    let cancelled = false;
+    const save = async () => {
+      if (cancelled) return;
+      try {
+        await pushLocalStateToCloud(session.user.id);
+      } catch {
+        // Silent sync fail; local-first UX continues.
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void save();
+    }, 20000);
+
+    const handleVisibility = () => {
+      if (document.hidden) void save();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isOnboarded, session?.user?.id]);
 
   if (showSplash) {
     return (
@@ -96,6 +182,62 @@ export function App() {
         <AnimatePresence>
           <SplashScreen />
         </AnimatePresence>
+        <AppStatusBadge />
+      </ThemeProvider>
+    );
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-[100dvh] flex items-center justify-center px-6">
+          <div className="card max-w-md w-full space-y-3">
+            <h1 className="text-2xl font-bold">Supabase não configurado</h1>
+            <p className="text-sm text-white/55">
+              Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para habilitar login obrigatório.
+            </p>
+          </div>
+        </div>
+        <AppStatusBadge />
+      </ThemeProvider>
+    );
+  }
+
+  if (!authReady || syncingAccount) {
+    return (
+      <ThemeProvider>
+        <AnimatePresence>
+          <SplashScreen />
+        </AnimatePresence>
+        <AppStatusBadge />
+      </ThemeProvider>
+    );
+  }
+
+  if (syncError) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-[100dvh] flex items-center justify-center px-6">
+          <div className="card max-w-md w-full space-y-3">
+            <h1 className="text-2xl font-bold">Falha ao sincronizar conta</h1>
+            <p className="text-sm text-white/55">{syncError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-primary py-3 text-sm"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+        <AppStatusBadge />
+      </ThemeProvider>
+    );
+  }
+
+  if (!session) {
+    return (
+      <ThemeProvider>
+        <Auth />
         <AppStatusBadge />
       </ThemeProvider>
     );
@@ -110,7 +252,7 @@ export function App() {
               path="*"
               element={(
                 <Suspense fallback={<RouteFallback />}>
-                  {startOnboarding ? <Onboarding onBack={() => setStartOnboarding(false)} /> : <BackupRestore onNewUser={startFreshOnboarding} />}
+                  <Onboarding />
                 </Suspense>
               )}
             />

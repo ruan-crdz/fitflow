@@ -1,0 +1,203 @@
+import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
+
+function normalizeUsername(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+}
+
+function ptSupabaseError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado.';
+  if (lower.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
+  if (lower.includes('already registered') || lower.includes('already exists')) return 'Esse e-mail já está cadastrado.';
+  if (lower.includes('password')) return 'Senha inválida.';
+  return message || 'Não consegui concluir agora. Tente novamente.';
+}
+
+export function Auth() {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
+
+  const canSubmit = useMemo(() => {
+    if (!password.trim()) return false;
+    if (mode === 'login') return Boolean(loginIdentifier.trim());
+    return Boolean(email.trim() && username.trim() && displayName.trim());
+  }, [displayName, email, loginIdentifier, mode, password, username]);
+
+  const handleAuth = async () => {
+    if (!supabase) return;
+
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      if (mode === 'signup') {
+        const cleanUsername = normalizeUsername(username);
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+            data: {
+              username: cleanUsername,
+              display_name: displayName.trim() || cleanUsername,
+            },
+          },
+        });
+
+        if (signUpError) throw signUpError;
+
+        if (!data.session) {
+          setMessage('Conta criada! Confirme o e-mail para entrar.');
+        } else {
+          setMessage('Conta criada com sucesso. Entrando...');
+        }
+        return;
+      }
+
+      let loginEmail = loginIdentifier.trim();
+      if (!loginEmail.includes('@')) {
+        const { data, error: lookupError } = await supabase.rpc('get_login_email', {
+          p_username: normalizeUsername(loginEmail),
+        });
+        if (lookupError || !data) {
+          setError('Username não encontrado. Tente com e-mail.');
+          return;
+        }
+        loginEmail = data as string;
+      }
+
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password,
+      });
+
+      if (loginError) throw loginError;
+      setMessage('Login realizado com sucesso.');
+    } catch (authError) {
+      const text = authError instanceof Error ? authError.message : 'Erro de autenticação';
+      setError(ptSupabaseError(text));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center px-6">
+        <div className="card max-w-md w-full space-y-3">
+          <h1 className="text-2xl font-bold">Configuração pendente</h1>
+          <p className="text-sm text-white/55">
+            Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para habilitar cadastro e login.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col justify-center px-6 py-10">
+      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-24 h-24 rounded-3xl bg-dark-100 border border-primary-500/25 mx-auto flex items-center justify-center overflow-hidden shadow-2xl shadow-primary-500/15">
+            <img src="/gympilot/icons/logo.png" alt="GymPilot" className="w-20 h-20 object-contain" />
+          </div>
+          <h1 className="text-3xl font-bold">Bem-vindo ao GymPilot</h1>
+          <p className="text-white/50 text-sm">Entre na sua conta para continuar.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => { setMode('login'); setError(''); setMessage(''); }}
+            className={`py-3 rounded-xl text-sm font-bold ${mode === 'login' ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/50'}`}
+          >
+            Entrar
+          </button>
+          <button
+            onClick={() => { setMode('signup'); setError(''); setMessage(''); }}
+            className={`py-3 rounded-xl text-sm font-bold ${mode === 'signup' ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/50'}`}
+          >
+            Criar conta
+          </button>
+        </div>
+
+        <div className="card space-y-3">
+          {mode === 'login' ? (
+            <input
+              value={loginIdentifier}
+              onChange={(e) => setLoginIdentifier(e.target.value)}
+              placeholder="E-mail ou username"
+              className="input-field text-sm"
+            />
+          ) : (
+            <>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Nome exibido"
+                className="input-field text-sm"
+              />
+              <input
+                value={username}
+                onChange={(e) => setUsername(normalizeUsername(e.target.value))}
+                placeholder="username"
+                className="input-field text-sm"
+              />
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="E-mail"
+                className="input-field text-sm"
+                type="email"
+              />
+            </>
+          )}
+
+          <div className="relative">
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Senha"
+              type={showPassword ? 'text' : 'password'}
+              className="input-field text-sm pr-20"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canSubmit && !loading) void handleAuth();
+              }}
+            />
+            <button
+              onClick={() => setShowPassword((value) => !value)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-3 h-9 rounded-xl text-white/45 text-xs font-semibold"
+            >
+              {showPassword ? 'Ocultar' : 'Ver'}
+            </button>
+          </div>
+
+          <button
+            disabled={loading || !canSubmit}
+            onClick={() => void handleAuth()}
+            className="btn-primary text-sm py-3 disabled:opacity-40"
+          >
+            <MaterialIcon name={mode === 'signup' ? 'person_add' : 'login'} />
+            {mode === 'signup' ? 'Criar conta' : 'Entrar'}
+          </button>
+
+          {message && <p className="text-xs text-primary-300">{message}</p>}
+          {error && <p className="text-xs text-red-300">{error}</p>}
+        </div>
+      </motion.div>
+    </div>
+  );
+}

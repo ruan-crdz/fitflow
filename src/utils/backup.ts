@@ -27,7 +27,7 @@ interface BackupPayload {
   storage: Record<string, string>;
 }
 
-export function createBackupPayload(): BackupPayload {
+export function createBackupStorageSnapshot(): Record<string, string> {
   const storage: Record<string, string> = {};
 
   BACKUP_KEYS.forEach((key) => {
@@ -35,12 +35,25 @@ export function createBackupPayload(): BackupPayload {
     if (value) storage[key] = value;
   });
 
+  return storage;
+}
+
+export function applyBackupStorageSnapshot(storage: Record<string, string>) {
+  BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
+  Object.entries(storage).forEach(([key, value]) => {
+    if (BACKUP_KEYS.includes(key) && typeof value === 'string') {
+      localStorage.setItem(key, value);
+    }
+  });
+}
+
+export function createBackupPayload(): BackupPayload {
   return {
     app: 'GymPilot',
     kind: 'gympilot-local-backup',
     version: 1,
     exportedAt: new Date().toISOString(),
-    storage,
+    storage: createBackupStorageSnapshot(),
   };
 }
 
@@ -61,12 +74,7 @@ export function restoreBackup(raw: string) {
     throw new Error('Arquivo de backup inválido.');
   }
 
-  BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
-  Object.entries(parsed.storage).forEach(([key, value]) => {
-    if (BACKUP_KEYS.includes(key) && typeof value === 'string') {
-      localStorage.setItem(key, value);
-    }
-  });
+  applyBackupStorageSnapshot(parsed.storage as Record<string, string>);
 }
 
 export function readBackupFile(file: File): Promise<string> {

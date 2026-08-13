@@ -24,7 +24,13 @@ function removeMatchingStorage(storage: Storage, shouldRemove: (key: string) => 
   });
 }
 
-export function clearGymPilotLocalData() {
+interface ClearGymPilotOptions {
+  preserveSupabaseSession?: boolean;
+}
+
+export function clearGymPilotLocalData(options: ClearGymPilotOptions = {}) {
+  const preserveSupabaseSession = options.preserveSupabaseSession === true;
+
   useProfileStore.setState({ profile: null, isOnboarded: false });
   useCustomWorkoutStore.setState({ customWorkouts: EMPTY_WORKOUTS, activeSlots: ['A', 'B', 'C'] });
   useHistoryStore.setState({ sessions: [] });
@@ -52,11 +58,11 @@ export function clearGymPilotLocalData() {
     knownKeys.has(key)
     || key.startsWith('fitflow-')
     || key.startsWith('gympilot-')
-    || key.startsWith('sb-')
+    || (!preserveSupabaseSession && key.startsWith('sb-'))
   );
   removeMatchingStorage(sessionStorage, (key) =>
     key.startsWith('fitflow-')
     || key.startsWith('gympilot-')
-    || key.startsWith('sb-')
+    || (!preserveSupabaseSession && key.startsWith('sb-'))
   );
 }

@@ -258,11 +258,6 @@ export function Social() {
   const [socialReady, setSocialReady] = useState(false);
   const [entryState, setEntryState] = useState<SocialEntryState>('loading');
   const [entryError, setEntryError] = useState('');
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loginIdentifier, setLoginIdentifier] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
 
@@ -1294,40 +1289,6 @@ export function Social() {
     await loadProfiles(list.map((item) => item.user_id));
   }
 
-  async function handleAuth() {
-    if (!supabase) return;
-    setLoading(true);
-    if (authMode === 'signup') {
-      const cleanUsername = normalizeUsername(username);
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
-          data: { username: cleanUsername, display_name: displayName.trim() || cleanUsername },
-        },
-      });
-      if (error) toast(ptSupabaseError(error.message), 'error');
-      else if (!data.session) toast('Conta criada! Confirme seu e-mail para entrar.', 'success');
-      else toast('Conta criada!', 'success');
-    } else {
-      let loginEmail = loginIdentifier.trim();
-      if (!loginEmail.includes('@')) {
-        const { data, error } = await supabase.rpc('get_login_email', { p_username: normalizeUsername(loginEmail) });
-        if (error || !data) {
-          toast('Username não encontrado. Tente entrar com e-mail.', 'error');
-          setLoading(false);
-          return;
-        }
-        loginEmail = data as string;
-      }
-      const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
-      if (error) toast(ptSupabaseError(error.message), 'error');
-      else toast('Login feito!', 'success');
-    }
-    setLoading(false);
-  }
-
   async function uploadAvatar() {
     if (!supabase || !session || !avatarFile) return profile?.avatar_url || null;
     const ext = avatarFile.name.split('.').pop() || 'jpg';
@@ -2237,38 +2198,12 @@ export function Social() {
       <div className="gym-page">
         <h1 className="text-[26px] font-bold">Social</h1>
         <div className="card space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setAuthMode('login')} className={`py-3 rounded-xl text-sm font-bold ${authMode === 'login' ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/50'}`}>Entrar</button>
-            <button onClick={() => setAuthMode('signup')} className={`py-3 rounded-xl text-sm font-bold ${authMode === 'signup' ? 'bg-primary-500 text-white' : 'bg-white/5 text-white/50'}`}>Criar conta</button>
-          </div>
-
-          {authMode === 'login' ? (
-            <input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="E-mail ou username" className="input-field text-sm" />
-          ) : (
-            <>
-              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Nome exibido" className="input-field text-sm" />
-              <input value={username} onChange={(e) => setUsername(normalizeUsername(e.target.value))} placeholder="username" className="input-field text-sm" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail" className="input-field text-sm" />
-            </>
-          )}
-
-          <div className="relative">
-            <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha" type={showPassword ? 'text' : 'password'} className="input-field text-sm pr-20" />
-            <button onClick={() => setShowPassword((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 px-3 h-9 rounded-xl text-white/45 text-xs font-semibold">
-              {showPassword ? 'Ocultar' : 'Ver'}
-            </button>
-          </div>
-
-          {authMode === 'signup' && (
-            <p className="text-xs text-white/35">Depois de criar a conta, você já pode entrar no Social.</p>
-          )}
-
-          <button
-            disabled={loading || !password || (authMode === 'login' ? !loginIdentifier : (!email || !username || !displayName))}
-            onClick={handleAuth}
-            className="btn-primary text-sm py-3 disabled:opacity-40"
-          >
-            {authMode === 'signup' ? 'Criar conta' : 'Entrar'}
+          <h2 className="font-semibold">Sua sessão expirou</h2>
+          <p className="text-sm text-white/45">
+            Cadastro e login agora são globais no app. Reabra o GymPilot para entrar novamente.
+          </p>
+          <button onClick={() => window.location.reload()} className="btn-primary text-sm py-3">
+            Voltar para login
           </button>
         </div>
       </div>

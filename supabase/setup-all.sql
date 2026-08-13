@@ -680,6 +680,12 @@ create table if not exists public.workout_replace_requests (
   primary key (user_id, idempotency_key)
 );
 
+create table if not exists public.user_app_snapshots (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 create unique index if not exists user_workout_programs_one_active_idx
   on public.user_workout_programs (user_id)
   where status = 'active';
@@ -1030,6 +1036,7 @@ alter table public.workout_templates enable row level security;
 alter table public.workout_drafts enable row level security;
 alter table public.user_workout_programs enable row level security;
 alter table public.workout_replace_requests enable row level security;
+alter table public.user_app_snapshots enable row level security;
 
 drop policy if exists "templates readable by visibility" on public.workout_templates;
 drop policy if exists "users manage own templates" on public.workout_templates;
@@ -1039,6 +1046,8 @@ drop policy if exists "users update own drafts" on public.workout_drafts;
 drop policy if exists "users delete own drafts" on public.workout_drafts;
 drop policy if exists "users read own programs" on public.user_workout_programs;
 drop policy if exists "users read own replace requests" on public.workout_replace_requests;
+drop policy if exists "users read own app snapshot" on public.user_app_snapshots;
+drop policy if exists "users upsert own app snapshot" on public.user_app_snapshots;
 
 create policy "templates readable by visibility"
   on public.workout_templates for select
@@ -1081,6 +1090,17 @@ create policy "users read own replace requests"
   on public.workout_replace_requests for select
   to authenticated
   using (user_id = auth.uid());
+
+create policy "users read own app snapshot"
+  on public.user_app_snapshots for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create policy "users upsert own app snapshot"
+  on public.user_app_snapshots for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 grant execute on function public.save_workout_draft(text, jsonb, text, uuid) to authenticated;
 grant execute on function public.replace_current_workout(uuid, text, int) to authenticated;

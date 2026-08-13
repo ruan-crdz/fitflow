@@ -7,7 +7,6 @@ import { planLabel, resolveAIPlan } from '@/constants/aiPlan';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
-import { ExportData } from '@/components/ui/ExportData';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
@@ -557,9 +556,6 @@ export function Profile() {
               )}
             </div>
           </div>
-
-          {/* Export Data */}
-          <ExportData />
 
           {/* Reset Account */}
           <button
