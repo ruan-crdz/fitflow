@@ -238,6 +238,31 @@ $$;
 
 grant execute on function public.get_login_email(text) to anon, authenticated;
 
+create or replace function public.delete_my_account()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then
+    return jsonb_build_object('success', false, 'error', 'Usuário não autenticado.');
+  end if;
+
+  delete from auth.users where id = v_user;
+
+  return jsonb_build_object('success', true);
+exception
+  when others then
+    return jsonb_build_object('success', false, 'error', left(sqlerrm, 1000));
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to authenticated;
+
 create table if not exists public.social_profile_stats (
   user_id uuid primary key references public.social_profiles(id) on delete cascade,
   consistency_count int not null default 0,

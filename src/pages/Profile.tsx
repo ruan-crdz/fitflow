@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useAIConfigStore, AI_PERSONALITIES, type AIPersonality } from '@/stores/useAIConfigStore';
+import { useToastStore } from '@/stores/useToastStore';
 import { planLabel, resolveAIPlan } from '@/constants/aiPlan';
 import { useThemeStore, THEMES } from '@/stores/useThemeStore';
 import { useAccessibilityStore, type FontScale } from '@/stores/useAccessibilityStore';
 import { useCycleStore, CYCLE_PHASES } from '@/stores/useCycleStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { CustomSelect } from '@/components/ui/CustomSelect';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { supabase } from '@/lib/supabase';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
@@ -23,6 +26,7 @@ const TRAINING_LOCATION_LABELS: Record<TrainingLocation, string> = {
 
 export function Profile() {
   const navigate = useNavigate();
+  const toast = useToastStore((s) => s.show);
   const { profile, updateProfile } = useProfileStore();
   const { isEnabled, hasSeenIntro } = useAIStore();
   const { assistantName, personality, setAssistantName, setPersonality, resetAIConfig } = useAIConfigStore();
@@ -41,7 +45,8 @@ export function Profile() {
   } = useAccessibilityStore();
   const { phase, setPhase } = useCycleStore();
   const [editing, setEditing] = useState(false);
-  const [showReset, setShowReset] = useState(false);
+  const [accountAction, setAccountAction] = useState<'signout' | 'delete' | null>(null);
+  const [processingAccountAction, setProcessingAccountAction] = useState(false);
   const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
 
   const [name, setName] = useState(profile?.name || '');
@@ -92,6 +97,60 @@ export function Profile() {
       limitations: parseCsvList(limitations),
     });
     setEditing(false);
+  };
+
+  const redirectToAppRoot = () => {
+    window.location.href = import.meta.env.BASE_URL || '/';
+  };
+
+  const handleSignOut = async () => {
+    setProcessingAccountAction(true);
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      }
+
+      clearGymPilotLocalData();
+      redirectToAppRoot();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não consegui sair da conta agora.';
+      toast(message, 'error');
+    } finally {
+      setProcessingAccountAction(false);
+      setAccountAction(null);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!supabase) {
+      toast('Supabase não configurado neste ambiente.', 'error');
+      return;
+    }
+
+    setProcessingAccountAction(true);
+    try {
+      const { data, error } = await supabase.rpc('delete_my_account');
+      if (error) throw error;
+
+      const payload = (data && typeof data === 'object' ? data : {}) as { success?: boolean; error?: string };
+      if (payload.success !== true) {
+        throw new Error(payload.error || 'Não foi possível excluir sua conta.');
+      }
+
+      clearGymPilotLocalData();
+      redirectToAppRoot();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao excluir conta.';
+      if (message.includes('delete_my_account')) {
+        toast('A função delete_my_account ainda não existe no banco. Rode o setup-all.sql no Supabase.', 'error');
+      } else {
+        toast(message, 'error');
+      }
+    } finally {
+      setProcessingAccountAction(false);
+      setAccountAction(null);
+    }
   };
 
   return (
@@ -557,35 +616,48 @@ export function Profile() {
             </div>
           </div>
 
-          {/* Reset Account */}
-          <button
-            onClick={() => setShowReset(true)}
-            className="w-full py-3 text-red-400/60 text-sm mt-4"
-          >
-            Excluir conta e recomeçar
-          </button>
-          {showReset && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
-              <div className="bg-dark-200 rounded-2xl p-6 space-y-4 max-w-sm w-full">
-                <h3 className="text-lg font-bold text-red-400">Excluir todos os dados?</h3>
-                <p className="text-sm text-white/50">Isso vai apagar perfil, treinos, histórico e configurações. Não tem volta.</p>
-                <div className="flex gap-3">
-                  <button onClick={() => setShowReset(false)} className="flex-1 py-3 rounded-xl bg-dark-300 text-white/50 text-sm font-medium">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => {
-                      clearGymPilotLocalData();
-                      window.location.href = '/gympilot/';
-                    }}
-                    className="flex-1 py-3 rounded-xl bg-red-500/20 text-red-400 text-sm font-bold"
-                  >
-                    Excluir tudo
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <div className="card space-y-3 border border-red-500/25">
+            <h2 className="font-semibold text-white/85">Conta</h2>
+            <p className="text-xs text-white/45">Use Sair para apenas encerrar a sessão neste dispositivo. Use Excluir conta para remoção permanente no Supabase.</p>
+
+            <button
+              onClick={() => setAccountAction('signout')}
+              disabled={processingAccountAction}
+              className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 text-sm font-semibold disabled:opacity-50"
+            >
+              Sair da conta
+            </button>
+
+            <button
+              onClick={() => setAccountAction('delete')}
+              disabled={processingAccountAction}
+              className="w-full py-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-sm font-semibold disabled:opacity-50"
+            >
+              Excluir conta permanentemente
+            </button>
+          </div>
+
+          <ConfirmModal
+            open={accountAction !== null}
+            title={accountAction === 'delete' ? 'Excluir conta permanentemente?' : 'Sair da conta?'}
+            message={accountAction === 'delete'
+              ? 'Isso remove seu usuário e dados vinculados no Supabase. Essa ação é irreversível.'
+              : 'Você vai encerrar a sessão deste dispositivo e voltar para a tela de login.'}
+            confirmText={processingAccountAction ? 'Processando...' : accountAction === 'delete' ? 'Excluir conta' : 'Sair'}
+            cancelText="Cancelar"
+            danger={accountAction === 'delete'}
+            onCancel={() => {
+              if (!processingAccountAction) setAccountAction(null);
+            }}
+            onConfirm={() => {
+              if (processingAccountAction) return;
+              if (accountAction === 'delete') {
+                void handleDeleteAccount();
+                return;
+              }
+              void handleSignOut();
+            }}
+          />
         </div>
       )}
     </div>
