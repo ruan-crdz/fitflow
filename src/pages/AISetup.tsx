@@ -672,7 +672,7 @@ ${SCIENCE_GUARDRAILS}
             key="summary"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex-1 flex flex-col"
+            className="flex-1 flex flex-col pt-12"
           >
             <h2 className="text-xl font-bold mb-1">Seu treino está pronto! </h2>
             <p className="text-white/40 text-sm mb-6">Montado com base na ciência pra você</p>

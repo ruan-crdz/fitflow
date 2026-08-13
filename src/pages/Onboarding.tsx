@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { supabase } from '@/lib/supabase';
 import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus, TrainingLocation } from '@/types';
 import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
 
@@ -69,6 +70,20 @@ export function Onboarding({ onBack }: OnboardingProps) {
   const [limitationsText, setLimitationsText] = useState((existingProfile?.limitations || []).join(', '));
   const [focus, setFocus] = useState<TrainingFocus>(existingProfile?.trainingFocus || 'balanced');
   const [customSplit, setCustomSplit] = useState<Record<string, string>>(existingProfile?.customSplit || {});
+
+  useEffect(() => {
+    if (existingProfile?.name?.trim() || name.trim() || !supabase) return;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      const sessionName = typeof data.session?.user?.user_metadata?.display_name === 'string'
+        ? data.session.user.user_metadata.display_name.trim()
+        : '';
+
+      if (sessionName) {
+        setName(sessionName);
+      }
+    });
+  }, [existingProfile?.name, name]);
 
   const getPreviousStep = (): Step | null => {
     if (step === 'tour1') return 'welcome';
