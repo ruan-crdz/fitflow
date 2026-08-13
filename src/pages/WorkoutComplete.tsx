@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSessionStore } from '@/stores/useSessionStore';
@@ -24,8 +24,13 @@ export function WorkoutComplete() {
   const [stress, setStress] = useState(2);
   const [sleepHours, setSleepHours] = useState(7);
 
+  useEffect(() => {
+    if (!activeSession) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [activeSession, navigate]);
+
   if (!activeSession) {
-    navigate('/dashboard');
     return null;
   }
 

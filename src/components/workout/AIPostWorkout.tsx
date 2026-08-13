@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAIStore } from '@/stores/useAIStore';
 import { useProfileStore } from '@/stores/useProfileStore';
 import { useFoodStore } from '@/stores/useFoodStore';
 import { WORKOUT_MAP } from '@/constants/workouts';
 import { useAIConfigStore } from '@/stores/useAIConfigStore';
+import { getToday } from '@/utils/date';
 import type { WorkoutType } from '@/types';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { RichText } from '@/components/ui/RichText';
@@ -20,10 +21,23 @@ export function AIPostWorkout({ workoutType, durationMs, setsCompleted }: AIPost
   const isEnabled = useAIStore((s) => s.isEnabled);
   const assistantName = useAIConfigStore((s) => s.assistantName);
   const profile = useProfileStore((s) => s.profile);
-  const todayTotals = useFoodStore((s) => s.getTodayTotals());
+  const logs = useFoodStore((s) => s.logs);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [meal, setMeal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const todayTotals = useMemo(() => {
+    const entries = logs[getToday()] || [];
+    return entries.reduce(
+      (acc, e) => ({
+        calories: acc.calories + e.calories,
+        protein: acc.protein + e.protein,
+        carbs: acc.carbs + e.carbs,
+        fat: acc.fat + e.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    );
+  }, [logs]);
 
   useEffect(() => {
     if (!apiKey || !isEnabled || !profile) {
