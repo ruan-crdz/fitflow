@@ -10,10 +10,16 @@ function normalizeUsername(value: string) {
 function ptSupabaseError(message: string) {
   const lower = message.toLowerCase();
   if (lower.includes('email not confirmed')) return 'E-mail ainda não confirmado.';
+  if (lower.includes('email rate limit exceeded')) return 'Muitas tentativas de envio de e-mail. Aguarde alguns minutos e tente novamente.';
   if (lower.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
   if (lower.includes('already registered') || lower.includes('already exists')) return 'Esse e-mail já está cadastrado.';
   if (lower.includes('password')) return 'Senha inválida.';
   return message || 'Não consegui concluir agora. Tente novamente.';
+}
+
+function buildEmailConfirmRedirectUrl() {
+  const base = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`;
+  return `${base}#/auth-confirmed`;
 }
 
 export function Auth() {
@@ -22,6 +28,7 @@ export function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +57,7 @@ export function Auth() {
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+            emailRedirectTo: buildEmailConfirmRedirectUrl(),
             data: {
               username: cleanUsername,
               display_name: displayName.trim() || cleanUsername,
@@ -61,7 +68,8 @@ export function Auth() {
         if (signUpError) throw signUpError;
 
         if (!data.session) {
-          setMessage('Conta criada! Confirme o e-mail para entrar.');
+          setPendingConfirmationEmail(email.trim());
+          setMessage('Conta criada! Enviamos um e-mail de confirmação.');
         } else {
           setMessage('Conta criada com sucesso. Entrando...');
         }
@@ -196,6 +204,41 @@ export function Auth() {
 
           {message && <p className="text-xs text-primary-300">{message}</p>}
           {error && <p className="text-xs text-red-300">{error}</p>}
+
+          {pendingConfirmationEmail && (
+            <div className="rounded-xl border border-primary-500/35 bg-primary-500/10 p-3 space-y-3">
+              <p className="text-xs text-white/85 font-semibold">Confirme seu e-mail para ativar a conta</p>
+              <p className="text-[11px] text-white/65 leading-relaxed">
+                Enviamos para <span className="text-primary-300">{pendingConfirmationEmail}</span>. Abra sua caixa de entrada,
+                clique em <span className="text-primary-300">Confirmar e-mail</span> e depois volte ao app para entrar.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => window.open('https://mail.google.com', '_blank', 'noopener,noreferrer')}
+                  className="py-2.5 rounded-xl bg-white/10 text-white/80 text-xs font-semibold"
+                >
+                  Abrir Gmail
+                </button>
+                <button
+                  onClick={() => window.open('https://outlook.live.com/mail/', '_blank', 'noopener,noreferrer')}
+                  className="py-2.5 rounded-xl bg-white/10 text-white/80 text-xs font-semibold"
+                >
+                  Abrir Outlook
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  setMode('login');
+                  setLoginIdentifier(pendingConfirmationEmail);
+                  setPendingConfirmationEmail('');
+                  setMessage('Depois de confirmar no e-mail, faça login normalmente.');
+                }}
+                className="w-full py-2.5 rounded-xl bg-primary-500 text-white text-xs font-bold"
+              >
+                Já confirmei, ir para login
+              </button>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>
