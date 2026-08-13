@@ -49,6 +49,7 @@ export function Dashboard() {
   const profile = useProfileStore((s) => s.profile)!;
   const activeSession = useSessionStore((s) => s.activeSession);
   const startSession = useSessionStore((s) => s.startSession);
+  const endSession = useSessionStore((s) => s.endSession);
   const sessions = useHistoryStore((s) => s.sessions);
   const weightEntries = useWeightStore((s) => s.entries);
   const hasTodayWeight = useWeightStore((s) => s.hasTodayEntry());
@@ -105,7 +106,13 @@ export function Dashboard() {
     }
   }
 
-  const todayWorkout = getTodayWorkoutType(profile.trainingDays);
+  const todayWorkoutFromCalendar = getTodayWorkoutType(profile.trainingDays);
+  const todayWorkoutIndex = todayWorkoutFromCalendar
+    ? ['A', 'B', 'C', 'D', 'E'].indexOf(todayWorkoutFromCalendar)
+    : -1;
+  const todayWorkout = todayWorkoutIndex >= 0
+    ? activeSlots[todayWorkoutIndex % Math.max(activeSlots.length, 1)] || activeSlots[0] || null
+    : null;
   const isTodayTraining = isTrainingDay(profile.trainingDays);
   const targetWeeklySessions = Math.max(3, profile.trainingDays.length);
   const weekAgo = new Date();
@@ -113,7 +120,8 @@ export function Dashboard() {
   const weeklyCompleted = sessions.filter((session) => session.completedAt && new Date(session.date) >= weekAgo).length;
   const weeklyProgress = Math.min(weeklyCompleted / targetWeeklySessions, 1);
   const nextWorkoutType = activeSlots[structuredSessions.length % Math.max(activeSlots.length, 1)] || 'A';
-  const activeWorkoutMeta = getWorkoutMeta(activeSession?.workoutType);
+  const isActiveSessionValid = Boolean(activeSession && activeSlots.includes(activeSession.workoutType));
+  const activeWorkoutMeta = getWorkoutMeta(isActiveSessionValid ? activeSession?.workoutType : null);
   const todayWorkoutMeta = getWorkoutMeta(todayWorkout);
   const todayCheckin = checkins[today];
   const readiness = computeReadiness(todayCheckin || null);
@@ -141,8 +149,18 @@ export function Dashboard() {
   };
 
   const handleResumeWorkout = () => {
+    if (!isActiveSessionValid) {
+      endSession();
+      return;
+    }
     navigate('/workout');
   };
+
+  useEffect(() => {
+    if (activeSession && !isActiveSessionValid) {
+      endSession();
+    }
+  }, [activeSession, isActiveSessionValid, endSession]);
 
   return (
     <div className="gym-page">
@@ -172,7 +190,7 @@ export function Dashboard() {
       {isWidgetVisible('weeklyReport') && <AIWeeklyReport />}
 
       {/* Active Session Banner */}
-      {activeSession && (
+      {isActiveSessionValid && (
         <motion.button
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -197,7 +215,7 @@ export function Dashboard() {
       )}
 
       {/* Today's Training */}
-      {!activeSession && isWidgetVisible('todayWorkout') && (
+      {!isActiveSessionValid && isWidgetVisible('todayWorkout') && (
         <div className="card space-y-4 border-primary-500/20">
           {isTodayTraining && !todayAlreadyDone ? (
             <>
@@ -240,7 +258,7 @@ export function Dashboard() {
       )}
 
       {/* Quick Start */}
-      {!activeSession && !todayAlreadyDone && isWidgetVisible('quickStart') && (
+      {!isActiveSessionValid && !todayAlreadyDone && isWidgetVisible('quickStart') && (
         <div className="space-y-2">
           <p className="text-xs text-white/25 font-semibold uppercase tracking-wider flex items-center gap-1.5">
             <MaterialIcon name="fitness_center" className="text-primary-300" />
@@ -326,7 +344,7 @@ export function Dashboard() {
             ? 'Meta batida. Mantenha consistência e foque em progressão de carga.'
             : `Faltam ${targetWeeklySessions - weeklyCompleted} treino(s) para bater a meta desta semana.`}
         </p>
-        {!activeSession && !todayAlreadyDone && (
+        {!isActiveSessionValid && !todayAlreadyDone && (
           <button onClick={() => handleStartWorkout(nextWorkoutType)} className="btn-secondary text-sm">
             Próximo treino recomendado: {nextWorkoutType}
           </button>
