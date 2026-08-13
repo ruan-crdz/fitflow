@@ -118,7 +118,7 @@ export function validateGeneratedPlan(plan: PlanCandidate, trainingDaysPerWeek: 
         const count = groupedExerciseCount.get(group) || 0;
         if (count < MIN_EXERCISES_PER_FOCUSED_GROUP) {
           errors.push(
-            `Plano inválido: treino ${wi + 1} com foco em ${group} precisa de pelo menos ${MIN_EXERCISES_PER_FOCUSED_GROUP} exercícios desse grupamento muscular.`,
+            `Plano inválido: treino ${wi + 1} com foco em ${group} precisa ter no mínimo ${MIN_EXERCISES_PER_FOCUSED_GROUP} exercícios desse grupamento muscular.`,
           );
         }
       });

@@ -22,7 +22,7 @@ export const AI_SETUP_SCHEMA: Record<string, unknown> = {
     rotation: { type: 'string' },
     workouts: {
       type: 'array',
-      minItems: 1,
+      minItems: 2,
       items: {
         type: 'object',
         additionalProperties: false,

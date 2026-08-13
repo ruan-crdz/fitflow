@@ -16,14 +16,84 @@ type Phase = 'generating' | 'summary';
 interface GeneratedWorkout {
   type: string;
   focus: string;
-  cardio?: { type: string; durationMin: number; intensity: string };
+  cardio?: { type: string; durationMin: number; intensity: string } | null;
   estimatedCalories?: number;
   exercises: { name: string; sets: number; repsMin: number; repsMax: number; muscleGroup: string }[];
+}
+
+interface SetupEvaluationItem {
+  option: string;
+  tier?: string;
+  reason?: string;
+}
+
+interface SetupAIResponse {
+  chosenSplit?: unknown;
+  workouts?: unknown;
+  evaluation?: SetupEvaluationItem[];
+  explanation?: string;
+  rotation?: string;
 }
 
 const WORKOUT_TYPES: WorkoutType[] = ['A', 'B', 'C', 'D', 'E'];
 const MIN_SETUP_EXERCISES = 6;
 const MAX_SETUP_EXERCISES = 10;
+type SplitType = 'ABC' | 'ABCD' | 'ABCDE';
+
+function isSplitType(value: unknown): value is SplitType {
+  return value === 'ABC' || value === 'ABCD' || value === 'ABCDE';
+}
+
+function splitToSlots(split: SplitType): WorkoutType[] {
+  if (split === 'ABCDE') return ['A', 'B', 'C', 'D', 'E'];
+  if (split === 'ABCD') return ['A', 'B', 'C', 'D'];
+  return ['A', 'B', 'C'];
+}
+
+function inferSplit(profile: Profile, rawWorkouts: unknown, chosenSplit?: unknown): SplitType {
+  if (isSplitType(chosenSplit)) return chosenSplit;
+
+  const customKeys = Object.keys(profile.customSplit || {}).filter((key) => WORKOUT_TYPES.includes(key as WorkoutType));
+  if (customKeys.length >= 5) return 'ABCDE';
+  if (customKeys.length >= 4) return 'ABCD';
+  if (customKeys.length >= 3) return 'ABC';
+
+  const count = Array.isArray(rawWorkouts) ? rawWorkouts.length : 0;
+  if (count >= 5) return 'ABCDE';
+  if (count >= 4) return 'ABCD';
+  return 'ABC';
+}
+
+function defaultFocusForSlot(slot: WorkoutType, split: SplitType, profile: Profile): string {
+  const custom = profile.customSplit?.[slot];
+  if (custom?.trim()) return custom;
+
+  const templates: Record<SplitType, Record<WorkoutType, string>> = {
+    ABC: {
+      A: 'Peitoral + Ombros + Tríceps',
+      B: 'Costas + Bíceps',
+      C: 'Quadríceps + Posterior de Coxa + Glúteos + Panturrilhas',
+      D: 'Abdômen',
+      E: 'Abdômen',
+    },
+    ABCD: {
+      A: 'Peitoral + Tríceps',
+      B: 'Costas + Bíceps',
+      C: 'Quadríceps + Posterior de Coxa',
+      D: 'Ombros + Glúteos + Panturrilhas + Abdômen',
+      E: 'Abdômen',
+    },
+    ABCDE: {
+      A: 'Peitoral + Tríceps',
+      B: 'Costas + Bíceps',
+      C: 'Quadríceps',
+      D: 'Posterior de Coxa + Glúteos',
+      E: 'Ombros + Panturrilhas + Abdômen',
+    },
+  };
+
+  return templates[split][slot] || `Treino ${slot}`;
+}
 
 function normalizeText(value: string): string {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -61,11 +131,19 @@ function extractFocusGroups(text?: string): string[] {
   ];
 
   const normalized = normalizeText(text);
-  return Array.from(new Set(
-    map
-      .filter((item) => item.keys.some((key) => normalized.includes(key)))
-      .map((item) => item.group),
-  ));
+  const found = map
+    .filter((item) => item.keys.some((key) => normalized.includes(key)))
+    .map((item) => item.group);
+
+  if (normalized.includes('perna') || normalized.includes('membro inferior') || normalized.includes('inferior completo')) {
+    found.push('Quadríceps', 'Posterior de Coxa', 'Glúteos', 'Panturrilhas');
+  }
+
+  if (normalized.includes('superior completo') || normalized.includes('membro superior')) {
+    found.push('Peitoral', 'Costas', 'Ombros', 'Bíceps', 'Tríceps');
+  }
+
+  return Array.from(new Set(found));
 }
 
 function defaultReps(group: string) {
@@ -90,7 +168,7 @@ function buildDesiredGroups(workout: GeneratedWorkout, profile: Profile, workout
   return merged;
 }
 
-function repairWorkout(workout: GeneratedWorkout, desiredGroups: string[]): GeneratedWorkout {
+function repairWorkout(workout: GeneratedWorkout, desiredGroups: string[], blockedExercises: Set<string>): GeneratedWorkout {
   const seen = new Set<string>();
   const repaired: GeneratedWorkout['exercises'] = [];
 
@@ -122,6 +200,7 @@ function repairWorkout(workout: GeneratedWorkout, desiredGroups: string[]): Gene
   const addFromCatalog = (group?: string): boolean => {
     for (const catalog of EXERCISE_CATALOG) {
       if (group && catalog.muscleGroup !== group) continue;
+      if (blockedExercises.has(normalizeText(catalog.name))) continue;
       const key = normalizeText(catalog.name);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -170,27 +249,56 @@ function repairWorkout(workout: GeneratedWorkout, desiredGroups: string[]): Gene
   };
 }
 
-function normalizeGeneratedWorkouts(rawWorkouts: unknown, profile: Profile): GeneratedWorkout[] {
+function normalizeGeneratedWorkouts(rawWorkouts: unknown, profile: Profile, split: SplitType): GeneratedWorkout[] {
   if (!Array.isArray(rawWorkouts)) return [];
 
-  return rawWorkouts
-    .map((item, index) => {
-      if (!item || typeof item !== 'object') return null;
-      const workout = item as GeneratedWorkout;
-      const workoutType = WORKOUT_TYPES[index];
-      if (!workoutType) return null;
+  const blockedExercises = new Set((profile.dislikedExercises || []).map((name) => normalizeText(name)));
+  const slots = splitToSlots(split);
 
-      const base: GeneratedWorkout = {
-        ...workout,
-        type: workoutType,
-        focus: workout.focus || `Treino ${workoutType}`,
-        exercises: Array.isArray(workout.exercises) ? workout.exercises : [],
-      };
+  const byType = new Map<WorkoutType, GeneratedWorkout>();
+  const fallbackQueue: GeneratedWorkout[] = [];
 
-      const desiredGroups = buildDesiredGroups(base, profile, workoutType);
-      return repairWorkout(base, desiredGroups);
-    })
-    .filter((workout): workout is GeneratedWorkout => Boolean(workout));
+  rawWorkouts.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const workout = item as GeneratedWorkout;
+    const rawType = typeof workout.type === 'string' ? workout.type.toUpperCase() : '';
+    const validType = WORKOUT_TYPES.includes(rawType as WorkoutType) ? rawType as WorkoutType : null;
+    const base: GeneratedWorkout = {
+      ...workout,
+      type: validType || 'A',
+      focus: workout.focus || '',
+      cardio: workout.cardio ?? null,
+      exercises: Array.isArray(workout.exercises) ? workout.exercises : [],
+    };
+
+    if (validType && !byType.has(validType)) {
+      byType.set(validType, base);
+      return;
+    }
+
+    fallbackQueue.push(base);
+  });
+
+  return slots.map((slot) => {
+    const queued = fallbackQueue.shift();
+    const source = byType.get(slot) || queued || {
+      type: slot,
+      focus: defaultFocusForSlot(slot, split, profile),
+      cardio: null,
+      exercises: [],
+    };
+
+    const base: GeneratedWorkout = {
+      ...source,
+      type: slot,
+      focus: source.focus || defaultFocusForSlot(slot, split, profile),
+      cardio: source.cardio ?? null,
+      exercises: Array.isArray(source.exercises) ? source.exercises : [],
+    };
+
+    const desiredGroups = buildDesiredGroups(base, profile, slot);
+    return repairWorkout(base, desiredGroups, blockedExercises);
+  });
 }
 
 export function AISetup() {
@@ -359,9 +467,10 @@ ${SCIENCE_GUARDRAILS}
         schemaName: 'ai_setup_plan',
         jsonSchema: AI_SETUP_SCHEMA,
       }, 'workout_builder');
-      const parsed = JSON.parse(response);
-      const normalizedWorkouts = normalizeGeneratedWorkouts(parsed.workouts, profile);
-      const normalizedPlan = { ...parsed, workouts: normalizedWorkouts };
+      const parsed = JSON.parse(response) as SetupAIResponse;
+      const normalizedSplit = inferSplit(profile, parsed.workouts, parsed.chosenSplit);
+      const normalizedWorkouts = normalizeGeneratedWorkouts(parsed.workouts, profile, normalizedSplit);
+      const normalizedPlan = { ...parsed, chosenSplit: normalizedSplit, workouts: normalizedWorkouts };
       const planErrors = validateGeneratedPlan(normalizedPlan, trainingDays);
       const blockingErrors = planErrors.filter((error) => !error.includes('com foco em'));
 
@@ -388,14 +497,14 @@ ${SCIENCE_GUARDRAILS}
               acceptable: 2,
               not_recommended: 1,
             };
-            const sortedEval = [...parsed.evaluation].sort((a: { tier?: string }, b: { tier?: string }) => (tierRank[b.tier || 'acceptable'] || 0) - (tierRank[a.tier || 'acceptable'] || 0));
+            const sortedEval = [...parsed.evaluation].sort((a, b) => (tierRank[b.tier || 'acceptable'] || 0) - (tierRank[a.tier || 'acceptable'] || 0));
             const winner = sortedEval[0];
             const scoreBoard = sortedEval
-              .map((e: { option: string; tier?: string }) => `${e.option}: ${e.tier || 'acceptable'}`)
+              .map((e) => `${e.option}: ${e.tier || 'acceptable'}`)
               .join(' • ');
       addMessage(`Avaliação: ${scoreBoard}`);
             await delay(600);
-            addMessage(`Vencedor: ${parsed.chosenSplit || winner?.option || 'divisão sugerida'}`);
+            addMessage(`Vencedor: ${normalizedSplit || winner?.option || 'divisão sugerida'}`);
             await delay(400);
           }
 
