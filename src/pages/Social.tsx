@@ -2846,13 +2846,6 @@ export function Social() {
               <Avatar profile={profile} size="sm" />
               <span className="text-[11px] font-bold text-white/70 max-w-[88px] truncate">{profile.display_name}</span>
             </button>
-            <button
-              className="h-10 px-3 rounded-full bg-white/5 border border-white/10 text-white/55 text-xs font-bold"
-              aria-label="Conta vinculada"
-              disabled
-            >
-              Conta vinculada
-            </button>
           </div>
         </div>
 
