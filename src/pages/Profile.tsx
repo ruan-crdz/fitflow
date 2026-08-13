@@ -46,7 +46,7 @@ export function Profile() {
   } = useAccessibilityStore();
   const { phase, setPhase } = useCycleStore();
   const [editing, setEditing] = useState(false);
-  const [accountAction, setAccountAction] = useState<'signout' | 'delete' | null>(null);
+  const [accountAction, setAccountAction] = useState<'delete' | null>(null);
   const [processingAccountAction, setProcessingAccountAction] = useState(false);
   const [showUltimateModal, setShowUltimateModal] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState(false);
@@ -104,25 +104,6 @@ export function Profile() {
 
   const redirectToAppRoot = () => {
     window.location.href = import.meta.env.BASE_URL || '/';
-  };
-
-  const handleSignOut = async () => {
-    setProcessingAccountAction(true);
-    try {
-      if (supabase) {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-      }
-
-      clearGymPilotLocalData();
-      redirectToAppRoot();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não consegui sair da conta agora.';
-      toast(message, 'error');
-    } finally {
-      setProcessingAccountAction(false);
-      setAccountAction(null);
-    }
   };
 
   const handleDeleteAccount = async () => {
@@ -679,15 +660,7 @@ export function Profile() {
 
           <div className="card space-y-3 border border-red-500/25">
             <h2 className="font-semibold text-white/85">Conta</h2>
-            <p className="text-xs text-white/45">Use Sair para apenas encerrar a sessão neste dispositivo. Use Excluir conta para remoção permanente no Supabase.</p>
-
-            <button
-              onClick={() => setAccountAction('signout')}
-              disabled={processingAccountAction}
-              className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 text-sm font-semibold disabled:opacity-50"
-            >
-              Sair da conta
-            </button>
+            <p className="text-xs text-white/45">A exclusão remove sua conta e dados vinculados no Supabase.</p>
 
             <button
               onClick={() => setAccountAction('delete')}
@@ -700,23 +673,17 @@ export function Profile() {
 
           <ConfirmModal
             open={accountAction !== null}
-            title={accountAction === 'delete' ? 'Excluir conta permanentemente?' : 'Sair da conta?'}
-            message={accountAction === 'delete'
-              ? 'Isso remove seu usuário e dados vinculados no Supabase. Essa ação é irreversível.'
-              : 'Você vai encerrar a sessão deste dispositivo e voltar para a tela de login.'}
-            confirmText={processingAccountAction ? 'Processando...' : accountAction === 'delete' ? 'Excluir conta' : 'Sair'}
+            title="Excluir conta permanentemente?"
+            message="Isso remove seu usuário e dados vinculados no Supabase. Essa ação é irreversível."
+            confirmText={processingAccountAction ? 'Processando...' : 'Excluir conta'}
             cancelText="Cancelar"
-            danger={accountAction === 'delete'}
+            danger
             onCancel={() => {
               if (!processingAccountAction) setAccountAction(null);
             }}
             onConfirm={() => {
               if (processingAccountAction) return;
-              if (accountAction === 'delete') {
-                void handleDeleteAccount();
-                return;
-              }
-              void handleSignOut();
+              void handleDeleteAccount();
             }}
           />
 

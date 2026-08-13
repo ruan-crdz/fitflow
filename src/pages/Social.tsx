@@ -287,7 +287,6 @@ export function Social() {
   const [focusedPostBackProfileId, setFocusedPostBackProfileId] = useState<string | null>(null);
   const [notificationSeenAt, setNotificationSeenAt] = useState('');
   const [pendingImportShare, setPendingImportShare] = useState<WorkoutShare | null>(null);
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [profileListMode, setProfileListMode] = useState<'followers' | 'following' | null>(null);
   const [profilePostMode, setProfilePostMode] = useState<'mine' | 'tagged'>('mine');
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -1988,11 +1987,6 @@ export function Social() {
     await refreshShares();
   }
 
-  async function confirmSignOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-  }
-
   const mentionMatch = postBody.match(/@([a-z0-9_]*)$/i);
   const mentionTerm = (mentionSearch || mentionMatch?.[1] || '').toLowerCase();
   const mentionCandidates = [...acceptedFriendIds.map((id) => profiles[id]), ...mentionResults, ...Object.values(profiles)]
@@ -2148,19 +2142,6 @@ export function Social() {
         onConfirm={confirmImportShare}
         onCancel={() => setPendingImportShare(null)}
       />
-      <ConfirmModal
-        open={showSignOutConfirm}
-        title="Sair da conta?"
-        message="Você vai precisar entrar novamente para usar o Social."
-        confirmText="Sair"
-        cancelText="Cancelar"
-        danger
-        onConfirm={() => {
-          setShowSignOutConfirm(false);
-          void confirmSignOut();
-        }}
-        onCancel={() => setShowSignOutConfirm(false)}
-      />
     </>
   );
 
@@ -2219,7 +2200,6 @@ export function Social() {
               <h1 className="text-[26px] font-bold">Social</h1>
               <p className="text-xs text-white/35">Complete seu perfil online</p>
             </div>
-            <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
           </div>
           <div className="card space-y-3">
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input-field text-sm" placeholder="Nome exibido" />
@@ -2681,7 +2661,6 @@ export function Social() {
         <div className="flex items-center justify-between">
           <button onClick={() => setViewProfileId(null)} className="w-11 h-11 rounded-full bg-white/5 text-white/70 text-xl">&lt;</button>
           <h1 className="text-lg font-bold">@{selectedProfile.username}</h1>
-          <button onClick={() => setShowSignOutConfirm(true)} className="px-3 py-2 rounded-xl bg-white/5 text-white/45 text-xs font-semibold">Sair</button>
         </div>
 
         <div className="flex flex-col items-center text-center space-y-3">
@@ -2868,11 +2847,11 @@ export function Social() {
               <span className="text-[11px] font-bold text-white/70 max-w-[88px] truncate">{profile.display_name}</span>
             </button>
             <button
-              onClick={() => setShowSignOutConfirm(true)}
               className="h-10 px-3 rounded-full bg-white/5 border border-white/10 text-white/55 text-xs font-bold"
-              aria-label="Sair"
+              aria-label="Conta vinculada"
+              disabled
             >
-              Sair
+              Conta vinculada
             </button>
           </div>
         </div>
