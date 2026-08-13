@@ -39,10 +39,13 @@ export async function replaceLocalStateFromCloud(userId: string): Promise<{ hasS
   return { hasSnapshot: Object.keys(payload).length > 0 };
 }
 
-export async function pushLocalStateToCloud(userId: string): Promise<void> {
+export async function pushLocalStateToCloud(userId: string, overrides?: Record<string, string>): Promise<void> {
   if (!supabase) return;
 
-  const payload = createBackupStorageSnapshot();
+  const payload = {
+    ...createBackupStorageSnapshot(),
+    ...(overrides || {}),
+  };
   const { error } = await supabase.from('user_app_snapshots').upsert({
     user_id: userId,
     payload,

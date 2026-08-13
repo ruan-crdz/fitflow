@@ -161,13 +161,45 @@ export function Profile() {
 
     setUpgradingPlan(true);
     try {
+      const profileStorageKey = 'fitflow-profile';
+      const currentStored = localStorage.getItem(profileStorageKey);
+      let persisted: { state?: Record<string, unknown>; version?: number } = { version: 0, state: {} };
+
+      try {
+        if (currentStored) {
+          const parsed = JSON.parse(currentStored) as { state?: Record<string, unknown>; version?: number };
+          if (parsed && typeof parsed === 'object') {
+            persisted = parsed;
+          }
+        }
+      } catch {
+        persisted = { version: 0, state: {} };
+      }
+
+      const nextProfile = {
+        ...(profile || {}),
+        aiPlan: 'ultimate' as const,
+      };
+      const nextPersisted = {
+        ...persisted,
+        state: {
+          ...(persisted.state || {}),
+          profile: nextProfile,
+          isOnboarded: true,
+        },
+      };
+      const nextProfileStorageValue = JSON.stringify(nextPersisted);
+      localStorage.setItem(profileStorageKey, nextProfileStorageValue);
+
       updateProfile({ aiPlan: 'ultimate' });
 
       if (supabase) {
         const { data } = await supabase.auth.getSession();
         const userId = data.session?.user.id;
         if (userId) {
-          await pushLocalStateToCloud(userId);
+          await pushLocalStateToCloud(userId, {
+            [profileStorageKey]: nextProfileStorageValue,
+          });
         }
       }
 
