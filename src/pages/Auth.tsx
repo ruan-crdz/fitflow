@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import type { EmailOtpType } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
@@ -48,34 +47,19 @@ function clearAuthTokensFromUrl() {
   window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}${cleanHash}`);
 }
 
-function normalizeOtpType(raw: string | null): EmailOtpType | null {
-  if (!raw) return null;
-
-  if (raw === 'reauthentication') {
-    return 'email';
-  }
-
-  const allowed = new Set(['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email']);
-  return allowed.has(raw) ? (raw as EmailOtpType) : null;
-}
-
-type AuthMode = 'login' | 'signup' | 'forgot' | 'set-password';
-
-type AuthFlowKind = 'recovery' | 'invite' | 'reauthentication' | 'signup' | 'email_change' | 'email' | 'unknown';
+type AuthMode = 'login' | 'signup' | 'forgot' | 'reset-password';
 
 type AuthProps = {
-  onActionFlowComplete?: () => void;
+  onResetFlowComplete?: () => void;
 };
 
-export function Auth({ onActionFlowComplete }: AuthProps) {
+export function Auth({ onResetFlowComplete }: AuthProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
-  const [flowKind, setFlowKind] = useState<AuthFlowKind>('unknown');
-  const [flowValidated, setFlowValidated] = useState(false);
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -88,60 +72,19 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
-    if (!supabase) return;
+    const type = readAuthUrlParam('type');
+    const action = readAuthUrlParam('action');
+    if (type !== 'recovery' && action !== 'recovery') return;
 
-    const tokenHash = readAuthUrlParam('token_hash');
-    const rawType = readAuthUrlParam('type');
-    const otpType = normalizeOtpType(rawType);
-
-    if (!tokenHash || !otpType) return;
-
-    setLoading(true);
+    setMode('reset-password');
     setError('');
-    setMessage('Validando link de autenticação...');
-
-    void supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: otpType,
-    })
-      .then(({ error: otpError }) => {
-        if (otpError) throw otpError;
-
-        const currentKind = (rawType as AuthFlowKind) ?? 'unknown';
-        setFlowKind(currentKind);
-        setFlowValidated(true);
-
-        if (rawType === 'recovery' || rawType === 'invite') {
-          setMode('set-password');
-          setMessage(rawType === 'invite'
-            ? 'Convite aceito! Defina sua senha para ativar sua conta.'
-            : 'Link validado! Defina sua nova senha.');
-        } else if (rawType === 'reauthentication') {
-          setMessage('Reautenticação confirmada com sucesso.');
-        } else if (rawType === 'signup') {
-          setMessage('E-mail confirmado com sucesso. Agora faça login.');
-          setMode('login');
-        } else {
-          setMessage('Ação de autenticação concluída com sucesso.');
-        }
-
-        clearAuthTokensFromUrl();
-      })
-      .catch((otpError) => {
-        const text = otpError instanceof Error ? otpError.message : 'Link inválido ou expirado.';
-        setError(ptSupabaseError(text));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    setMessage('Link validado. Defina sua nova senha.');
+    clearAuthTokensFromUrl();
   }, []);
 
   const canSubmit = useMemo(() => {
     if (mode === 'forgot') return Boolean(resetEmail.trim());
-    if (mode === 'set-password') {
-      return Boolean(newPassword.trim() && confirmPassword.trim());
-    }
-
+    if (mode === 'reset-password') return Boolean(newPassword.trim() && confirmPassword.trim());
     if (!password.trim()) return false;
     if (mode === 'login') return Boolean(loginIdentifier.trim());
     return Boolean(email.trim() && username.trim() && displayName.trim());
@@ -161,7 +104,7 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
       });
 
       if (resetError) throw resetError;
-      setMessage('Enviamos o link de redefinição. Verifique sua caixa de entrada.');
+      setMessage('Se esse e-mail existir, enviamos um link para redefinir a senha.');
     } catch (requestError) {
       const text = requestError instanceof Error ? requestError.message : 'Não foi possível enviar o link.';
       setError(ptSupabaseError(text));
@@ -183,16 +126,13 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
     setMessage('');
 
     try {
-      const { error: passwordError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (passwordError) throw passwordError;
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
 
-      setMessage('Senha atualizada com sucesso! Entrando no app...');
-      setFlowValidated(true);
-      onActionFlowComplete?.();
-    } catch (updateError) {
-      const text = updateError instanceof Error ? updateError.message : 'Não foi possível atualizar a senha.';
+      setMessage('Senha atualizada com sucesso.');
+      onResetFlowComplete?.();
+    } catch (saveError) {
+      const text = saveError instanceof Error ? saveError.message : 'Não foi possível atualizar sua senha.';
       setError(ptSupabaseError(text));
     } finally {
       setLoading(false);
@@ -207,7 +147,7 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
       return;
     }
 
-    if (mode === 'set-password') {
+    if (mode === 'reset-password') {
       await handleSaveNewPassword();
       return;
     }
@@ -386,7 +326,7 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
             </div>
           )}
 
-          {mode === 'set-password' && (
+          {mode === 'reset-password' && (
             <button
               onClick={() => setShowPassword((value) => !value)}
               className="w-full py-2 rounded-xl bg-white/5 text-white/55 text-xs font-semibold"
@@ -400,8 +340,8 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
             onClick={() => void handleAuth()}
             className="btn-primary text-sm py-3 disabled:opacity-40"
           >
-            <MaterialIcon name={mode === 'signup' ? 'person_add' : mode === 'forgot' ? 'mail' : mode === 'set-password' ? 'lock_reset' : 'login'} />
-            {mode === 'signup' ? 'Criar conta' : mode === 'forgot' ? 'Enviar link de redefinição' : mode === 'set-password' ? 'Salvar nova senha' : 'Entrar'}
+            <MaterialIcon name={mode === 'signup' ? 'person_add' : mode === 'forgot' ? 'mail' : mode === 'reset-password' ? 'lock_reset' : 'login'} />
+            {mode === 'signup' ? 'Criar conta' : mode === 'forgot' ? 'Enviar link de redefinição' : mode === 'reset-password' ? 'Salvar nova senha' : 'Entrar'}
           </button>
 
           {mode === 'login' && (
@@ -417,7 +357,7 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
             </button>
           )}
 
-          {(mode === 'forgot' || mode === 'set-password') && (
+          {(mode === 'forgot' || mode === 'reset-password') && (
             <button
               onClick={() => {
                 setMode('login');
@@ -432,15 +372,6 @@ export function Auth({ onActionFlowComplete }: AuthProps) {
 
           {message && <p className="text-xs text-primary-300">{message}</p>}
           {error && <p className="text-xs text-red-300">{error}</p>}
-
-          {flowValidated && (flowKind === 'invite' || flowKind === 'reauthentication') && (
-            <button
-              onClick={() => onActionFlowComplete?.()}
-              className="w-full py-2.5 rounded-xl bg-primary-500 text-white text-xs font-bold"
-            >
-              Continuar para o app
-            </button>
-          )}
 
           {pendingConfirmationEmail && (
             <div className="rounded-xl border border-primary-500/35 bg-primary-500/10 p-3 space-y-3">
