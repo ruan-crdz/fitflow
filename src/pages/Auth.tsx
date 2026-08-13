@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import type { EmailOtpType } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
@@ -19,16 +20,62 @@ function ptSupabaseError(message: string) {
 
 function buildEmailConfirmRedirectUrl() {
   const base = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`;
-  return `${base}#/auth-confirmed`;
+  return `${base}#/auth`;
 }
 
-export function Auth() {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+function getAuthHashParams() {
+  const hash = window.location.hash || '';
+  if (!hash) return new URLSearchParams();
+
+  if (hash.includes('?')) {
+    return new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+  }
+
+  if (hash.startsWith('#access_token=') || hash.startsWith('#type=')) {
+    return new URLSearchParams(hash.slice(1));
+  }
+
+  return new URLSearchParams();
+}
+
+function readAuthUrlParam(name: string) {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name) ?? getAuthHashParams().get(name);
+}
+
+function clearAuthTokensFromUrl() {
+  const cleanHash = '#/auth';
+  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}${cleanHash}`);
+}
+
+function normalizeOtpType(raw: string | null): EmailOtpType | null {
+  if (!raw) return null;
+
+  if (raw === 'reauthentication') {
+    return 'email';
+  }
+
+  const allowed = new Set(['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email']);
+  return allowed.has(raw) ? (raw as EmailOtpType) : null;
+}
+
+type AuthMode = 'login' | 'signup' | 'forgot' | 'set-password';
+
+type AuthFlowKind = 'recovery' | 'invite' | 'reauthentication' | 'signup' | 'email_change' | 'email' | 'unknown';
+
+type AuthProps = {
+  onActionFlowComplete?: () => void;
+};
+
+export function Auth({ onActionFlowComplete }: AuthProps) {
+  const [mode, setMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
+  const [flowKind, setFlowKind] = useState<AuthFlowKind>('unknown');
+  const [flowValidated, setFlowValidated] = useState(false);
 
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -36,15 +83,134 @@ export function Auth() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    const tokenHash = readAuthUrlParam('token_hash');
+    const rawType = readAuthUrlParam('type');
+    const otpType = normalizeOtpType(rawType);
+
+    if (!tokenHash || !otpType) return;
+
+    setLoading(true);
+    setError('');
+    setMessage('Validando link de autenticação...');
+
+    void supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: otpType,
+    })
+      .then(({ error: otpError }) => {
+        if (otpError) throw otpError;
+
+        const currentKind = (rawType as AuthFlowKind) ?? 'unknown';
+        setFlowKind(currentKind);
+        setFlowValidated(true);
+
+        if (rawType === 'recovery' || rawType === 'invite') {
+          setMode('set-password');
+          setMessage(rawType === 'invite'
+            ? 'Convite aceito! Defina sua senha para ativar sua conta.'
+            : 'Link validado! Defina sua nova senha.');
+        } else if (rawType === 'reauthentication') {
+          setMessage('Reautenticação confirmada com sucesso.');
+        } else if (rawType === 'signup') {
+          setMessage('E-mail confirmado com sucesso. Agora faça login.');
+          setMode('login');
+        } else {
+          setMessage('Ação de autenticação concluída com sucesso.');
+        }
+
+        clearAuthTokensFromUrl();
+      })
+      .catch((otpError) => {
+        const text = otpError instanceof Error ? otpError.message : 'Link inválido ou expirado.';
+        setError(ptSupabaseError(text));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   const canSubmit = useMemo(() => {
+    if (mode === 'forgot') return Boolean(resetEmail.trim());
+    if (mode === 'set-password') {
+      return Boolean(newPassword.trim() && confirmPassword.trim());
+    }
+
     if (!password.trim()) return false;
     if (mode === 'login') return Boolean(loginIdentifier.trim());
     return Boolean(email.trim() && username.trim() && displayName.trim());
-  }, [displayName, email, loginIdentifier, mode, password, username]);
+  }, [confirmPassword, displayName, email, loginIdentifier, mode, newPassword, password, resetEmail, username]);
+
+  const handleSendResetLink = async () => {
+    if (!supabase) return;
+
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const redirectTo = `${buildEmailConfirmRedirectUrl()}?action=recovery`;
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+        redirectTo,
+      });
+
+      if (resetError) throw resetError;
+      setMessage('Enviamos o link de redefinição. Verifique sua caixa de entrada.');
+    } catch (requestError) {
+      const text = requestError instanceof Error ? requestError.message : 'Não foi possível enviar o link.';
+      setError(ptSupabaseError(text));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveNewPassword = async () => {
+    if (!supabase) return;
+
+    if (newPassword !== confirmPassword) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const { error: passwordError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (passwordError) throw passwordError;
+
+      setMessage('Senha atualizada com sucesso! Entrando no app...');
+      setFlowValidated(true);
+      onActionFlowComplete?.();
+    } catch (updateError) {
+      const text = updateError instanceof Error ? updateError.message : 'Não foi possível atualizar a senha.';
+      setError(ptSupabaseError(text));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAuth = async () => {
     if (!supabase) return;
+
+    if (mode === 'forgot') {
+      await handleSendResetLink();
+      return;
+    }
+
+    if (mode === 'set-password') {
+      await handleSaveNewPassword();
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -150,7 +316,7 @@ export function Auth() {
               placeholder="E-mail ou username"
               className="input-field text-sm"
             />
-          ) : (
+          ) : mode === 'signup' ? (
             <>
               <input
                 value={displayName}
@@ -172,38 +338,109 @@ export function Auth() {
                 type="email"
               />
             </>
+          ) : mode === 'forgot' ? (
+            <input
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              placeholder="Digite seu e-mail"
+              className="input-field text-sm"
+              type="email"
+            />
+          ) : (
+            <>
+              <input
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Nova senha"
+                type={showPassword ? 'text' : 'password'}
+                className="input-field text-sm"
+              />
+              <input
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirmar nova senha"
+                type={showPassword ? 'text' : 'password'}
+                className="input-field text-sm"
+              />
+            </>
           )}
 
-          <div className="relative">
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Senha"
-              type={showPassword ? 'text' : 'password'}
-              className="input-field text-sm pr-20"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && canSubmit && !loading) void handleAuth();
-              }}
-            />
+          {(mode === 'login' || mode === 'signup') && (
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha"
+                type={showPassword ? 'text' : 'password'}
+                className="input-field text-sm pr-20"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canSubmit && !loading) void handleAuth();
+                }}
+              />
+              <button
+                onClick={() => setShowPassword((value) => !value)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-3 h-9 rounded-xl text-white/45 text-xs font-semibold"
+              >
+                {showPassword ? 'Ocultar' : 'Ver'}
+              </button>
+            </div>
+          )}
+
+          {mode === 'set-password' && (
             <button
               onClick={() => setShowPassword((value) => !value)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 px-3 h-9 rounded-xl text-white/45 text-xs font-semibold"
+              className="w-full py-2 rounded-xl bg-white/5 text-white/55 text-xs font-semibold"
             >
-              {showPassword ? 'Ocultar' : 'Ver'}
+              {showPassword ? 'Ocultar senhas' : 'Mostrar senhas'}
             </button>
-          </div>
+          )}
 
           <button
             disabled={loading || !canSubmit}
             onClick={() => void handleAuth()}
             className="btn-primary text-sm py-3 disabled:opacity-40"
           >
-            <MaterialIcon name={mode === 'signup' ? 'person_add' : 'login'} />
-            {mode === 'signup' ? 'Criar conta' : 'Entrar'}
+            <MaterialIcon name={mode === 'signup' ? 'person_add' : mode === 'forgot' ? 'mail' : mode === 'set-password' ? 'lock_reset' : 'login'} />
+            {mode === 'signup' ? 'Criar conta' : mode === 'forgot' ? 'Enviar link de redefinição' : mode === 'set-password' ? 'Salvar nova senha' : 'Entrar'}
           </button>
+
+          {mode === 'login' && (
+            <button
+              onClick={() => {
+                setMode('forgot');
+                setError('');
+                setMessage('');
+              }}
+              className="w-full text-xs text-primary-300 font-semibold py-1"
+            >
+              Esqueci minha senha
+            </button>
+          )}
+
+          {(mode === 'forgot' || mode === 'set-password') && (
+            <button
+              onClick={() => {
+                setMode('login');
+                setError('');
+                setMessage('');
+              }}
+              className="w-full text-xs text-white/55 font-semibold py-1"
+            >
+              Voltar para login
+            </button>
+          )}
 
           {message && <p className="text-xs text-primary-300">{message}</p>}
           {error && <p className="text-xs text-red-300">{error}</p>}
+
+          {flowValidated && (flowKind === 'invite' || flowKind === 'reauthentication') && (
+            <button
+              onClick={() => onActionFlowComplete?.()}
+              className="w-full py-2.5 rounded-xl bg-primary-500 text-white text-xs font-bold"
+            >
+              Continuar para o app
+            </button>
+          )}
 
           {pendingConfirmationEmail && (
             <div className="rounded-xl border border-primary-500/35 bg-primary-500/10 p-3 space-y-3">

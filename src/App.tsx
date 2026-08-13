@@ -11,6 +11,21 @@ import { Auth } from '@/pages/Auth';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { pushLocalStateToCloud, replaceLocalStateFromCloud } from '@/lib/accountState';
 
+function hasPendingAuthAction() {
+  const url = new URL(window.location.href);
+  const hash = window.location.hash || '';
+  const hashParams = new URLSearchParams(hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : hash.startsWith('#') ? hash.slice(1) : '');
+
+  const action = url.searchParams.get('action') ?? hashParams.get('action');
+  const type = url.searchParams.get('type') ?? hashParams.get('type');
+  const tokenHash = url.searchParams.get('token_hash') ?? hashParams.get('token_hash');
+
+  if (action) return true;
+  if (tokenHash && type) return true;
+  if (type === 'recovery' || type === 'invite' || type === 'reauthentication') return true;
+  return false;
+}
+
 const Onboarding = lazy(() => import('@/pages/Onboarding').then((module) => ({ default: module.Onboarding })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Workout = lazy(() => import('@/pages/Workout').then((module) => ({ default: module.Workout })));
@@ -53,6 +68,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [syncingAccount, setSyncingAccount] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [authActionActive, setAuthActionActive] = useState(hasPendingAuthAction());
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1800);
@@ -76,6 +92,11 @@ export function App() {
     const { data: authListener } = supabase.auth.onAuthStateChange((_, next) => {
       setSession(next);
       setSyncError('');
+
+      if (hasPendingAuthAction()) {
+        setAuthActionActive(true);
+      }
+
       if (!next) {
         sessionStorage.removeItem(syncMarkerKey);
       }
@@ -237,7 +258,16 @@ export function App() {
   if (!session) {
     return (
       <ThemeProvider>
-        <Auth />
+        <Auth onActionFlowComplete={() => setAuthActionActive(false)} />
+        <AppStatusBadge />
+      </ThemeProvider>
+    );
+  }
+
+  if (authActionActive) {
+    return (
+      <ThemeProvider>
+        <Auth onActionFlowComplete={() => setAuthActionActive(false)} />
         <AppStatusBadge />
       </ThemeProvider>
     );
