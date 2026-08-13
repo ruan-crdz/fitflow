@@ -99,6 +99,13 @@ serve(async (req) => {
     stream: false,
   };
 
+  if (feature === 'workout_builder') {
+    const requestedTemperature = typeof payload.temperature === 'number'
+      ? payload.temperature
+      : 0.35;
+    safePayload.temperature = Math.max(0, Math.min(requestedTemperature, 0.4));
+  }
+
   if (typeof requestedTokens === 'number') {
     safePayload.max_tokens = Math.min(requestedTokens, maxTokensCap);
   }

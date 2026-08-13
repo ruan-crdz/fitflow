@@ -278,6 +278,7 @@ export function App() {
               <Route path="/health" element={<Health />} />
               <Route path="/social" element={<Social />} />
               <Route path="/setup-ai" element={<AISetup />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/ai/intro" element={<AIIntro />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

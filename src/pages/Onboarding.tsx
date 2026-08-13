@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS, FOCUS_OPTIONS } from '@/stores/useProfileStore';
 import { useCustomWorkoutStore } from '@/stores/useCustomWorkoutStore';
@@ -8,6 +8,23 @@ import type { WeekDay, Goal, BiologicalSex, ExperienceLevel, TrainingFocus, Trai
 import { parseCsvList, toPositiveIntOrFallback } from '@/utils/profileMapping';
 
 type Step = 'welcome' | 'tour1' | 'tour2' | 'tour3' | 'sex' | 'name' | 'body' | 'goal' | 'experience' | 'days' | 'personalization' | 'focus' | 'customSplit' | 'setup';
+
+function isStepValue(value: string | null): value is Step {
+  return value === 'welcome'
+    || value === 'tour1'
+    || value === 'tour2'
+    || value === 'tour3'
+    || value === 'sex'
+    || value === 'name'
+    || value === 'body'
+    || value === 'goal'
+    || value === 'experience'
+    || value === 'days'
+    || value === 'personalization'
+    || value === 'focus'
+    || value === 'customSplit'
+    || value === 'setup';
+}
 
 interface OnboardingProps {
   onBack?: () => void;
@@ -24,27 +41,66 @@ function PrivacyHint({ text }: { text: string }) {
 
 export function Onboarding({ onBack }: OnboardingProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const existingProfile = useProfileStore((s) => s.profile);
   const setProfile = useProfileStore((s) => s.setProfile);
   const setCustomWorkoutState = useCustomWorkoutStore.setState;
 
-  const [step, setStep] = useState<Step>('welcome');
-  const [sex, setSex] = useState<BiologicalSex>('undisclosed');
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [weight, setWeight] = useState('');
-  const [height, setHeight] = useState('');
-  const [goal, setGoal] = useState<Goal>('lose');
-  const [experience, setExperience] = useState<ExperienceLevel>('beginner');
-  const [days, setDays] = useState<WeekDay[]>([]);
-  const [sessionDurationMin, setSessionDurationMin] = useState('60');
-  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>('academia');
-  const [equipmentText, setEquipmentText] = useState('');
-  const [trainingAgeMonths, setTrainingAgeMonths] = useState('');
-  const [preferredExercisesText, setPreferredExercisesText] = useState('');
-  const [dislikedExercisesText, setDislikedExercisesText] = useState('');
-  const [limitationsText, setLimitationsText] = useState('');
-  const [focus, setFocus] = useState<TrainingFocus>('balanced');
-  const [customSplit, setCustomSplit] = useState<Record<string, string>>({});
+  const requestedStep = new URLSearchParams(location.search).get('step');
+  const initialStep: Step = isStepValue(requestedStep)
+    ? requestedStep
+    : (existingProfile ? 'setup' : 'welcome');
+
+  const [step, setStep] = useState<Step>(initialStep);
+  const [sex, setSex] = useState<BiologicalSex>(existingProfile?.sex || 'undisclosed');
+  const [name, setName] = useState(existingProfile?.name || '');
+  const [age, setAge] = useState(existingProfile?.age ? String(existingProfile.age) : '');
+  const [weight, setWeight] = useState(existingProfile?.weight ? String(existingProfile.weight) : '');
+  const [height, setHeight] = useState(existingProfile?.height ? String(existingProfile.height) : '');
+  const [goal, setGoal] = useState<Goal>(existingProfile?.goal || 'lose');
+  const [experience, setExperience] = useState<ExperienceLevel>(existingProfile?.experienceLevel || 'beginner');
+  const [days, setDays] = useState<WeekDay[]>(existingProfile?.trainingDays || []);
+  const [sessionDurationMin, setSessionDurationMin] = useState(String(existingProfile?.sessionDurationMin || 60));
+  const [trainingLocation, setTrainingLocation] = useState<TrainingLocation>(existingProfile?.trainingLocation || 'academia');
+  const [equipmentText, setEquipmentText] = useState((existingProfile?.equipmentAccess || []).join(', '));
+  const [trainingAgeMonths, setTrainingAgeMonths] = useState(existingProfile?.trainingAgeMonths ? String(existingProfile.trainingAgeMonths) : '');
+  const [preferredExercisesText, setPreferredExercisesText] = useState((existingProfile?.preferredExercises || []).join(', '));
+  const [dislikedExercisesText, setDislikedExercisesText] = useState((existingProfile?.dislikedExercises || []).join(', '));
+  const [limitationsText, setLimitationsText] = useState((existingProfile?.limitations || []).join(', '));
+  const [focus, setFocus] = useState<TrainingFocus>(existingProfile?.trainingFocus || 'balanced');
+  const [customSplit, setCustomSplit] = useState<Record<string, string>>(existingProfile?.customSplit || {});
+
+  const getPreviousStep = (): Step | null => {
+    if (step === 'tour1') return 'welcome';
+    if (step === 'tour2') return 'tour1';
+    if (step === 'tour3') return 'tour2';
+    if (step === 'sex') return 'tour3';
+    if (step === 'name') return 'sex';
+    if (step === 'body') return 'name';
+    if (step === 'goal') return 'body';
+    if (step === 'experience') return 'goal';
+    if (step === 'days') return 'experience';
+    if (step === 'personalization') return 'days';
+    if (step === 'focus') return 'personalization';
+    if (step === 'customSplit') return 'focus';
+    if (step === 'setup') return focus === 'custom' ? 'customSplit' : 'focus';
+    return null;
+  };
+
+  const handleBack = () => {
+    const previous = getPreviousStep();
+    if (previous) {
+      setStep(previous);
+      return;
+    }
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (existingProfile) {
+      navigate('/dashboard');
+    }
+  };
 
   const toggleDay = (day: WeekDay) => {
     setDays((prev) =>
@@ -107,9 +163,9 @@ export function Onboarding({ onBack }: OnboardingProps) {
 
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center px-6 py-12 relative">
-      {onBack && (
+      {step !== 'welcome' && (
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="absolute left-5 top-12 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-semibold"
         >
           ← Voltar

@@ -1131,4 +1131,142 @@ grant execute on function public.save_workout_draft(text, jsonb, text, uuid) to 
 grant execute on function public.replace_current_workout(uuid, text, int) to authenticated;
 grant execute on function public.get_active_workout_program() to authenticated;
 
+-- =====================================================
+-- 4) AI playbook knowledge base
+-- =====================================================
+create table if not exists public.ai_knowledge_rules (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references auth.users(id) on delete cascade,
+  rule_key text,
+  feature text not null default 'all' check (feature in (
+    'all',
+    'chat',
+    'dashboard_insight',
+    'workout_tip',
+    'meal_calc',
+    'workout_builder',
+    'weekly_report',
+    'post_workout_feedback',
+    'meal_photo',
+    'plan_reeval'
+  )),
+  title text not null,
+  rule_condition jsonb not null default '{}'::jsonb check (jsonb_typeof(rule_condition) = 'object'),
+  recommendation text not null check (char_length(trim(recommendation)) >= 8),
+  evidence_ref text,
+  source_type text check (source_type is null or source_type in ('guideline', 'meta_analysis', 'systematic_review', 'rct', 'cohort', 'expert_consensus', 'internal_protocol', 'position_stand', 'position_statement', 'systematic_review_meta_analysis', 'meta_regression', 'umbrella_review')),
+  source_title text,
+  source_authors text,
+  source_journal text,
+  source_year int check (source_year is null or (source_year >= 1900 and source_year <= 2100)),
+  source_url text,
+  source_doi text,
+  source_quality text check (source_quality is null or source_quality in ('high', 'moderate', 'low', 'very_low')),
+  source_notes text,
+  review_status text not null default 'pending_human_review' check (review_status in ('pending_human_review', 'approved', 'rejected')),
+  priority int not null default 100 check (priority between 1 and 1000),
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.ai_knowledge_rules
+  add column if not exists rule_key text,
+  add column if not exists source_type text check (source_type is null or source_type in ('guideline', 'meta_analysis', 'systematic_review', 'rct', 'cohort', 'expert_consensus', 'internal_protocol', 'position_stand', 'position_statement', 'systematic_review_meta_analysis', 'meta_regression', 'umbrella_review')),
+  add column if not exists source_title text,
+  add column if not exists source_authors text,
+  add column if not exists source_journal text,
+  add column if not exists source_year int check (source_year is null or (source_year >= 1900 and source_year <= 2100)),
+  add column if not exists source_url text,
+  add column if not exists source_doi text,
+  add column if not exists source_quality text check (source_quality is null or source_quality in ('high', 'moderate', 'low', 'very_low')),
+  add column if not exists source_notes text,
+  add column if not exists review_status text not null default 'pending_human_review';
+
+do $$
+declare
+  v_constraint record;
+begin
+  for v_constraint in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.ai_knowledge_rules'::regclass
+      and contype = 'c'
+      and conname like 'ai_knowledge_rules_source_type%'
+  loop
+    execute format('alter table public.ai_knowledge_rules drop constraint %I', v_constraint.conname);
+  end loop;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_knowledge_rules_source_type_chk'
+      and conrelid = 'public.ai_knowledge_rules'::regclass
+  ) then
+    alter table public.ai_knowledge_rules
+      add constraint ai_knowledge_rules_source_type_chk
+      check (source_type is null or source_type in ('guideline', 'meta_analysis', 'systematic_review', 'rct', 'cohort', 'expert_consensus', 'internal_protocol', 'position_stand', 'position_statement', 'systematic_review_meta_analysis', 'meta_regression', 'umbrella_review'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_knowledge_rules_review_status_chk'
+      and conrelid = 'public.ai_knowledge_rules'::regclass
+  ) then
+    alter table public.ai_knowledge_rules
+      add constraint ai_knowledge_rules_review_status_chk
+      check (review_status in ('pending_human_review', 'approved', 'rejected'));
+  end if;
+end $$;
+
+create unique index if not exists ai_knowledge_rules_rule_key_uq
+  on public.ai_knowledge_rules (rule_key)
+  where rule_key is not null;
+
+create index if not exists ai_knowledge_rules_feature_priority_idx
+  on public.ai_knowledge_rules (feature, is_active, priority, updated_at desc);
+
+create index if not exists ai_knowledge_rules_owner_feature_idx
+  on public.ai_knowledge_rules (owner_id, feature, updated_at desc);
+
+create index if not exists ai_knowledge_rules_condition_gin_idx
+  on public.ai_knowledge_rules using gin (rule_condition);
+
+alter table public.ai_knowledge_rules enable row level security;
+
+drop policy if exists "users read own and global active ai rules" on public.ai_knowledge_rules;
+drop policy if exists "users insert own ai rules" on public.ai_knowledge_rules;
+drop policy if exists "users update own ai rules" on public.ai_knowledge_rules;
+drop policy if exists "users delete own ai rules" on public.ai_knowledge_rules;
+
+create policy "users read own and global active ai rules"
+  on public.ai_knowledge_rules for select
+  to authenticated
+  using (
+    owner_id = auth.uid()
+    or (owner_id is null and is_active = true)
+  );
+
+create policy "users insert own ai rules"
+  on public.ai_knowledge_rules for insert
+  to authenticated
+  with check (owner_id = auth.uid());
+
+create policy "users update own ai rules"
+  on public.ai_knowledge_rules for update
+  to authenticated
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create policy "users delete own ai rules"
+  on public.ai_knowledge_rules for delete
+  to authenticated
+  using (owner_id = auth.uid());
+
+drop trigger if exists ai_knowledge_rules_touch_updated_at on public.ai_knowledge_rules;
+create trigger ai_knowledge_rules_touch_updated_at
+  before update on public.ai_knowledge_rules
+  for each row execute function public.workout_touch_updated_at();
+
+grant select, insert, update, delete on public.ai_knowledge_rules to authenticated;
+
 notify pgrst, 'reload schema';

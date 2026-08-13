@@ -15,6 +15,14 @@ export function AIIntro() {
   const isMale = profile?.sex === 'male';
   const isFemale = profile?.sex === 'female';
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/dashboard');
+  };
+
   const lines = [
     `Inicializando ${assistantName}...`,
     'Conectando a inteligencia artificial...',
@@ -40,6 +48,12 @@ export function AIIntro() {
 
   return (
     <div className="relative min-h-[100dvh] flex flex-col items-center justify-center px-8 bg-dark-500">
+      <button
+        onClick={handleBack}
+        className="fixed left-5 top-[calc(1.25rem+env(safe-area-inset-top))] z-10 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/55 text-xs font-semibold"
+      >
+        ← Voltar
+      </button>
       <button
         onClick={handleContinue}
         className="fixed right-5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-10 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 text-sm font-semibold"

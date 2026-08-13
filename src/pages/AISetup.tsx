@@ -301,6 +301,28 @@ function normalizeGeneratedWorkouts(rawWorkouts: unknown, profile: Profile, spli
   });
 }
 
+function isRawSplitComplete(rawWorkouts: unknown, split: SplitType): boolean {
+  if (!Array.isArray(rawWorkouts)) return false;
+
+  const requiredSlots = splitToSlots(split);
+  const slotSet = new Set(requiredSlots);
+  const seen = new Set<WorkoutType>();
+
+  for (const item of rawWorkouts) {
+    if (!item || typeof item !== 'object') continue;
+    const workout = item as GeneratedWorkout;
+    const rawType = typeof workout.type === 'string' ? workout.type.toUpperCase() : '';
+    if (!WORKOUT_TYPES.includes(rawType as WorkoutType)) continue;
+    const type = rawType as WorkoutType;
+    if (!slotSet.has(type)) continue;
+    const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
+    if (exercises.length < 5) continue;
+    seen.add(type);
+  }
+
+  return requiredSlots.every((slot) => seen.has(slot));
+}
+
 export function AISetup() {
   const navigate = useNavigate();
   const profile = useProfileStore((s) => s.profile)!;
@@ -308,6 +330,9 @@ export function AISetup() {
   const [phase, setPhase] = useState<Phase>('generating');
   const [messages, setMessages] = useState<string[]>([]);
   const [workouts, setWorkouts] = useState<GeneratedWorkout[]>([]);
+
+  const resumeStep = profile.trainingFocus === 'custom' ? 'customSplit' : 'focus';
+  const goBackToOnboarding = () => navigate(`/onboarding?step=${resumeStep}`);
 
   const trainingDays = profile.trainingDays.length || 3;
   const goalLabel = profile.goal === 'lose' ? 'perder gordura' : profile.goal === 'gain' ? 'ganhar massa muscular' : 'manter peso';
@@ -414,7 +439,7 @@ IMPORTANTE: O número de treinos distintos NÃO precisa ser igual ao número de 
 REGRAS DE MONTAGEM:
 1. Após escolher o split vencedor, monte os treinos
 2. Cada treino de musculação deve ter entre 5 e 10 exercícios.
-3. Se o foco de um treino tiver até 3 grupamentos principais (ex.: peito + tríceps + ombros), distribua no mínimo 2 exercícios por grupamento (evite 1 exercício isolado por grupo).
+3. Se o foco de um treino tiver até 3 grupamentos principais (ex.: peito + tríceps + ombros), distribua no mínimo 3 exercícios por grupamento (evite 1 exercício isolado por grupo).
 4. Respeite a preferência do aluno: ${focusLabel}
 ${profile.trainingFocus === 'custom' ? '5. Se o aluno especificou a divisão personalizada, SIGA-A. Monte os exercícios respeitando os grupos que ele pediu.' : '5. Priorize músculos e padrões de movimento com base em objetivo declarado, preferências, histórico, limitações e aderência. Nunca inferir preferência muscular por sexo biológico.'}
 6. Cada exercício DEVE vir da lista abaixo (nome exato)
@@ -463,12 +488,29 @@ ${SCIENCE_GUARDRAILS}
         return;
       }
       const groundedPrompt = `${prompt}\n\n${buildEvidenceContext(evidence)}\n\nUse APENAS sourceIds do EVIDENCE_CONTEXT no campo evidenceIds.`;
-      const response = await askAI(null, profile, groundedPrompt, {
-        schemaName: 'ai_setup_plan',
-        jsonSchema: AI_SETUP_SCHEMA,
-      }, 'workout_builder');
-      const parsed = JSON.parse(response) as SetupAIResponse;
-      const normalizedSplit = inferSplit(profile, parsed.workouts, parsed.chosenSplit);
+      const requestPlan = async (promptText: string): Promise<SetupAIResponse> => {
+        const response = await askAI(null, profile, promptText, {
+          schemaName: 'ai_setup_plan',
+          jsonSchema: AI_SETUP_SCHEMA,
+        }, 'workout_builder');
+        return JSON.parse(response) as SetupAIResponse;
+      };
+
+      let parsed = await requestPlan(groundedPrompt);
+      let parsedSplit = inferSplit(profile, parsed.workouts, parsed.chosenSplit);
+      let completedByModel = isRawSplitComplete(parsed.workouts, parsedSplit);
+
+      if (!completedByModel) {
+        addMessage('Recebi um rascunho parcial da IA e pedi uma segunda geração para fechar todos os treinos da divisão.');
+        await delay(600);
+        const requiredSlots = splitToSlots(parsedSplit).join(', ');
+        const secondPassPrompt = `${groundedPrompt}\n\nCORREÇÃO OBRIGATÓRIA:\n- Sua resposta anterior veio incompleta para o split ${parsedSplit}.\n- Retorne novamente JSON válido com TODOS os treinos ${requiredSlots}.\n- Cada treino deve ter entre 5 e 10 exercícios.\n- Não omita nenhum treino do split escolhido.\n- Mantenha evidenceIds preenchido com sourceIds válidos.`;
+        parsed = await requestPlan(secondPassPrompt);
+        parsedSplit = inferSplit(profile, parsed.workouts, parsed.chosenSplit);
+        completedByModel = isRawSplitComplete(parsed.workouts, parsedSplit);
+      }
+
+      const normalizedSplit = parsedSplit;
       const normalizedWorkouts = normalizeGeneratedWorkouts(parsed.workouts, profile, normalizedSplit);
       const normalizedPlan = { ...parsed, chosenSplit: normalizedSplit, workouts: normalizedWorkouts };
       const planErrors = validateGeneratedPlan(normalizedPlan, trainingDays);
@@ -482,8 +524,13 @@ ${SCIENCE_GUARDRAILS}
       }
 
       if (normalizedWorkouts.length > 0) {
+        if (!completedByModel) {
+          addMessage('A IA retornou estrutura parcial e finalizei a consistência do plano com validação técnica para não deixar nenhum dia sem treino.');
+          await delay(500);
+        }
+
         if (planErrors.length > 0) {
-          addMessage('Ajustei automaticamente o volume por grupamento para entregar um treino mais completo.');
+          addMessage('Refinei o plano com validação técnica para garantir volume mínimo por grupamento e cobertura completa da divisão.');
           await delay(500);
         }
 
@@ -564,7 +611,13 @@ ${SCIENCE_GUARDRAILS}
   const handleDone = () => navigate('/plans');
 
   return (
-    <div className="min-h-[100dvh] flex flex-col px-6 py-12">
+    <div className="min-h-[100dvh] flex flex-col px-6 py-12 relative">
+      <button
+        onClick={goBackToOnboarding}
+        className="absolute left-5 top-8 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-semibold"
+      >
+        ← Voltar e ajustar
+      </button>
       <AnimatePresence mode="wait">
         {/* Generating */}
         {phase === 'generating' && (
@@ -602,10 +655,10 @@ ${SCIENCE_GUARDRAILS}
                     Rotação: Tentar novamente
                   </button>
                   <button
-                    onClick={() => navigate('/plans')}
+                    onClick={goBackToOnboarding}
                     className="flex-1 py-3 rounded-xl bg-dark-200 text-white/50 text-sm"
                   >
-                    Pular
+                    Cancelar e voltar
                   </button>
                 </div>
               )}
@@ -657,9 +710,17 @@ ${SCIENCE_GUARDRAILS}
               ))}
             </div>
 
-            <button className="btn-primary mt-6" onClick={handleDone}>
-              Concluído — ver meus treinos
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+              <button className="btn-primary" onClick={handleDone}>
+                Concluído — ver meus treinos
+              </button>
+              <button
+                onClick={goBackToOnboarding}
+                className="py-3 rounded-xl bg-dark-200 text-white/55 text-sm font-semibold"
+              >
+                Refazer preferências
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -62,6 +62,7 @@ export const AI_SETUP_SCHEMA: Record<string, unknown> = {
     },
     evidenceIds: {
       type: 'array',
+      minItems: 1,
       items: { type: 'string' },
     },
   },

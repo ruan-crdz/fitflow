@@ -68,6 +68,7 @@ export function AppShell({ children }: AppShellProps) {
   const hideNav = location.pathname.startsWith('/workout')
     || location.pathname === '/ai/intro'
     || location.pathname === '/setup-ai'
+    || location.pathname === '/onboarding'
     || location.pathname === '/plans/reeval';
 
   if (hideNav) return <><ToastContainer />{children}</>;

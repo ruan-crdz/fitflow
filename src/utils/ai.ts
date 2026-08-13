@@ -11,6 +11,7 @@ import { calculateTDEE, calculateMacros } from '@/utils/calories';
 import { buildEvidenceContext, extractSourceIds, getEvidenceByIds, getEvidenceForQuery, isScientificQuery } from '@/utils/evidence';
 import { calculateWaterIntake } from '@/utils/water';
 import { buildProfilePromptLines } from '@/utils/promptContext';
+import { buildKnowledgeContextForAI } from '@/utils/aiKnowledge';
 import type { Profile, WorkoutType } from '@/types';
 import { EXERCISE_CATALOG } from '@/constants/exerciseCatalog';
 import { supabase } from '@/lib/supabase';
@@ -542,7 +543,13 @@ export async function sendMessage(
   const profile = useProfileStore.getState().profile;
   if (!profile) throw new Error('Perfil não encontrado');
 
-  const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')?.content || '';
+  const { context: knowledgeContext } = await buildKnowledgeContextForAI(profile, 'chat', latestUserMessage);
+  const knowledgeInstruction = knowledgeContext
+    ? '\n\nINSTRUCOES DO PLAYBOOK:\n- Trate PLAYBOOK_SUPABASE como fonte primaria de recomendacao neste app.\n- Em caso de conflito, priorize as regras do playbook interno antes de conhecimento geral.'
+    : '';
+
+  const systemMessage = `${getSystemPrompt()}${knowledgeContext ? `\n\n${knowledgeContext}` : ''}${knowledgeInstruction}${ACTION_PROMPT}\n${buildContext(profile)}`;
 
   const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => invokeAI({
     messages: [
@@ -577,14 +584,18 @@ export async function sendMessageWithActions(
   if (!profile) throw new Error('Perfil não encontrado');
 
   const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')?.content || '';
+  const { context: knowledgeContext } = await buildKnowledgeContextForAI(profile, feature, latestUserMessage);
   const scientificQuery = isScientificQuery(latestUserMessage);
   const evidenceItems = scientificQuery ? getEvidenceForQuery(latestUserMessage) : [];
   const evidenceContext = scientificQuery ? buildEvidenceContext(evidenceItems) : '';
   const scientificInstruction = scientificQuery
     ? `\n\nINSTRUÇÕES DE EVIDÊNCIA:\n- Para recomendações científicas/prescritivas, cite apenas IDs do EVIDENCE_CONTEXT no formato [SRC:ID1,ID2].\n- Não invente fontes.\n- Se não houver evidência suficiente no contexto, responda explicitamente: "Não encontrei evidência suficiente para afirmar isso com segurança."`
     : '';
+  const knowledgeInstruction = knowledgeContext
+    ? '\n\nINSTRUCOES DO PLAYBOOK:\n- Trate PLAYBOOK_SUPABASE como fonte primaria de recomendacao neste app.\n- Em caso de conflito, priorize as regras do playbook interno antes de conhecimento geral.'
+    : '';
 
-  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 6-10 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Se o foco do treino tiver até 3 grupamentos principais (ex.: peito, tríceps e ombros), inclua no mínimo 2 exercícios por grupamento.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
+  const systemMessage = `${getSystemPrompt()}\n${buildContext(profile)}${knowledgeContext ? `\n\n${knowledgeContext}` : ''}${knowledgeInstruction}${evidenceContext ? `\n\n${evidenceContext}` : ''}${scientificInstruction}\n\nREGRAS DE AÇÕES NO APP:\n- Se o usuário pedir para trocar/substituir exercício, use replace_exercise.\n- Se o usuário pedir para montar/mudar treino completo (ex: "quero treino ABC"), use apply_workout_plan com split + workouts + exercises completos.\n- Em apply_workout_plan, inclua obrigatoriamente 6-10 exercícios por treino, com variação por grupamento e séries/reps válidas.\n- Se o foco do treino tiver até 3 grupamentos principais (ex.: peito, tríceps e ombros), inclua no mínimo 2 exercícios por grupamento.\n- Nunca retorne apenas split sem lista de exercícios.\n- Quando o treino estiver pronto, faça apenas UMA pergunta de confirmação para substituir.\n- Depois da confirmação do usuário, não repita perguntas.\n- Se não houver pedido claro de alteração, responda em texto.`;
 
   const requestChat = (chatMessages: ChatMessage[], maxTokens: number) => invokeAI({
     messages: [
@@ -815,7 +826,11 @@ export async function askAI(
     }
     : {};
 
-  const systemMessage = getSystemPrompt() + ACTION_PROMPT + '\n' + buildContext(profile);
+  const { context: knowledgeContext } = await buildKnowledgeContextForAI(profile, feature, question);
+  const knowledgeInstruction = knowledgeContext
+    ? '\n\nINSTRUCOES DO PLAYBOOK:\n- Trate PLAYBOOK_SUPABASE como fonte primaria de recomendacao neste app.\n- Em caso de conflito, priorize as regras do playbook interno antes de conhecimento geral.'
+    : '';
+  const systemMessage = `${getSystemPrompt()}${knowledgeContext ? `\n\n${knowledgeContext}` : ''}${knowledgeInstruction}${ACTION_PROMPT}\n${buildContext(profile)}`;
   const data = await invokeAI({
     messages: [
       { role: 'system', content: systemMessage },
