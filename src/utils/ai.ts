@@ -514,7 +514,6 @@ export async function invokeAI(
 
   const { data, error } = await supabase.functions.invoke('ai-gateway', {
     body: {
-      plan,
       feature,
       payload,
     },

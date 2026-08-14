@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProfileStore, WEEKDAY_OPTIONS, GOAL_OPTIONS, EXPERIENCE_OPTIONS } from '@/stores/useProfileStore';
 import { useAIStore } from '@/stores/useAIStore';
@@ -12,7 +12,7 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { supabase } from '@/lib/supabase';
-import { pushLocalStateToCloud } from '@/lib/accountState';
+import { createUltimateCheckout, syncPlanFromBackend } from '@/lib/billing';
 import { calculateTDEE, calculateMacros, calculateBMI, bmiCategory } from '@/utils/calories';
 import { calculateWaterIntake } from '@/utils/water';
 import { clearGymPilotLocalData } from '@/utils/resetAppData';
@@ -48,7 +48,6 @@ export function Profile() {
   const [editing, setEditing] = useState(false);
   const [accountAction, setAccountAction] = useState<'delete' | null>(null);
   const [processingAccountAction, setProcessingAccountAction] = useState(false);
-  const [showUltimateModal, setShowUltimateModal] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState(false);
   const [assistantNameInput, setAssistantNameInput] = useState(assistantName);
 
@@ -67,6 +66,38 @@ export function Profile() {
   const [preferredExercises, setPreferredExercises] = useState((profile?.preferredExercises || []).join(', '));
   const [dislikedExercises, setDislikedExercises] = useState((profile?.dislikedExercises || []).join(', '));
   const [limitations, setLimitations] = useState((profile?.limitations || []).join(', '));
+
+  useEffect(() => {
+    void syncPlanFromBackend().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const query = hash.includes('?') ? new URLSearchParams(hash.slice(hash.indexOf('?') + 1)) : new URLSearchParams();
+    const billingResult = query.get('billing');
+
+    const clearBillingQuery = () => {
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}#/profile`);
+    };
+
+    if (billingResult === 'success') {
+      toast('Pagamento recebido. Atualizando seu plano...', 'success');
+      void syncPlanFromBackend().catch(() => undefined);
+      clearBillingQuery();
+      return;
+    }
+
+    if (billingResult === 'pending') {
+      toast('Pagamento pendente. Assim que aprovar, o Ultimate será liberado.', 'info');
+      clearBillingQuery();
+      return;
+    }
+
+    if (billingResult === 'failure') {
+      toast('Pagamento não concluído. Tente novamente.', 'error');
+      clearBillingQuery();
+    }
+  }, [toast]);
 
   if (!profile) return null;
 
@@ -137,59 +168,16 @@ export function Profile() {
     }
   };
 
-  const handleUpgradeToUltimate = async () => {
+  const handleUpgradeToUltimate = async (cycle: 'monthly' | 'annual') => {
     if (upgradingPlan) return;
 
     setUpgradingPlan(true);
     try {
-      const profileStorageKey = 'fitflow-profile';
-      const currentStored = localStorage.getItem(profileStorageKey);
-      let persisted: { state?: Record<string, unknown>; version?: number } = { version: 0, state: {} };
-
-      try {
-        if (currentStored) {
-          const parsed = JSON.parse(currentStored) as { state?: Record<string, unknown>; version?: number };
-          if (parsed && typeof parsed === 'object') {
-            persisted = parsed;
-          }
-        }
-      } catch {
-        persisted = { version: 0, state: {} };
-      }
-
-      const nextProfile = {
-        ...(profile || {}),
-        aiPlan: 'ultimate' as const,
-      };
-      const nextPersisted = {
-        ...persisted,
-        state: {
-          ...(persisted.state || {}),
-          profile: nextProfile,
-          isOnboarded: true,
-        },
-      };
-      const nextProfileStorageValue = JSON.stringify(nextPersisted);
-      localStorage.setItem(profileStorageKey, nextProfileStorageValue);
-
-      updateProfile({ aiPlan: 'ultimate' });
-
-      if (supabase) {
-        const { data } = await supabase.auth.getSession();
-        const userId = data.session?.user.id;
-        if (userId) {
-          await pushLocalStateToCloud(userId, {
-            [profileStorageKey]: nextProfileStorageValue,
-          });
-        }
-      }
-
-      toast('Ultimate ativado. Obrigado por testar a fase beta gratuita.', 'success');
-      setShowUltimateModal(false);
+      const { checkoutUrl } = await createUltimateCheckout(cycle);
+      window.location.href = checkoutUrl;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não consegui salvar seu plano agora.';
-      toast(`Ultimate ativado localmente, mas falhou sincronizar na nuvem: ${message}`, 'error');
-      setShowUltimateModal(false);
+      const message = error instanceof Error ? error.message : 'Não consegui iniciar o checkout agora.';
+      toast(message, 'error');
     } finally {
       setUpgradingPlan(false);
     }
@@ -635,15 +623,26 @@ export function Profile() {
                   )}
                 </div>
                 <p className="text-[11px] text-white/40 leading-relaxed">
-                  O plano Free inclui chat e dicas rápidas. Ultimate libera reavaliação avançada, relatório semanal e foto IA para refeições.
+                  O plano Free inclui chat e dicas rápidas. Ultimate libera reavaliação avançada, relatório semanal e análise de refeição por foto.
                 </p>
                 {aiPlan === 'free' && (
-                  <button
-                    onClick={() => setShowUltimateModal(true)}
-                    className="btn-primary py-2.5 text-xs"
-                  >
-                    <MaterialIcon name="workspace_premium" /> Fazer upgrade para Ultimate
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => { void handleUpgradeToUltimate('monthly'); }}
+                      disabled={upgradingPlan}
+                      className="btn-primary py-2.5 text-xs disabled:opacity-50"
+                    >
+                      <MaterialIcon name="workspace_premium" />
+                      {upgradingPlan ? 'Abrindo checkout...' : 'Assinar Ultimate mensal'}
+                    </button>
+                    <button
+                      onClick={() => { void handleUpgradeToUltimate('annual'); }}
+                      disabled={upgradingPlan}
+                      className="w-full py-2.5 rounded-xl bg-white/10 border border-white/15 text-white/75 text-xs font-semibold disabled:opacity-50"
+                    >
+                      Anual com desconto
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -687,22 +686,6 @@ export function Profile() {
             }}
           />
 
-          <ConfirmModal
-            open={showUltimateModal}
-            title="Ativar Ultimate (beta gratuito)?"
-            message={[
-              'Com o Ultimate você libera: reavaliação avançada, relatório semanal completo e análise de foto para refeições.',
-              'Durante o beta, o Ultimate está gratuito. Obrigado por testar e ajudar a evoluir o GymPilot.',
-            ].join(' ')}
-            confirmText={upgradingPlan ? 'Ativando...' : 'Ativar Ultimate'}
-            cancelText="Agora não"
-            onCancel={() => {
-              if (!upgradingPlan) setShowUltimateModal(false);
-            }}
-            onConfirm={() => {
-              void handleUpgradeToUltimate();
-            }}
-          />
         </div>
       )}
     </div>

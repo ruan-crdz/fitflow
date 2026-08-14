@@ -10,6 +10,7 @@ import { syncActiveWorkoutFromBackend } from '@/lib/workoutEngine';
 import { Auth } from '@/pages/Auth';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { pushLocalStateToCloud, replaceLocalStateFromCloud } from '@/lib/accountState';
+import { syncPlanFromBackend } from '@/lib/billing';
 
 function hasPendingRecoveryAction() {
   const url = new URL(window.location.href);
@@ -153,6 +154,11 @@ export function App() {
 
     const timeout = globalThis.setTimeout(prefetch, 1500);
     return () => globalThis.clearTimeout(timeout);
+  }, [isOnboarded, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id || !isOnboarded) return;
+    void syncPlanFromBackend().catch(() => undefined);
   }, [isOnboarded, session?.user?.id]);
 
   useEffect(() => {

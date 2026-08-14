@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 type AIPlan = 'free' | 'ultimate';
 
@@ -50,8 +51,33 @@ serve(async (req) => {
     return jsonResponse({ error: { message: 'OPENAI_API_KEY não configurada nos secrets do Supabase.' } }, 500);
   }
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    return jsonResponse({ error: { message: 'Secrets do Supabase não configurados.' } }, 500);
+  }
+
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) {
+    return jsonResponse({ error: { message: 'Token de autenticação ausente.' } }, 401);
+  }
+
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: userData, error: userError } = await authClient.auth.getUser(token);
+  if (userError || !userData.user) {
+    return jsonResponse({ error: { message: 'Sessão inválida.' } }, 401);
+  }
+
   let body: {
-    plan?: AIPlan;
     feature?: AIFeature;
     payload?: Record<string, unknown>;
   };
@@ -62,7 +88,21 @@ serve(async (req) => {
     return jsonResponse({ error: { message: 'Payload inválido.' } }, 400);
   }
 
-  const plan: AIPlan = body.plan === 'ultimate' ? 'ultimate' : 'free';
+  const { data: entitlement } = await serviceClient
+    .from('user_ai_subscriptions')
+    .select('plan, status, current_period_end')
+    .eq('user_id', userData.user.id)
+    .eq('status', 'active')
+    .order('current_period_end', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nowIso = new Date().toISOString();
+  const hasUltimate = entitlement
+    && entitlement.plan === 'ultimate'
+    && (!entitlement.current_period_end || entitlement.current_period_end > nowIso);
+
+  const plan: AIPlan = hasUltimate ? 'ultimate' : 'free';
   const feature = body.feature || 'chat';
 
   if (plan === 'free' && !FREE_FEATURES.has(feature)) {

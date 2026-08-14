@@ -1269,4 +1269,216 @@ create trigger ai_knowledge_rules_touch_updated_at
 
 grant select, insert, update, delete on public.ai_knowledge_rules to authenticated;
 
+-- =====================================================
+-- 5) Billing + Entitlements (server authoritative)
+-- =====================================================
+create table if not exists public.app_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.user_ai_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plan text not null default 'free' check (plan in ('free', 'ultimate')),
+  status text not null default 'inactive' check (status in ('inactive', 'active', 'canceled', 'past_due')),
+  billing_cycle text not null default 'manual' check (billing_cycle in ('manual', 'monthly', 'annual')),
+  provider text not null default 'manual' check (provider in ('manual', 'mercadopago', 'stripe')),
+  source text not null default 'manual_grant' check (source in ('manual_grant', 'checkout', 'webhook')),
+  provider_customer_id text,
+  provider_subscription_id text,
+  provider_payment_id text,
+  started_at timestamptz,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.billing_checkout_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  provider text not null check (provider in ('mercadopago', 'stripe')),
+  plan text not null check (plan in ('ultimate')),
+  billing_cycle text not null check (billing_cycle in ('monthly', 'annual')),
+  amount_cents int not null check (amount_cents > 0),
+  currency text not null default 'BRL',
+  status text not null default 'created' check (status in ('created', 'pending', 'approved', 'rejected', 'canceled', 'expired')),
+  checkout_url text,
+  provider_reference text,
+  provider_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_ai_subscriptions_user_status_idx
+  on public.user_ai_subscriptions (user_id, status, current_period_end desc, updated_at desc);
+
+create index if not exists billing_checkout_sessions_user_created_idx
+  on public.billing_checkout_sessions (user_id, created_at desc);
+
+drop trigger if exists user_ai_subscriptions_touch_updated_at on public.user_ai_subscriptions;
+create trigger user_ai_subscriptions_touch_updated_at
+  before update on public.user_ai_subscriptions
+  for each row execute function public.workout_touch_updated_at();
+
+drop trigger if exists billing_checkout_sessions_touch_updated_at on public.billing_checkout_sessions;
+create trigger billing_checkout_sessions_touch_updated_at
+  before update on public.billing_checkout_sessions
+  for each row execute function public.workout_touch_updated_at();
+
+alter table public.app_admins enable row level security;
+alter table public.user_ai_subscriptions enable row level security;
+alter table public.billing_checkout_sessions enable row level security;
+
+drop policy if exists "admins read own membership" on public.app_admins;
+drop policy if exists "users read own subscriptions" on public.user_ai_subscriptions;
+drop policy if exists "users read own checkout sessions" on public.billing_checkout_sessions;
+
+create policy "admins read own membership"
+  on public.app_admins for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create policy "users read own subscriptions"
+  on public.user_ai_subscriptions for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create policy "users read own checkout sessions"
+  on public.billing_checkout_sessions for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create or replace function public.get_my_ai_plan()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_row public.user_ai_subscriptions%rowtype;
+begin
+  if v_user is null then
+    return jsonb_build_object(
+      'plan', 'free',
+      'status', 'inactive',
+      'billingCycle', 'manual',
+      'provider', 'manual',
+      'source', 'manual_grant'
+    );
+  end if;
+
+  select *
+    into v_row
+    from public.user_ai_subscriptions
+    where user_id = v_user
+      and status = 'active'
+      and (current_period_end is null or current_period_end > now())
+    order by current_period_end desc nulls last, updated_at desc
+    limit 1;
+
+  if v_row.id is null then
+    return jsonb_build_object(
+      'plan', 'free',
+      'status', 'inactive',
+      'billingCycle', 'manual',
+      'provider', 'manual',
+      'source', 'manual_grant'
+    );
+  end if;
+
+  return jsonb_build_object(
+    'plan', v_row.plan,
+    'status', v_row.status,
+    'billingCycle', v_row.billing_cycle,
+    'provider', v_row.provider,
+    'source', v_row.source,
+    'currentPeriodEnd', v_row.current_period_end,
+    'cancelAtPeriodEnd', v_row.cancel_at_period_end
+  );
+end;
+$$;
+
+create or replace function public.set_user_ai_plan_manual(
+  p_target_user uuid,
+  p_plan text default 'ultimate',
+  p_days int default 30,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_is_admin boolean := false;
+  v_end timestamptz;
+begin
+  if v_actor is null then
+    return jsonb_build_object('success', false, 'error', 'Usuário não autenticado.');
+  end if;
+
+  select exists (
+    select 1 from public.app_admins where user_id = v_actor
+  ) into v_is_admin;
+
+  if not v_is_admin then
+    return jsonb_build_object('success', false, 'error', 'Permissão negada.');
+  end if;
+
+  if p_target_user is null then
+    return jsonb_build_object('success', false, 'error', 'Usuário alvo não informado.');
+  end if;
+
+  if p_plan not in ('free', 'ultimate') then
+    return jsonb_build_object('success', false, 'error', 'Plano inválido.');
+  end if;
+
+  if p_plan = 'ultimate' and coalesce(p_days, 0) > 0 then
+    v_end := now() + make_interval(days => p_days);
+  else
+    v_end := null;
+  end if;
+
+  insert into public.user_ai_subscriptions (
+    user_id,
+    plan,
+    status,
+    billing_cycle,
+    provider,
+    source,
+    started_at,
+    current_period_end,
+    note
+  ) values (
+    p_target_user,
+    p_plan,
+    case when p_plan = 'ultimate' then 'active' else 'inactive' end,
+    'manual',
+    'manual',
+    'manual_grant',
+    now(),
+    v_end,
+    p_note
+  );
+
+  return jsonb_build_object(
+    'success', true,
+    'userId', p_target_user,
+    'plan', p_plan,
+    'currentPeriodEnd', v_end
+  );
+end;
+$$;
+
+grant select on public.app_admins to authenticated;
+grant select on public.user_ai_subscriptions to authenticated;
+grant select on public.billing_checkout_sessions to authenticated;
+grant execute on function public.get_my_ai_plan() to authenticated;
+grant execute on function public.set_user_ai_plan_manual(uuid, text, int, text) to authenticated;
+
 notify pgrst, 'reload schema';
